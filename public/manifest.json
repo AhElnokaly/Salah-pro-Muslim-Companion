@@ -1,0 +1,17 @@
+{
+  "name": "رفيق المسلم - Muslim Companion",
+  "short_name": "رفيق المسلم",
+  "description": "A comprehensive daily companion for prayer times, Qibla direction, daily tracking, Adhkar, and Quran readings.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0c1017",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "muslim_companion_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

@@ -5,6 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>رفيق المسلم - Muslim Companion</title>
     <link rel="icon" type="image/jpeg" href="/src/assets/images/muslim_companion_icon_1784362373898.jpg" />
+    <link rel="manifest" href="manifest.json" />
+    <script type="text/javascript">
+      // Single Page Apps for GitHub Pages routing restoration
+      // https://github.com/rafgraph/spa-github-pages
+      (function(l) {
+        if (l.search[1] === 'p') {
+          var decoded = l.search.slice(1).split('&').reduce(function(q, v) {
+            var a = v.split('=');
+            q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');
+            return q;
+          }, {});
+          if (decoded.p !== undefined) {
+            window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + (decoded.p || '') +
+              (decoded.q ? ('?' + decoded.q) : '') +
+              l.hash
+            );
+          }
+        }
+      }(window.location));
+    </script>
   </head>
   <body>
     <div id="root"></div>

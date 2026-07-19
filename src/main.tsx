@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // Safe localStorage polyfill to prevent DOMExceptions and SecurityErrors inside sandboxed iframes
 (function() {
   let storageAvailable = false;
@@ -118,14 +119,29 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Unregister any active service workers to prevent stale PWA caching in development/preview environments
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.unregister().then(() => {
-        console.log('[Service Worker] Unregistered successfully to bypass stale cache');
-      });
-    }
-  });
+// Register Service Worker in production, or unregister in dev/preview to prevent stale caching
+if (import.meta.env.PROD) {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const base = import.meta.env.BASE_URL || '/';
+      navigator.serviceWorker.register(`${base}sw.js`, { scope: base })
+        .then((reg) => {
+          console.log('[Service Worker] Registered successfully with scope:', reg.scope);
+        })
+        .catch((err) => {
+          console.error('[Service Worker] Registration failed:', err);
+        });
+    });
+  }
+} else {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().then(() => {
+          console.log('[Service Worker] Unregistered successfully to bypass stale cache');
+        });
+      }
+    });
+  }
 }
 
