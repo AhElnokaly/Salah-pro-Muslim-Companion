@@ -25,7 +25,10 @@ export default function CompanionInsights({
   khatmat = [],
   settings,
 }: CompanionInsightsProps) {
-  const currentStyle = settings.appStyle || 'glass-dark';
+  const isDarkTheme = settings.theme === 'dark' || 
+    ((!settings.theme || settings.theme === 'system') && 
+     window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const currentStyle = isDarkTheme ? 'glass-dark' : 'faith-bright';
 
   // Helper to calculate various stats
   const getInsights = () => {

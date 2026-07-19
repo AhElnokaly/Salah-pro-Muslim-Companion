@@ -107,3 +107,11 @@ export function formatGregorianFullDateArabic(date: Date): string {
   const yearNum = toArabicNumbers(date.getFullYear());
   return `${dayName}، ${dayNum} ${monthName}`;
 }
+
+export function isForbiddenFastDay(hDay: number, hMonth: number): boolean {
+  // Eid al-Fitr (1 Shawwal)
+  if (hMonth === 10 && hDay === 1) return true;
+  // Eid al-Adha (10 Dhu al-Hijjah) & Tashreeq days (11, 12, 13 Dhu al-Hijjah)
+  if (hMonth === 12 && (hDay === 10 || hDay === 11 || hDay === 12 || hDay === 13)) return true;
+  return false;
+}

@@ -13,7 +13,10 @@ interface FridayModeProps {
 }
 
 export default function FridayMode({ settings }: FridayModeProps) {
-  const currentStyle = settings.appStyle || 'glass-dark';
+  const isDarkTheme = settings.theme === 'dark' || 
+    ((!settings.theme || settings.theme === 'system') && 
+     window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const currentStyle = isDarkTheme ? 'glass-dark' : 'faith-bright';
   
   // State for Friday checklist
   const [checklist, setChecklist] = useState<Record<string, boolean>>(() => {

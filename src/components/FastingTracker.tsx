@@ -20,7 +20,7 @@ import {
   Info
 } from 'lucide-react';
 import { AppSettings, RamadanQadaTracker, FastingLog } from '../types';
-import { toArabicNumbers, getHijriDate } from '../utils/hijri';
+import { toArabicNumbers, getHijriDate, isForbiddenFastDay } from '../utils/hijri';
 import { calculatePrayerTimes } from '../utils/prayerCalc';
 
 interface FastingTrackerProps {
@@ -167,6 +167,22 @@ export default function FastingTracker({
   const handleToggleFastToday = (type: 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar') => {
     const isCurrentlyFasting = fastingLogs[todayStr]?.fasted || false;
     
+    // Check if today is a forbidden fasting day
+    const isForbidden = isForbiddenFastDay(hijriToday.day, hijriToday.month);
+    if (isForbidden && !isCurrentlyFasting) {
+      let reasonStr = '';
+      if (hijriToday.month === 10 && hijriToday.day === 1) {
+        reasonStr = 'أول أيام عيد الفطر المبارك (١ شوال)';
+      } else if (hijriToday.month === 12 && hijriToday.day === 10) {
+        reasonStr = 'أول أيام عيد الأضحى المبارك (١٠ ذو الحجة)';
+      } else {
+        const dayArabic = hijriToday.day === 11 ? 'الحادي عشر' : hijriToday.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
+        reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
+      }
+      alert(`⚠️ تنبيه شرعي: لا يجوز صيام هذا اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      return;
+    }
+
     // Create copy
     const updated = { ...fastingLogs };
     
@@ -204,6 +220,21 @@ export default function FastingTracker({
     if (!customDate) return;
 
     const hDate = getHijriDate(new Date(customDate), settings.hijriOffset);
+    const isForbidden = isForbiddenFastDay(hDate.day, hDate.month);
+    if (isForbidden) {
+      let reasonStr = '';
+      if (hDate.month === 10 && hDate.day === 1) {
+        reasonStr = 'أول أيام عيد الفطر المبارك (١ شوال)';
+      } else if (hDate.month === 12 && hDate.day === 10) {
+        reasonStr = 'أول أيام عيد الأضحى المبارك (١٠ ذو الحجة)';
+      } else {
+        const dayArabic = hDate.day === 11 ? 'الحادي عشر' : hDate.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
+        reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
+      }
+      alert(`⚠️ تنبيه شرعي: لا يجوز تسجيل صيام في هذا التاريخ لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      return;
+    }
+
     setFastingLogs(prev => ({
       ...prev,
       [customDate]: {

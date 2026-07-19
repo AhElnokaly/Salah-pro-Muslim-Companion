@@ -3,7 +3,7 @@ import { Smartphone, BookOpen, Clock, Heart, Sparkles, RotateCw, MapPin, Calenda
 import { toArabicNumbers } from '../utils/hijri';
 
 interface WidgetSimulatorProps {
-  prayerTimes: Record<string, string>;
+  prayerTimes: any;
   settings: any;
   currentPrayer?: string;
   nextPrayer?: string;

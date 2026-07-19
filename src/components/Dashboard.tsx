@@ -98,6 +98,8 @@ interface DashboardProps {
   quranSessions?: QuranSession[];
   khatmat?: QuranKhatma[];
   dhikrLogs?: Record<string, Record<string, number>>;
+  onInstallApp?: () => void;
+  isPwaInstalled?: boolean;
 }
 
 export default function Dashboard({
@@ -116,7 +118,9 @@ export default function Dashboard({
   setCustomDuas,
   quranSessions = [],
   khatmat = [],
-  dhikrLogs = {}
+  dhikrLogs = {},
+  onInstallApp,
+  isPwaInstalled = false
 }: DashboardProps) {
   const [selectedPrayerToLog, setSelectedPrayerToLog] = useState<PrayerName | null>(null);
   const [now, setNow] = useState<Date>(new Date());
@@ -160,7 +164,7 @@ export default function Dashboard({
   });
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
   const [autoPlayOnTime, setAutoPlayOnTime] = useState<boolean>(() => {
-    return localStorage.getItem('salah_auto_play_athan') === 'true';
+    return localStorage.getItem('salah_auto_play_athan') !== 'false';
   });
   const [showSunriseModal, setShowSunriseModal] = useState<boolean>(false);
 
@@ -246,8 +250,15 @@ export default function Dashboard({
 
       setCurrentMuezzin(targetMuezzinId);
       audio.play().catch(err => {
-        console.error('Playback failed', err);
-        alert('حدث خطأ أثناء تشغيل الأذان، يرجى التحقق من اتصالك بالإنترنت.');
+        if (err.name === 'AbortError') {
+          console.log('[Audio] Playback was aborted or interrupted safely.');
+          return;
+        }
+        if (err.name === 'NotAllowedError') {
+          console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
+          return;
+        }
+        console.error('[Audio] Playback failed', err);
       });
     }
   };
@@ -273,13 +284,14 @@ export default function Dashboard({
   React.useEffect(() => {
     const timer = setInterval(() => {
       setNow(new Date());
-    }, 30000); // update every 30s
+    }, 1000); // update every 1s
     return () => clearInterval(timer);
   }, []);
 
   const todayStr = now.toISOString().split('T')[0];
   const hijri = getHijriDate(now, settings.hijriOffset);
   const gregorianStr = formatGregorianFullDateArabic(now);
+  const gregorianClean = gregorianStr.includes('،') ? gregorianStr.split('،')[1].trim() : gregorianStr;
 
   const times = calculatePrayerTimes(
     now,
@@ -292,6 +304,25 @@ export default function Dashboard({
   );
 
   const { current, next, timeRemainingStr, progressPercent } = getCurrentAndNextPrayer(times, now);
+
+  // Check if current time is between Thursday Maghrib and Friday Maghrib
+  const isFridayWindow = (() => {
+    const day = now.getDay();
+    if (day !== 4 && day !== 5) return false;
+    if (!times || !times.Maghrib) return false;
+
+    const [maghribH, maghribM] = times.Maghrib.split(':').map(Number);
+    const maghribDate = new Date(now);
+    maghribDate.setHours(maghribH, maghribM, 0, 0);
+
+    if (day === 4) {
+      // Thursday: from Maghrib onwards
+      return now >= maghribDate;
+    } else {
+      // Friday: until Maghrib
+      return now < maghribDate;
+    }
+  })();
 
   React.useEffect(() => {
     if (!autoPlayOnTime) return;
@@ -361,6 +392,24 @@ export default function Dashboard({
       window.removeEventListener('open-spiritual-notifications', handleNotificationsTrigger);
     };
   }, []);
+
+  // Handle global header GPS sync trigger
+  React.useEffect(() => {
+    const handleGPSTrigger = () => {
+      handleGPSLocationSync();
+    };
+    window.addEventListener('trigger-gps-sync', handleGPSTrigger);
+    return () => {
+      window.removeEventListener('trigger-gps-sync', handleGPSTrigger);
+    };
+  }, []);
+
+  // Dispatch spiritual notifications count to header
+  React.useEffect(() => {
+    const count = getSpiritualNotifications().length;
+    const event = new CustomEvent('update-spiritual-notifications-count', { detail: count });
+    window.dispatchEvent(event);
+  }, [pendingQadaPrayers, ramadanQada?.daysOwed, ramadanQada?.daysCompleted, now.getDay(), now.getHours()]);
 
   interface SpiritualNotification {
     id: string;
@@ -532,9 +581,9 @@ export default function Dashboard({
       id: 'general-adhkar-rem',
       type: 'spiritual_advice',
       title: 'أذكار الصباح والمساء',
-      description: 'قال رسول الله ﷺ: "مثل الذي يذكر ربه والذي لا يذكر ربه، مثل الحي والميت". رطّب لسانك بذكر الله عز وجل دائماً.',
-      icon: '📿',
-      actionLabel: 'الذهاب للأذكار 📿',
+      description: 'قال رسول الله ﷺ: "مثل الذي يذكر ربه والذي لا يذكر ربه، مثل الحي والميت". يمكنك الآن الاستماع للأذكار بصوت الشيخ مشاري العفاسي مباشرة.',
+      icon: '🎧',
+      actionLabel: 'استمع للأذكار بصوت مشاري العفاسي 🎧',
       action: () => {
         if (setActiveTab) setActiveTab('adhkar');
       }
@@ -558,10 +607,10 @@ export default function Dashboard({
   // Status logs for today
   const todayLogs = prayerLogs[todayStr] || {};
 
-  // Count completed prayers (status A or B)
+  // Count completed prayers (status A or B, or E for excused)
   const fiveDailyPrayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
   const completedCount = fiveDailyPrayers.filter(p => 
-    todayLogs[p]?.status === 'A' || todayLogs[p]?.status === 'B'
+    todayLogs[p]?.status === 'A' || todayLogs[p]?.status === 'B' || todayLogs[p]?.status === 'E'
   ).length;
 
   const isDarkTheme = settings.theme === 'dark' || 
@@ -699,6 +748,25 @@ export default function Dashboard({
   // Fasting quick tracker
   const todayFast = fastingLogs[todayStr] || { date: todayStr, fasted: false, fastType: 'Sunnah' };
   const toggleFasting = () => {
+    // Check if today is a forbidden fasting day
+    const hToday = getHijriDate(now, settings.hijriOffset);
+    const isEidFitr = hToday.month === 10 && hToday.day === 1;
+    const isEidAdhaOrTashreeq = hToday.month === 12 && (hToday.day === 10 || hToday.day === 11 || hToday.day === 12 || hToday.day === 13);
+    
+    if ((isEidFitr || isEidAdhaOrTashreeq) && !todayFast.fasted) {
+      let reasonStr = '';
+      if (isEidFitr) {
+        reasonStr = 'أول أيام عيد الفطر المبارك (١ شوال)';
+      } else if (hToday.day === 10) {
+        reasonStr = 'أول أيام عيد الأضحى المبارك (١٠ ذو الحجة)';
+      } else {
+        const dayArabic = hToday.day === 11 ? 'الحادي عشر' : hToday.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
+        reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
+      }
+      alert(`⚠️ تنبيه شرعي: لا يجوز صيام اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      return;
+    }
+
     setFastingLogs(prev => ({
       ...prev,
       [todayStr]: {
@@ -908,8 +976,8 @@ export default function Dashboard({
   const arabicDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const dayNameArabic = arabicDays[now.getDay()];
 
-  // Active App Style
-  const currentStyle = settings.appStyle || 'glass-dark';
+  // Active App Style (Automatically unifies Theme & Glass style)
+  const currentStyle = isDarkTheme ? 'glass-dark' : 'faith-bright';
 
   // 1. Salah progress (obligatory)
   const salahPercent = isNaN(completedCount)
@@ -933,6 +1001,14 @@ export default function Dashboard({
   const fastingPercent = todayFast.fasted ? 100 : 0;
 
   const getFastingProgressAndCountdown = () => {
+    if (!todayFast.fasted) {
+      return {
+        label: 'غير صائم اليوم',
+        countdownStr: 'غير مسجل',
+        percent: 0
+      };
+    }
+
     const nowMins = now.getHours() * 60 + now.getMinutes();
     const fajrMins = parseTimeToMinutes(times.Fajr);
     const maghribMins = parseTimeToMinutes(times.Maghrib);
@@ -1343,9 +1419,7 @@ export default function Dashboard({
       {/* 1. High-Fidelity Main Prayer Card with Custom Gradient & Elegant Image Backdrop */}
       <div 
         id="main-prayer-card"
-        className={`w-full bg-gradient-to-b ${currentGradient} text-white rounded-3xl ${
-          settings.cardCompactMode ? 'p-4 gap-2.5 min-h-[190px]' : 'p-5 gap-4 min-h-[300px]'
-        } shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
+        className={`w-full bg-gradient-to-b ${currentGradient} text-white rounded-3xl p-4 sm:p-5 gap-4 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
         {/* Transparent Elegant Mosque Backdrop Image */}
         <div className="absolute inset-0 pointer-events-none select-none opacity-[0.25] mix-blend-screen overflow-hidden">
@@ -1358,218 +1432,56 @@ export default function Dashboard({
         </div>
 
         {/* Centered Premium Header Section with Location, Date & Controls */}
-        <div className="flex flex-col items-center justify-center text-center gap-3.5 z-10 w-full border-b border-white/15 pb-4">
-          
-          {/* Row 1: Centered Date Widget (Hijri | Gregorian | Day) */}
-          <div className="flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 text-white shadow-xs max-w-full flex-wrap">
+        <div className="flex flex-col items-center justify-center text-center gap-2.5 z-10 w-full border-b border-white/10 pb-3">
+          {/* Centered Date Widget (Hijri | Day | Gregorian without day name) */}
+          <div className="flex items-center justify-center gap-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/10 text-white shadow-xs max-w-full flex-wrap">
             <Calendar className="w-3 h-3 text-amber-300 shrink-0" />
-            <span className="text-[11px] font-black leading-none">{hijri.fullString}</span>
-            <span className="text-white/20 text-[11px] font-light">|</span>
-            <span className="text-[11px] font-extrabold text-white/95 leading-none" title="التاريخ الميلادي">{toArabicNumbers(gregorianStr)}</span>
+            <span className="text-[11px] font-black leading-none" title="التاريخ الهجري">{hijri.fullString}</span>
             <span className="text-white/20 text-[11px] font-light">|</span>
             <span className="text-[11px] font-black text-amber-200 leading-none">{dayNameArabic}</span>
-          </div>
-
-          {/* Row 2: Location sync - placed as a gorgeous little centered tag with GPS tracking */}
-          <div className="flex items-center justify-center">
-            <button
-              type="button"
-              onClick={handleGPSLocationSync}
-              title="انقر لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS"
-              className="flex items-center gap-1.5 bg-amber-400/10 hover:bg-amber-400/20 active:scale-95 border border-amber-400/20 px-3 py-1 rounded-full text-amber-300 transition-all text-xs font-black cursor-pointer shadow-inner animate-pulse-slow"
-            >
-              <MapPin className="w-3 h-3 animate-bounce shrink-0 text-amber-300" />
-              <span>مواقيت: {settings.cityName} (مزامنة GPS 📡)</span>
-            </button>
-          </div>
-
-          {/* Row 3: Centered style, clock face, theme, and compact mode toggles */}
-          <div className="flex items-center justify-center gap-1.5 bg-black/25 hover:bg-black/35 backdrop-blur-md p-1 rounded-xl border border-white/5 transition-all w-full max-w-sm flex-wrap shadow-inner">
-            {/* 1. Style Toggles */}
-            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, appStyle: 'faith-bright' }))}
-                className={`py-0.5 px-2 rounded-md text-[8px] font-black cursor-pointer transition-all ${
-                  currentStyle === 'faith-bright'
-                    ? 'bg-white text-emerald-700 shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="النمط الإيماني"
-              >
-                إيماني
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, appStyle: 'glass-dark' }))}
-                className={`py-0.5 px-2 rounded-md text-[8px] font-black cursor-pointer transition-all ${
-                  currentStyle === 'glass-dark'
-                    ? 'bg-white/90 text-indigo-950 shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="النمط الزجاجي"
-              >
-                زجاجي
-              </button>
-            </div>
-
-            <div className="w-[1px] h-3 bg-white/10 shrink-0" />
-
-            {/* 2. Clock Style Switcher (Segmented button control!) */}
-            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
-              <button
-                type="button"
-                onClick={() => setShowAnalogClock(false)}
-                className={`py-0.5 px-2 rounded-md text-[8px] font-black cursor-pointer transition-all ${
-                  !showAnalogClock
-                    ? 'bg-white text-slate-900 shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="ساعة رقمية"
-              >
-                رقمية
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAnalogClock(true)}
-                className={`py-0.5 px-2 rounded-md text-[8px] font-black cursor-pointer transition-all ${
-                  showAnalogClock
-                    ? 'bg-white text-slate-900 shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="عقارب"
-              >
-                عقارب
-              </button>
-            </div>
-
-            <div className="w-[1px] h-3 bg-white/10 shrink-0" />
-
-            {/* 3. Theme Toggles */}
-            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, theme: 'light' }))}
-                className={`p-0.5 rounded-md text-[8px] font-black cursor-pointer transition-all flex items-center justify-center ${
-                  settings.theme === 'light'
-                    ? 'bg-white text-amber-500 shadow-xs'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="مظهر فاتح"
-              >
-                <Sun className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, theme: 'dark' }))}
-                className={`p-0.5 rounded-md text-[8px] font-black cursor-pointer transition-all flex items-center justify-center ${
-                  settings.theme === 'dark'
-                    ? 'bg-white text-indigo-600 shadow-xs'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="مظهر داكن"
-              >
-                <Moon className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, theme: 'system' }))}
-                className={`py-0.5 px-1.5 rounded-md text-[7px] font-black cursor-pointer transition-all flex items-center gap-0.5 ${
-                  settings.theme === 'system' || !settings.theme
-                    ? 'bg-white text-slate-850 shadow-xs font-bold'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="تلقائي حسب النظام"
-              >
-                <Monitor className="w-2.5 h-2.5" />
-                <span>تلقائي</span>
-              </button>
-            </div>
-
-            <div className="w-[1px] h-3 bg-white/10 shrink-0" />
-
-            {/* 4. Compact Mode Toggle */}
-            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
-              <button
-                type="button"
-                onClick={() => setSettings(prev => ({ ...prev, cardCompactMode: !prev.cardCompactMode }))}
-                className={`py-0.5 px-2 rounded-md text-[8px] font-black cursor-pointer transition-all ${
-                  settings.cardCompactMode
-                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                    : 'text-white/60 hover:text-white'
-                }`}
-                title="التبديل للتصميم المبسط"
-              >
-                {settings.cardCompactMode ? 'مبسط ⚡' : 'مفصل 📊'}
-              </button>
-            </div>
+            <span className="text-white/20 text-[11px] font-light">|</span>
+            <span className="text-[11px] font-extrabold text-white/95 leading-none" title="التاريخ الميلادي">{gregorianClean}</span>
           </div>
         </div>
 
-        {/* Analog Clock Face Options Selector - Shown under control bar when analog clock is active */}
-        {showAnalogClock && (
-          <div className="flex items-center justify-center gap-1.5 z-10 w-full -mt-1 sm:-mt-1.5 animate-fade-in">
-            <span className="text-[9px] font-bold text-white/50">نمط الساعة:</span>
-            <div className="flex bg-black/25 backdrop-blur-md p-0.5 rounded-lg border border-white/5 shadow-inner scale-95">
-              {(['classic', 'islamic', 'minimal', 'cyber', 'salatuk'] as const).map(face => (
-                <button
-                  key={face}
-                  type="button"
-                  onClick={() => setClockFace(face)}
-                  className={`px-2 py-0.5 rounded text-[8px] font-black cursor-pointer transition-all ${
-                    clockFace === face
-                      ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {face === 'classic' ? 'كلاسيك' : face === 'islamic' ? 'إسلامي' : face === 'minimal' ? 'بسيط' : face === 'cyber' ? 'سايبر' : 'صلاتك 🕒'}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Central Glowing Prayer Meta & Clock Dashboard Grid */}
-        <div className="z-10 py-1.5 w-full">
-          
-          {/* Subtle Time Period Tag & Notifications Button Row */}
-          {!settings.cardCompactMode && (
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="bg-white/10 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/5 text-[9px] font-black text-amber-300 tracking-wide">
-                فترة {timePeriodLabel}
-              </div>
-              
-              {/* Interactive Spiritual Notifications Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNotificationsModal(true);
-                }}
-                title="لوحة التنبيهات والنفحات الإيمانية 🔔"
-                className="p-1 rounded-full bg-white/10 hover:bg-amber-400 hover:text-slate-950 border border-white/5 cursor-pointer transition-all active:scale-95 text-amber-300 flex items-center justify-center w-6 h-6 relative shrink-0"
-              >
-                <Bell className="w-3.5 h-3.5 animate-bounce" style={{ animationDuration: '3s' }} />
-                {getSpiritualNotifications().length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[7px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-xs border border-white/20 animate-pulse">
-                    {toArabicNumbers(getSpiritualNotifications().length)}
-                  </span>
-                )}
-              </button>
-            </div>
-          )}
+        <div className="z-10 py-1 w-full">
+          {/* Dual-Column Responsive Dashboard */}
+          <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4 md:gap-6 px-1">
+            
+            {/* Column 1: The Focal Spiritual Clock */}
+            <div className="flex flex-col items-center text-center space-y-2.5 flex-1 w-full order-1 md:order-2">
+              {/* Event Tag */}
+              {(() => {
+                const ev = getIslamicEventLabel();
+                if (!ev) return null;
+                return (
+                  <div className="bg-gradient-to-r from-amber-500/10 via-emerald-600/25 to-amber-500/10 border border-amber-400/15 backdrop-blur-md px-3 py-0.5 rounded-full text-center animate-pulse">
+                    <span className="font-black text-amber-300 text-[9px] block leading-normal">{ev.text}</span>
+                  </div>
+                );
+              })()}
 
-          {settings.cardCompactMode ? (
-            /* Minimalist Card Layout: Sleek clock and tight upcoming capsule */
-            <div className="flex flex-col items-center justify-center w-full gap-2 py-1 animate-fade-in text-center">
+              {/* Heartwarming spiritual greeting */}
+              <span className="text-[11px] sm:text-xs font-extrabold text-amber-200/95 tracking-wide drop-shadow-sm">
+                {(() => {
+                  const hr = now.getHours();
+                  if (hr >= 4 && hr < 12) return "صباحك بذكر الله أجمل 🌸";
+                  if (hr >= 12 && hr < 16) return "يومك مبارك وسعيد ☀️";
+                  if (hr >= 16 && hr < 19) return "مساؤك عامر بالرضا والطاعة ✨";
+                  return "ليلتك هادئة بذكر الله 🌙";
+                })()}
+              </span>
+
               {/* Clock Display */}
               {showAnalogClock ? (
-                <div className="scale-[0.82] py-0.5 transition-all duration-350">
+                <div className="flex flex-col items-center gap-1.5 py-0.5 transition-all duration-500 scale-90 sm:scale-95">
                   {renderCardAnalogClock()}
                 </div>
               ) : (
-                /* Compact Digital Clock */
-                <div className="flex items-baseline gap-1 select-all py-0.5">
-                  <span className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+                /* Giant Digital Current Time Clock */
+                <div className="flex items-baseline gap-1 select-all py-0.5 justify-center">
+                  <span className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.35)]">
                     {(() => {
                       let hrs = now.getHours();
                       const mins = now.getMinutes().toString().padStart(2, '0');
@@ -1583,173 +1495,117 @@ export default function Dashboard({
                 </div>
               )}
 
-              {/* Minimalist Upcoming capsule pill */}
-              <div className="text-center text-[10.5px] text-white/95 bg-black/25 backdrop-blur-md border border-white/10 px-3.5 py-1.5 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-xs w-full max-w-xs transition-all mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span className="text-white/60">القادمة:</span>
-                <span className="text-amber-300 font-black">{getArabicPrayerName(next, now)}</span>
-                <span className="text-white/70 font-mono">({toArabicNumbers(times[next])})</span>
-                <span className="text-white/20">|</span>
-                <span className="text-amber-200">متبقي {toArabicNumbers(timeRemainingStr)}</span>
-              </div>
-            </div>
-          ) : (
-            /* Dual-Column Responsive Dashboard */
-            <div className="flex flex-col md:flex-row items-center justify-between w-full gap-6 md:gap-8 px-2">
-              
-              {/* Right/Center Column: The Focal Spiritual Clock */}
-              <div className="flex flex-col items-center text-center space-y-3 flex-1 w-full order-1 md:order-2">
-                {/* Event Tag */}
-                {(() => {
-                  const ev = getIslamicEventLabel();
-                  if (!ev) return null;
-                  return (
-                    <div className="bg-gradient-to-r from-amber-500/20 via-emerald-600/35 to-amber-500/20 border border-amber-400/20 backdrop-blur-md px-3.5 py-1 rounded-2xl text-center shadow-xs animate-pulse">
-                      <span className="font-black text-amber-300 text-[10px] block leading-normal">{ev.text}</span>
-                      <span className="text-[8px] text-white/80 font-semibold block">{ev.desc}</span>
-                    </div>
-                  );
-                })()}
+              {/* Segmented Clock Mode Button underneath */}
+              <button
+                type="button"
+                onClick={() => setShowAnalogClock(!showAnalogClock)}
+                className="text-[9px] font-black text-white/50 hover:text-amber-300 transition-all cursor-pointer bg-white/5 px-2 py-0.5 rounded-md border border-white/5 active:scale-95"
+              >
+                {showAnalogClock ? 'عرض الساعة الرقمية 🕒' : 'عرض ساعة العقارب 🕰️'}
+              </button>
 
-                {/* Heartwarming spiritual greeting */}
-                <span className="text-xs sm:text-sm font-extrabold text-amber-200/95 tracking-wide drop-shadow-sm transition-all duration-300">
+              {/* Analog Clock Face Options Selector - Shown under clock button when analog clock is active */}
+              {showAnalogClock && (
+                <div className="flex items-center justify-center gap-1 z-10 w-full animate-fade-in mt-1 scale-90">
+                  <div className="flex bg-black/25 backdrop-blur-md p-0.5 rounded-lg border border-white/5 shadow-inner">
+                    {(['classic', 'islamic', 'minimal', 'cyber', 'salatuk'] as const).map(face => (
+                      <button
+                        key={face}
+                        type="button"
+                        onClick={() => setClockFace(face)}
+                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black cursor-pointer transition-all ${
+                          clockFace === face
+                            ? 'bg-amber-400 text-slate-950 font-black'
+                            : 'text-white/60 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {face === 'classic' ? 'كلاسيك' : face === 'islamic' ? 'إسلامي' : face === 'minimal' ? 'بسيط' : face === 'cyber' ? 'سايبر' : 'صلاتك'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Subtle vertical separator for tablet/desktop */}
+            <div className="hidden md:block w-[1px] h-28 bg-white/10 shrink-0 order-2" />
+
+            {/* Column 2: Prayer Status Hub */}
+            <div className="flex flex-col items-center md:items-start text-center md:text-right space-y-3.5 flex-1 w-full order-3 md:order-1 max-w-sm mx-auto md:mx-0">
+              {/* Glassmorphic Upcoming Prayer Status Pill */}
+              <div className="bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl p-2.5 flex flex-col items-center md:items-start gap-1 shadow-md w-full hover:border-white/20 transition-all duration-300">
+                <div className="flex items-center gap-1.5 justify-center md:justify-start w-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="text-white/60 text-[9.5px] font-extrabold tracking-wider">الصلاة القادمة</span>
+                  <span className="text-amber-300 text-xs font-black">
+                    {getArabicPrayerName(next, now)}
+                  </span>
+                  <span className="text-[9.5px] text-white/50 font-mono">({toArabicNumbers(times[next])})</span>
+                </div>
+                
+                <div className="text-[11px] font-black text-white flex items-center gap-1 border-t border-white/15 pt-1.5 w-full justify-center md:justify-start">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+                  <span>متبقي {toArabicNumbers(timeRemainingStr)}</span>
+                </div>
+              </div>
+
+              {/* Prayer Progress Bar */}
+              <div className="w-full space-y-1.5">
+                <div className="flex justify-between items-center text-[9.5px] text-white/75 font-bold px-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-white/50">الحالية:</span>
+                    <span className="text-emerald-300 font-extrabold">{getArabicPrayerName(current, now)}</span>
+                  </div>
+                  <span className="text-amber-300 font-black bg-white/10 px-1 py-0.5 rounded-md text-[8.5px]">{toArabicNumbers(Math.round(getPrayerProgressPercentage()))}%</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-white/50">التالية:</span>
+                    <span className="text-amber-200 font-extrabold">{getArabicPrayerName(next, now)}</span>
+                  </div>
+                </div>
+                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden relative border border-white/5 shadow-inner">
+                  <div 
+                    className="h-full bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${getPrayerProgressPercentage()}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Sunnah & Remembrance motivational quote or quick recommendation */}
+              <div className="text-[9.5px] font-bold text-white/80 bg-white/5 border border-white/5 rounded-xl px-2.5 py-1.5 w-full leading-relaxed flex items-start gap-1.5 shadow-sm text-right">
+                <span className="text-amber-300 text-[11px] shrink-0 mt-0.5">💡</span>
+                <span className="leading-normal">
                   {(() => {
                     const hr = now.getHours();
-                    if (hr >= 4 && hr < 12) return "صباحك بذكر الله أجمل 🌸";
-                    if (hr >= 12 && hr < 16) return "يومك مبارك وسعيد ☀️";
-                    if (hr >= 16 && hr < 19) return "مساؤك عامر بالرضا والطاعة ✨";
-                    return "ليلتك هادئة بذكر الله 🌙";
+                    if (hr >= 4 && hr < 11) return "سنة الضحى صلاة الأوابين، تجزئ عن ٣٦٠ صدقة من مفاصل جسدك.";
+                    if (hr >= 11 && hr < 15) return "رواتب الظهر: أربع ركعات قبلها وركعتان بعدها تبني لك بيتًا في الجنة.";
+                    if (hr >= 15 && hr < 18) return "أربع ركعات قبل العصر رحم الله امرءاً صلى قبل العصر أربعاً.";
+                    return "احرص على ركعة الوتر قبل النوم ليكون مسك ختام يومك المبارك.";
                   })()}
                 </span>
-
-                {/* Clock Display */}
-                {showAnalogClock ? (
-                  <div className="flex flex-col items-center gap-2 py-1 transition-all duration-500">
-                    {renderCardAnalogClock()}
-                  </div>
-                ) : (
-                  /* Giant Digital Current Time Clock */
-                  <div className="flex items-baseline gap-1.5 select-all py-1">
-                    <span className="text-5xl sm:text-6xl font-black font-mono tracking-tight text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)] animate-pulse-slow">
-                      {(() => {
-                        let hrs = now.getHours();
-                        const mins = now.getMinutes().toString().padStart(2, '0');
-                        hrs = hrs % 12 || 12;
-                        return `${toArabicNumbers(hrs.toString())}:${toArabicNumbers(mins)}`;
-                      })()}
-                    </span>
-                    <span className="text-[10px] font-black text-amber-300 bg-black/20 backdrop-blur-md px-2 py-0.5 rounded-md border border-white/5">
-                      {now.getHours() >= 12 ? 'م' : 'ص'}
-                    </span>
-                  </div>
-                )}
               </div>
-
-              {/* Subtle vertical separator for tablet/desktop */}
-              <div className="hidden md:block w-[1px] h-36 bg-white/10 shrink-0 order-2" />
-
-              {/* Left Column: Prayer Status Hub */}
-              <div className="flex flex-col items-center md:items-start text-center md:text-right space-y-4 flex-1 w-full order-3 md:order-1 max-w-sm mx-auto md:mx-0">
-                {/* Glassmorphic Upcoming Prayer Status Pill */}
-                <div className="bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl p-3 flex flex-col items-center md:items-start gap-1.5 shadow-md w-full hover:border-white/20 transition-all duration-300">
-                  <div className="flex items-center gap-1.5 justify-center md:justify-start w-full">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <span className="text-white/60 text-[10px] font-extrabold tracking-wider">الصلاة القادمة</span>
-                    <span className="text-amber-300 text-xs font-black">
-                      {getArabicPrayerName(next, now)}
-                    </span>
-                    <span className="text-[10px] text-white/50 font-mono">({toArabicNumbers(times[next])})</span>
-                  </div>
-                  
-                  <div className="text-xs font-black text-white flex items-center gap-1.5 mt-1 border-t border-white/10 pt-1.5 w-full justify-center md:justify-start">
-                    <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
-                    <span>متبقي {toArabicNumbers(timeRemainingStr)}</span>
-                  </div>
-                </div>
-
-                {/* Prayer Progress Bar */}
-                <div className="w-full space-y-1.5">
-                  <div className="flex justify-between items-center text-[10px] text-white/75 font-bold px-1">
-                    <div className="flex items-center gap-1">
-                      <span className="text-white/50">الحالية:</span>
-                      <span className="text-emerald-300 font-extrabold">{getArabicPrayerName(current, now)}</span>
-                    </div>
-                    <span className="text-amber-300 font-black bg-white/10 px-1.5 py-0.5 rounded-md text-[9px]">{toArabicNumbers(Math.round(getPrayerProgressPercentage()))}%</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-white/50">التالية:</span>
-                      <span className="text-amber-200 font-extrabold">{getArabicPrayerName(next, now)}</span>
-                    </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative border border-white/5 shadow-inner">
-                    <div 
-                      className="h-full bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${getPrayerProgressPercentage()}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Sunnah & Remembrance motivational quote or quick recommendation */}
-                <div className="text-[10px] font-bold text-white/80 bg-white/5 border border-white/5 rounded-xl px-3 py-2 w-full leading-relaxed flex items-start gap-1.5 shadow-sm text-right">
-                  <span className="text-amber-300 text-xs shrink-0 mt-0.5">💡</span>
-                  <span className="leading-normal">
-                    {(() => {
-                      const hr = now.getHours();
-                      if (hr >= 4 && hr < 11) return "سنة الضحى صلاة الأوابين، تجزئ عن ٣٦٠ صدقة من مفاصل جسدك.";
-                      if (hr >= 11 && hr < 15) return "رواتب الظهر: أربع ركعات قبلها وركعتان بعدها تبني لك بيتًا في الجنة.";
-                      if (hr >= 15 && hr < 18) return "أربع ركعات قبل العصر رحم الله امرءاً صلى قبل العصر أربعاً.";
-                      return "احرص على ركعة الوتر قبل النوم ليكون مسك ختام يومك المبارك.";
-                    })()}
-                  </span>
-                </div>
-              </div>
-
             </div>
-          )}
+
+          </div>
         </div>
 
-        {/* Horizontal list of 5 prayers inside the card */}
-        <div className="w-full z-10 pt-1 flex flex-col gap-3">
-          {/* Dynamic Celestial Track connecting current and next prayers */}
-          {!settings.cardCompactMode && (
-            <div className="w-full px-2 relative h-4 flex items-center animate-fade-in">
-              {/* Track background line */}
-              <div className="w-full h-[1px] bg-white/20 relative">
-                {/* Dashed line */}
-                <div className="absolute inset-x-0 top-0 border-t border-dashed border-white/40" />
-                
-                {/* The sun/moon body moving from current to next */}
-                <div 
-                  className="absolute top-1/2 -translate-y-1/2 translate-x-1/2 transition-all duration-1000 ease-out flex flex-col items-center"
-                  style={{ right: `${getCelestialRightPercentage()}%` }}
-                >
-                  <div 
-                    className="w-5 h-5 rounded-full flex items-center justify-center relative shadow-lg"
-                    style={{
-                      boxShadow: celestial.type === 'sun' 
-                        ? '0 0 14px rgba(251, 191, 36, 0.7)' 
-                        : '0 0 10px rgba(226, 232, 240, 0.5)'
-                    }}
-                  >
-                    {celestial.type === 'sun' ? (
-                      <>
-                        <div className="absolute inset-0 bg-amber-400 rounded-full animate-ping opacity-25" />
-                        <Sun className="w-3.5 h-3.5 text-amber-300 fill-amber-300 animate-spin-slow z-10" />
-                      </>
-                    ) : (
-                      <>
-                        <div className="absolute inset-0 bg-slate-200 rounded-full animate-ping opacity-15" />
-                        <Moon className="w-3 h-3 text-slate-100 fill-slate-100 transform rotate-12 z-10" />
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!settings.cardCompactMode && (
-            <p className="text-[8px] text-center text-white/50 font-bold leading-none animate-fade-in">انقر على صلاة لتسجيل الفريضة والسنن</p>
-          )}
+        {/* Horizontal list of 6 prayers inside the card */}
+        <div className="w-full z-10 pt-1 flex flex-col gap-1.5">
+          {(() => {
+            const currentLog = current && current !== 'Sunrise' ? todayLogs[current] : undefined;
+            const isCurrentLogged = currentLog && (currentLog.status === 'A' || currentLog.status === 'B' || currentLog.status === 'D' || currentLog.status === 'E');
+            const needsAttention = current && current !== 'Sunrise' && !isCurrentLogged;
+            
+            return needsAttention ? (
+              <p className="text-[9.5px] text-center text-amber-300 font-extrabold leading-none animate-pulse flex items-center justify-center gap-1">
+                <span className="inline-block animate-bounce text-[10px]">👇</span>
+                <span>حان وقت صلاة {getArabicPrayerName(current, now)}! اضغط لتسجيل صلاتك وسننك</span>
+              </p>
+            ) : (
+              <p className="text-[8px] text-center text-white/40 font-bold leading-none animate-fade-in">
+                انقر على صلاة لتسجيل الفريضة والسنن
+              </p>
+            );
+          })()}
           
           <div className="grid grid-cols-6 gap-1 text-center">
             {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as PrayerName[]).map((pName) => {
@@ -1757,6 +1613,8 @@ export default function Dashboard({
               const isSunrise = pName === 'Sunrise';
               const log = !isSunrise ? todayLogs[pName] : undefined;
               const status = log?.status || 'future';
+              const isLogged = !isSunrise && (status === 'A' || status === 'B' || status === 'D' || status === 'E');
+              const shouldNudge = isActive && !isSunrise && !isLogged;
 
               // Interactive styling based on status and active
               let bgClass = '';
@@ -1766,11 +1624,14 @@ export default function Dashboard({
 
               if (isActive) {
                 bgClass = 'bg-white dark:bg-amber-400 text-slate-900 dark:text-slate-950 shadow-md font-bold';
+                if (shouldNudge) {
+                  bgClass += ' animate-gentle-wiggle animate-dynamic-glow ring-2 ring-amber-500 dark:ring-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]';
+                }
                 textNameClass = 'text-slate-900 dark:text-slate-950';
                 textTimeClass = 'text-slate-900/80 dark:text-slate-950/85';
               } else {
                 if (isSunrise) {
-                  bgClass = 'bg-white/5 hover:bg-white/12 text-white/80';
+                   bgClass = 'bg-white/5 hover:bg-white/12 text-white/80';
                 } else if (status === 'A') {
                   bgClass = 'bg-emerald-500/15 text-white';
                   borderClass = 'border-emerald-500/30';
@@ -1780,6 +1641,9 @@ export default function Dashboard({
                 } else if (status === 'D') {
                   bgClass = 'bg-rose-500/15 text-white';
                   borderClass = 'border-rose-500/30';
+                } else if (status === 'E') {
+                  bgClass = 'bg-purple-500/15 text-white';
+                  borderClass = 'border-purple-500/30';
                 } else {
                   bgClass = 'bg-white/5 hover:bg-white/15 text-white/80';
                 }
@@ -1821,7 +1685,7 @@ export default function Dashboard({
                   {/* Small absolute indicator dot for logged prayers */}
                   {!isActive && !isSunrise && status !== 'future' && (
                     <span className={`w-1 h-1 rounded-full absolute top-1 right-1 ${
-                      status === 'A' ? 'bg-emerald-400 animate-pulse' : status === 'B' ? 'bg-amber-400' : 'bg-rose-400'
+                      status === 'A' ? 'bg-emerald-400 animate-pulse' : status === 'B' ? 'bg-amber-400' : status === 'E' ? 'bg-purple-400' : 'bg-rose-400'
                     }`} />
                   )}
                   
@@ -1905,6 +1769,7 @@ export default function Dashboard({
                 if (status === 'A') strokeColor = '#10b981';
                 else if (status === 'B') strokeColor = '#f59e0b';
                 else if (status === 'C' || status === 'D') strokeColor = '#ef4444';
+                else if (status === 'E') strokeColor = '#a855f7'; // Lavender/Purple for Excused status
 
                 const r = 16;
                 const c = 100.53;
@@ -2124,7 +1989,7 @@ export default function Dashboard({
         settings={settings}
       />
 
-      <FridayMode settings={settings} />
+      {isFridayWindow && <FridayMode settings={settings} />}
 
       {/* Nafilah & Optional Prayers Card (Home Quick Access) */}
       <div className={`rounded-3xl p-5 border transition-all duration-300 space-y-4 ${
@@ -2529,7 +2394,7 @@ export default function Dashboard({
               {/* 1. Obligatory Prayer Section */}
               <div className="space-y-2.5">
                 <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 block">الفريضة المكتوبة</span>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={`grid ${settings.gender === 'female' ? 'grid-cols-4 gap-1.5' : 'grid-cols-3 gap-2'}`}>
                   {/* option A: In Time */}
                   <button
                     type="button"
@@ -2554,7 +2419,7 @@ export default function Dashboard({
                     }`}
                   >
                     <span className="text-lg">✅</span>
-                    <span className="text-xs">حاضر</span>
+                    <span className="text-[10px] leading-none whitespace-nowrap">حاضر</span>
                   </button>
 
                   {/* option B: Late/Qada */}
@@ -2581,7 +2446,7 @@ export default function Dashboard({
                     }`}
                   >
                     <span className="text-lg">🕒</span>
-                    <span className="text-xs">قضاء</span>
+                    <span className="text-[10px] leading-none whitespace-nowrap">قضاء</span>
                   </button>
 
                   {/* option D: Missed */}
@@ -2617,8 +2482,37 @@ export default function Dashboard({
                     }`}
                   >
                     <span className="text-lg">❌</span>
-                    <span className="text-xs">فاتتني</span>
+                    <span className="text-[10px] leading-none whitespace-nowrap">صليتها متأخر</span>
                   </button>
+
+                  {/* option E: Excused (Only visible if female) */}
+                  {settings.gender === 'female' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const existingLog = todayLogs[selectedPrayerToLog] || { status: 'not_yet', sunnahBefore: 0, sunnahAfter: 0 };
+                        setPrayerLogs(prev => ({
+                          ...prev,
+                          [todayStr]: {
+                            ...todayLogs,
+                            [selectedPrayerToLog]: { ...existingLog, status: 'E' }
+                          }
+                        }));
+                        // Remove from pending Qada
+                        setPendingQadaPrayers(prev => prev.filter(
+                          q => !(q.date === todayStr && q.prayerName === selectedPrayerToLog)
+                        ));
+                      }}
+                      className={`p-3 rounded-2xl border text-center transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                        status === 'E'
+                          ? 'bg-purple-500/15 border-purple-500 text-purple-600 dark:text-purple-400 font-extrabold shadow-xs scale-[1.02]'
+                          : 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100/50'
+                      }`}
+                    >
+                      <span className="text-lg">🌸</span>
+                      <span className="text-[10px] leading-none whitespace-nowrap">عذر شرعي</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

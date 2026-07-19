@@ -20,6 +20,7 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ADHKAR_DATA, FREE_TASBEEH_PRESETS, DhikrCategory } from '../utils/adhkarData';
 import { toArabicNumbers } from '../utils/hijri';
 
@@ -41,6 +42,11 @@ export default function AdhkarTracker({
   const [currentDhikrCount, setCurrentDhikrCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showCelebration, setShowCelebration] = useState(false);
+
+  // States for interactive vibration & particles
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; text: string }>>([]);
+  const [focusParticles, setFocusParticles] = useState<Array<{ id: number; x: number; y: number; text: string }>>([]);
+  const [tasbeehSuccessModal, setTasbeehSuccessModal] = useState(false);
 
   // States for Electronic Tasbeeh (المسبحة الإلكترونية)
   const [tasbeehPresetIdx, setTasbeehPresetIdx] = useState(0);
@@ -81,10 +87,16 @@ export default function AdhkarTracker({
   const todayStr = new Date().toISOString().split('T')[0];
 
   // Sound/haptic feedback trigger
-  const triggerFeedback = () => {
-    // Attempt standard vibration
+  const triggerFeedback = (type: 'tap' | 'completed_dhikr' | 'completed_category' = 'tap') => {
+    // Attempt standard vibration with profiles
     if (navigator.vibrate) {
-      navigator.vibrate(35);
+      if (type === 'tap') {
+        navigator.vibrate(15);
+      } else if (type === 'completed_dhikr') {
+        navigator.vibrate([45, 65, 45]);
+      } else if (type === 'completed_category') {
+        navigator.vibrate([90, 55, 90, 55, 130]);
+      }
     }
     
     // Play a synthetic pleasant audio beep if sound enabled
@@ -98,12 +110,39 @@ export default function AdhkarTracker({
         gain.connect(ctx.destination);
         
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 pleasant tone
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-        
-        osc.start();
-        osc.stop(ctx.currentTime + 0.1);
+        if (type === 'completed_category') {
+          // Beautiful chord
+          const osc2 = ctx.createOscillator();
+          const osc3 = ctx.createOscillator();
+          osc2.connect(gain);
+          osc3.connect(gain);
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+          osc2.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+          osc3.frequency.setValueAtTime(783.99, ctx.currentTime); // G5
+          gain.gain.setValueAtTime(0.04, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+          osc.start();
+          osc2.start();
+          osc3.start();
+          osc.stop(ctx.currentTime + 0.6);
+          osc2.stop(ctx.currentTime + 0.6);
+          osc3.stop(ctx.currentTime + 0.6);
+        } else if (type === 'completed_dhikr') {
+          // Double snappy pleasant tone
+          osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+          osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.08); // A5
+          gain.gain.setValueAtTime(0.04, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.25);
+        } else {
+          // Normal tap
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 pleasant tone
+          gain.gain.setValueAtTime(0.03, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.1);
+        }
       } catch (e) {
         console.error('Audio feedback error', e);
       }
@@ -111,33 +150,33 @@ export default function AdhkarTracker({
   };
 
   const playCompletionSound = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
-    }
-    if (soundEnabled && (window.AudioContext || (window as any).webkitAudioContext)) {
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const ctx = new AudioContextClass();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.12); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.24); // G5
-        osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.36); // C6
-        
-        gain.gain.setValueAtTime(0.05, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-        
-        osc.start();
-        osc.stop(ctx.currentTime + 0.6);
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    triggerFeedback('completed_category');
+  };
+
+  const spawnParticle = (text: string) => {
+    const id = Date.now() + Math.random();
+    const x = Math.random() * 80 - 40; // horizontal scattering
+    const y = -40 - Math.random() * 30; // vertical scattering
+    const newParticle = { id, x, y, text };
+    setParticles(prev => [...prev, newParticle]);
+    setTimeout(() => {
+      setParticles(prev => prev.filter(p => p.id !== id));
+    }, 900);
+  };
+
+  const handleSpawnTapParticles = () => {
+    const sparks = ['+١', '✨', '🤍', '📿', 'نور', 'أجر'];
+    const randomSpark = sparks[Math.floor(Math.random() * sparks.length)];
+    spawnParticle(randomSpark);
+  };
+
+  const spawnFocusParticle = (text: string, x: number, y: number) => {
+    const id = Date.now() + Math.random();
+    const newParticle = { id, x, y, text };
+    setFocusParticles(prev => [...prev, newParticle]);
+    setTimeout(() => {
+      setFocusParticles(prev => prev.filter(p => p.id !== id));
+    }, 1000);
   };
 
   // Increment current Category item
@@ -145,12 +184,15 @@ export default function AdhkarTracker({
     if (!selectedCategory) return;
     const item = selectedCategory.items[currentDhikrIdx];
     
-    triggerFeedback();
+    handleSpawnTapParticles();
 
     if (currentDhikrCount + 1 < item.count) {
+      triggerFeedback('tap');
       setCurrentDhikrCount(prev => prev + 1);
     } else {
       // Completed this specific item!
+      triggerFeedback('completed_dhikr');
+      
       // Update global logs
       setDhikrLogs(prev => {
         const dayLogs = prev[todayStr] || {};
@@ -170,7 +212,7 @@ export default function AdhkarTracker({
         setCurrentDhikrCount(0);
       } else {
         // Category Fully Completed!
-        playCompletionSound();
+        triggerFeedback('completed_category');
         setShowCelebration(true);
       }
     }
@@ -183,14 +225,15 @@ export default function AdhkarTracker({
   };
 
   const handleIncrementTasbeeh = () => {
-    triggerFeedback();
+    handleSpawnTapParticles();
     
     if (tasbeehCount + 1 >= tasbeehTarget) {
       setTasbeehCount(tasbeehTarget);
-      playCompletionSound();
-      alert('تمت المسبحة بنجاح! تقبل الله منكم الصالحات ✨');
+      triggerFeedback('completed_category');
+      setTasbeehSuccessModal(true);
       setTasbeehCount(0); // Reset
     } else {
+      triggerFeedback('tap');
       setTasbeehCount(prev => prev + 1);
     }
   };
@@ -253,23 +296,18 @@ export default function AdhkarTracker({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-4">
             {ADHKAR_DATA.map((cat) => {
               const completedItemsCount = dhikrLogs[todayStr]?.[cat.id] || 0;
               
               return (
-                <button
+                <div
                   key={cat.id}
-                  onClick={() => {
-                    setSelectedCategory(cat);
-                    setCurrentDhikrIdx(0);
-                    setCurrentDhikrCount(0);
-                    setShowCelebration(false);
-                  }}
-                  className="p-5 bg-white dark:bg-[#161d26] rounded-2xl border border-[#e2e8f0] dark:border-slate-800/80 text-right flex justify-between items-center hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer"
+                  className="p-5 bg-white dark:bg-[#161d26] rounded-2xl border border-[#e2e8f0] dark:border-slate-800/80 text-right flex flex-col gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl ${
+                  {/* Card Header Info */}
+                  <div className="flex items-start gap-4">
+                    <div className={`p-3 rounded-xl shrink-0 ${
                       cat.id === 'morning' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' :
                       cat.id === 'evening' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400' :
                       cat.id === 'sleep' ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
@@ -277,19 +315,33 @@ export default function AdhkarTracker({
                       {cat.id === 'morning' ? <Sun className="w-6 h-6" /> :
                        cat.id === 'evening' ? <Moon className="w-6 h-6" /> : <BookOpen className="w-6 h-6" />}
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-base font-black text-slate-800 dark:text-white">{cat.arabicName}</span>
+                    <div className="space-y-1 flex-grow">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-black text-slate-800 dark:text-white">{cat.arabicName}</span>
+                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 px-2 py-0.5 rounded-md">
+                          {toArabicNumbers(completedItemsCount)}/{toArabicNumbers(cat.items.length)} ذكر
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed max-w-xs">{cat.description}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                      {toArabicNumbers(completedItemsCount)}/{toArabicNumbers(cat.items.length)}
-                    </span>
-                    <ChevronLeft className="w-5 h-5 text-slate-400 dark:text-slate-500" />
+                  {/* High-visibility Action Buttons */}
+                  <div className="flex gap-2 w-full pt-2.5 border-t border-slate-100 dark:border-slate-800/30">
+                    <button
+                      onClick={() => {
+                        setSelectedCategory(cat);
+                        setCurrentDhikrIdx(0);
+                        setCurrentDhikrCount(0);
+                        setShowCelebration(false);
+                      }}
+                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-black rounded-xl text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                    >
+                      <span>بدء تلاوة وقراءة الأذكار</span>
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -307,7 +359,9 @@ export default function AdhkarTracker({
             >
               <span>رجوع للقائمة</span>
             </button>
-            <h3 className="font-extrabold text-slate-800 dark:text-white">{selectedCategory.arabicName}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-extrabold text-slate-800 dark:text-white">{selectedCategory.arabicName}</h3>
+            </div>
             
             <div className="flex items-center gap-1.5">
               <button
@@ -329,55 +383,132 @@ export default function AdhkarTracker({
             </div>
           </div>
 
+
+
           {!showCelebration ? (
-            <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 space-y-6 flex flex-col items-center transition-colors">
-              {/* Progress counter */}
-              <div className="text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-full">
-                الذكر {toArabicNumbers(currentDhikrIdx + 1)} من {toArabicNumbers(selectedCategory.items.length)}
+            <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 space-y-6 flex flex-col items-center transition-colors overflow-hidden">
+              {/* Progress timeline dots indicator */}
+              <div className="flex justify-center gap-1.5 flex-wrap w-full pb-2 border-b border-slate-100/50 dark:border-slate-800/30">
+                {selectedCategory.items.map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      idx === currentDhikrIdx
+                        ? 'w-6 bg-indigo-600 dark:bg-indigo-500 shadow-xs'
+                        : idx < currentDhikrIdx
+                          ? 'w-2 bg-emerald-500'
+                          : 'w-2 bg-slate-200 dark:bg-slate-700'
+                    }`}
+                  />
+                ))}
               </div>
 
-              {/* Main text box */}
-              <div className="w-full bg-[#faf7f0]/40 dark:bg-[#111720] rounded-2xl p-6 border border-slate-50 dark:border-slate-800/50 text-center leading-loose text-lg font-bold text-slate-800 dark:text-slate-100 select-all transition-colors">
-                {selectedCategory.items[currentDhikrIdx].text}
-              </div>
+              {/* Animated card transition wrapper */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentDhikrIdx}
+                  initial={{ opacity: 0, x: 80, scale: 0.95 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: -80, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="w-full space-y-6 flex flex-col items-center"
+                >
+                  {/* Main text card with glowing backdrops */}
+                  <div className="w-full relative bg-slate-50/50 dark:bg-[#111720]/80 rounded-3xl p-6 md:p-8 border border-slate-100 dark:border-slate-800/60 overflow-hidden shadow-inner flex flex-col items-center">
+                    <div className="absolute -top-12 -left-12 w-32 h-32 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                    
+                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 mb-4 bg-indigo-50/50 dark:bg-indigo-950/40 px-3.5 py-1 rounded-full border border-indigo-100/20">
+                      الذكر {toArabicNumbers(currentDhikrIdx + 1)} من {toArabicNumbers(selectedCategory.items.length)}
+                    </span>
+                    
+                    <p className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 leading-relaxed text-center py-4 select-text max-w-xl">
+                      {selectedCategory.items[currentDhikrIdx].text}
+                    </p>
+                    
+                    {selectedCategory.items[currentDhikrIdx].reward && (
+                      <div className="mt-4 p-3.5 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/20 text-xs text-indigo-700 dark:text-indigo-300 text-right w-full leading-relaxed flex items-start gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <span>{selectedCategory.items[currentDhikrIdx].reward}</span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
 
-              {/* Explanation / Reward */}
-              {selectedCategory.items[currentDhikrIdx].reward && (
-                <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-xs text-indigo-900 dark:text-indigo-200 text-right w-full leading-relaxed">
-                  <Sparkles className="w-4 h-4 text-indigo-500 inline-block ml-1.5 shrink-0" />
-                  <span>{selectedCategory.items[currentDhikrIdx].reward}</span>
+              {/* Interactive Counter Tap Button with float particles inside relative area */}
+              <div className="relative flex items-center justify-center pt-4">
+                {/* Sparkle particle overlays */}
+                <div className="absolute pointer-events-none inset-0 flex items-center justify-center overflow-visible z-30">
+                  <AnimatePresence>
+                    {particles.map(p => (
+                      <motion.span
+                        key={p.id}
+                        initial={{ opacity: 0, scale: 0.5, y: 0, x: p.x }}
+                        animate={{ opacity: 1, scale: 1.25, y: p.y }}
+                        exit={{ opacity: 0, scale: 0.8, y: p.y - 15 }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="absolute text-xs font-black px-2.5 py-1 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-md select-none pointer-events-none whitespace-nowrap"
+                      >
+                        {p.text}
+                      </motion.span>
+                    ))}
+                  </AnimatePresence>
                 </div>
-              )}
 
-              {/* Interactive Counter Tap Button */}
-              <button
-                onClick={handleIncrementCategoryCount}
-                className="w-44 h-44 rounded-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 hover:scale-105 active:scale-95 text-white flex flex-col items-center justify-center shadow-xl shadow-indigo-100/40 dark:shadow-none transition-all cursor-pointer border-4 border-indigo-100 dark:border-indigo-950/50"
-              >
-                <span className="text-4xl font-black">
-                  {toArabicNumbers(currentDhikrCount)}/{toArabicNumbers(selectedCategory.items[currentDhikrIdx].count)}
-                </span>
-                <span className="text-xs font-bold text-indigo-100 mt-2">انقر للتكرار</span>
-              </button>
+                {/* Outer Breathing rings */}
+                <div className="absolute w-44 h-44 rounded-full border border-indigo-500/25 dark:border-indigo-500/10 animate-ping pointer-events-none" />
+
+                <button
+                  onClick={handleIncrementCategoryCount}
+                  className="w-44 h-44 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-700 dark:from-indigo-700 dark:to-indigo-800 hover:from-indigo-500 hover:to-indigo-600 text-white flex flex-col items-center justify-center shadow-xl shadow-indigo-100/40 dark:shadow-none hover:shadow-indigo-300/40 hover:scale-105 active:scale-95 transition-all cursor-pointer border-4 border-white dark:border-slate-800 relative overflow-hidden group select-none"
+                >
+                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  <div className="text-4xl font-black tracking-tight z-10 flex flex-col items-center">
+                    <span>{toArabicNumbers(currentDhikrCount)}</span>
+                    <span className="text-xs font-extrabold text-indigo-200 border-t border-indigo-500/50 mt-1.5 pt-1 w-12 text-center">
+                      من {toArabicNumbers(selectedCategory.items[currentDhikrIdx].count)}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-extrabold text-indigo-100/90 mt-2 tracking-wide z-10 bg-indigo-950/20 px-2.5 py-0.5 rounded-full">
+                    اضغط للعد 📿
+                  </span>
+                  
+                  <div className="absolute bottom-1.5 w-full flex justify-center z-10">
+                    <span className="text-[9px] font-black text-indigo-300 bg-indigo-900/40 px-2.5 py-0.5 rounded-full">
+                      {toArabicNumbers(Math.round((currentDhikrCount / selectedCategory.items[currentDhikrIdx].count) * 100))}%
+                    </span>
+                  </div>
+                </button>
+              </div>
+
             </div>
           ) : (
-            <div className="bg-white dark:bg-[#161d26] rounded-3xl p-8 border border-[#e2e8f0] dark:border-slate-800 text-center space-y-6 transition-colors">
-              <div className="inline-flex p-4 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-full animate-bounce">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white dark:bg-[#161d26] rounded-3xl p-8 border border-slate-100 dark:border-slate-800 text-center space-y-6 flex flex-col items-center shadow-lg"
+            >
+              <div className="inline-flex p-5 bg-gradient-to-tr from-emerald-500 to-teal-600 text-white rounded-full shadow-lg shadow-emerald-100 dark:shadow-none animate-bounce">
                 <CheckCircle2 className="w-12 h-12" />
               </div>
-              <div className="space-y-2">
-                <h3 className="text-xl font-extrabold text-slate-800 dark:text-white">تقبل الله طاعاتكم!</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed font-medium">
-                  لقد أتممت قراءة {selectedCategory.arabicName} لليوم بنجاح، جعلها الله في ميزان حسناتك وحفظك بها طوال اليوم.
+              <div className="space-y-3">
+                <h3 className="text-2xl font-black text-slate-800 dark:text-white">تقبل الله طاعاتكم وغفر ذنوبكم!</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed font-semibold">
+                  لقد أتممت قراءة {selectedCategory.arabicName} لليوم بنجاح، جعلها الله حصناً حصيناً وحفظاً مباركاً في يومك وليلتك 🤍
+                </p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 italic font-bold bg-indigo-50/50 dark:bg-indigo-950/20 py-2 px-4 rounded-xl inline-block mt-2">
+                  "ألا بذكرِ الله تطمئنُّ القلوب"
                 </p>
               </div>
               <button
                 onClick={() => setSelectedCategory(null)}
-                className="py-3 px-6 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer"
+                className="py-3 px-8 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-extrabold rounded-2xl text-xs shadow-md transition-all active:scale-[0.98] cursor-pointer"
               >
-                العودة للأذكار الأخرى
+                العودة لقائمة التحصين للأوراد الأخرى
               </button>
-            </div>
+            </motion.div>
           )}
         </div>
       )}
@@ -523,48 +654,71 @@ export default function AdhkarTracker({
               <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold">{activeTasbeehDesc}</p>
             </div>
 
-            {/* Circular counter button */}
-            <button
-              onClick={handleIncrementTasbeeh}
-              className="w-56 h-56 rounded-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0] dark:border-slate-800 hover:scale-105 active:scale-95 flex flex-col items-center justify-center transition-all cursor-pointer relative shadow-inner"
-              style={{
-                background: 'radial-gradient(circle, var(--tw-radial-start, #ffffff) 60%, var(--tw-radial-end, #f1f5f9) 100%)'
-              }}
-            >
-              {/* Ring Progress border */}
-              <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="46"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  fill="transparent"
-                  className="text-slate-100 dark:text-slate-800"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="46"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                  fill="transparent"
-                  strokeDasharray="289"
-                  strokeDashoffset={289 - (289 * tasbeehCount) / tasbeehTarget}
-                  strokeLinecap="round"
-                  className="text-indigo-600 dark:text-indigo-500 transition-all duration-300"
-                />
-              </svg>
-
-              <div className="text-center space-y-1 z-10">
-                <span className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">
-                  {toArabicNumbers(tasbeehCount)}
-                </span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">
-                  الهدف: {toArabicNumbers(tasbeehTarget)}
-                </span>
+            {/* Circular counter button with particles */}
+            <div className="relative flex items-center justify-center">
+              {/* Sparkle particle overlays */}
+              <div className="absolute pointer-events-none inset-0 flex items-center justify-center overflow-visible z-30">
+                <AnimatePresence>
+                  {particles.map(p => (
+                    <motion.span
+                      key={p.id}
+                      initial={{ opacity: 0, scale: 0.5, y: 0, x: p.x }}
+                      animate={{ opacity: 1, scale: 1.25, y: p.y }}
+                      exit={{ opacity: 0, scale: 0.8, y: p.y - 15 }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="absolute text-xs font-black px-2.5 py-1 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-md select-none pointer-events-none whitespace-nowrap"
+                    >
+                      {p.text}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
               </div>
-            </button>
+
+              {/* Outer Breathing rings */}
+              <div className="absolute w-56 h-56 rounded-full border border-indigo-500/25 dark:border-indigo-500/10 animate-ping pointer-events-none" />
+
+              <button
+                onClick={handleIncrementTasbeeh}
+                className="w-56 h-56 rounded-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0] dark:border-slate-800 hover:scale-105 active:scale-95 flex flex-col items-center justify-center transition-all cursor-pointer relative shadow-inner group overflow-hidden"
+                style={{
+                  background: 'radial-gradient(circle, var(--tw-radial-start, #ffffff) 60%, var(--tw-radial-end, #f1f5f9) 100%)'
+                }}
+              >
+                {/* Ring Progress border */}
+                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="46"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="transparent"
+                    className="text-slate-100 dark:text-slate-800"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="46"
+                    stroke="currentColor"
+                    strokeWidth="3.5"
+                    fill="transparent"
+                    strokeDasharray="289"
+                    strokeDashoffset={289 - (289 * tasbeehCount) / tasbeehTarget}
+                    strokeLinecap="round"
+                    className="text-indigo-600 dark:text-indigo-500 transition-all duration-300"
+                  />
+                </svg>
+
+                <div className="text-center space-y-1 z-10 select-none">
+                  <span className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">
+                    {toArabicNumbers(tasbeehCount)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">
+                    الهدف: {toArabicNumbers(tasbeehTarget)}
+                  </span>
+                </div>
+              </button>
+            </div>
 
             {/* Reset & Focus Buttons */}
             <div className="flex gap-2.5">
@@ -593,15 +747,38 @@ export default function AdhkarTracker({
       {isFocusMode && (
         <div 
           onClick={(e) => {
+            // Spawn focus particle at tap coordinates
+            const x = e.clientX;
+            const y = e.clientY;
+            const sparks = ['+١', '✨', 'سُبْحَانَ اللهِ', 'الْحَمْدُ للهِ', 'اللهُ أَكْبَرُ', 'أَسْتَغْفِرُ اللهَ', '🤍', 'نور', 'أجر'];
+            const randomSpark = sparks[Math.floor(Math.random() * sparks.length)];
+            spawnFocusParticle(randomSpark, x, y);
+
             if (selectedCategory) {
               if (!showCelebration) handleIncrementCategoryCount();
             } else if (activeTab === 'tasbeeh') {
               handleIncrementTasbeeh();
             }
           }}
-          className="fixed inset-0 z-50 flex flex-col justify-between p-6 cursor-pointer select-none text-right transition-all duration-500 bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100"
+          className="fixed inset-0 z-50 flex flex-col justify-between p-6 cursor-pointer select-none text-right transition-all duration-500 bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 overflow-hidden"
           dir="rtl"
         >
+          {/* Floating focus particles */}
+          <AnimatePresence>
+            {focusParticles.map(p => (
+              <motion.span
+                key={p.id}
+                initial={{ opacity: 0, scale: 0.5, x: p.x, y: p.y }}
+                animate={{ opacity: 1, scale: 1.3, y: p.y - 100 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.9, ease: "easeOut" }}
+                className="fixed z-50 text-sm font-extrabold px-3 py-1.5 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-lg pointer-events-none whitespace-nowrap"
+                style={{ left: p.x - 40, top: p.y }}
+              >
+                {p.text}
+              </motion.span>
+            ))}
+          </AnimatePresence>
           {/* Header Controls */}
           <div className="flex justify-between items-center w-full pb-4 border-b border-slate-200/50 dark:border-slate-800/40" onClick={(e) => e.stopPropagation()}>
             <button
@@ -679,6 +856,50 @@ export default function AdhkarTracker({
           </div>
         </div>
       )}
+
+      {/* Modern, high-fidelity celebratory modal for electronic tasbeeh completion */}
+      <AnimatePresence>
+        {tasbeehSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 350, damping: 26 }}
+              className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-slate-100 dark:border-slate-800/80 text-center max-w-sm w-full space-y-5 shadow-2xl relative overflow-hidden"
+              dir="rtl"
+            >
+              {/* Decorative backdrop glow */}
+              <div className="absolute -top-12 -left-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl pointer-events-none" />
+              <div className="absolute -bottom-12 -right-12 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
+
+              <div className="inline-flex p-4.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-full animate-bounce">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-slate-800 dark:text-white">تمت المسبحة بنجاح!</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
+                  تقبل الله منكم صالح الأعمال وكتب لكم الأجر والقبول المضاعف في هذا الذكر الطيب ✨
+                </p>
+                <p className="text-[11px] text-indigo-600 dark:text-indigo-400 italic font-bold bg-indigo-50/50 dark:bg-indigo-950/20 py-1.5 px-3 rounded-lg inline-block">
+                  "أحبُّ الكلامِ إلى اللهِ أربع..."
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setTasbeehSuccessModal(false);
+                  setIsFocusMode(false); // Close focus mode if completed
+                }}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-extrabold rounded-2xl text-xs shadow-md transition-all active:scale-[0.98] cursor-pointer"
+              >
+                متابعة الذكر والتسبيح
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

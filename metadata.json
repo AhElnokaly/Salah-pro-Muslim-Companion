@@ -1,5 +1,5 @@
 {
-  "name": "Muslim Companion",
+  "name": "رفيق المسلم - Muslim Companion",
   "description": "A comprehensive daily companion for prayer times, Qibla direction, daily tracking, Adhkar, and Quran readings.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

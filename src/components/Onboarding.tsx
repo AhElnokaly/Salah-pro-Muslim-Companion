@@ -24,6 +24,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [calcMethod, setCalcMethod] = useState('Egypt');
   const [madhab, setMadhab] = useState<'standard' | 'hanafi'>('standard');
   const [hijriOffset, setHijriOffset] = useState(0);
+  const [gender, setGender] = useState<'male' | 'female'>('male');
   
   // Last prayer state
   const [lastPrayer, setLastPrayer] = useState<PrayerName>('Dhuhr');
@@ -74,6 +75,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       calcMethod,
       madhab,
       hijriOffset,
+      gender,
       adhanEnabled: {
         Fajr: true,
         Sunrise: false,
@@ -237,6 +239,40 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     +
                   </button>
                 </div>
+              </div>
+
+              {/* Gender Selection */}
+              <div className="space-y-1.5 text-right">
+                <label className="text-sm font-bold text-gray-700">الجنس ومستند الرخصة الشرعية (👨/👩):</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGender('male')}
+                    className={`p-3 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+                      gender === 'male'
+                        ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    ذكر 👨
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGender('female')}
+                    className={`p-3 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+                      gender === 'female'
+                        ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    أنثى 👩
+                  </button>
+                </div>
+                {gender === 'female' && (
+                  <p className="text-[10px] text-indigo-600 font-semibold leading-relaxed mt-1">
+                    ✨ يتيح وضع المرأة المسلمة تسجيل صلواتك كـ «عذر شرعي رخصة» لا ينقص من إنجازكِ أو يقطع تتابعك الإيماني المبارك 🤍.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -88,7 +88,7 @@ export default function MoreSettings({
     const saved = localStorage.getItem('salah_audio_volume');
     return saved ? parseFloat(saved) : 0.8;
   });
-  const [autoPlayAthan, setAutoPlayAthan] = useState(() => localStorage.getItem('salah_auto_play_athan') === 'true');
+  const [autoPlayAthan, setAutoPlayAthan] = useState(() => localStorage.getItem('salah_auto_play_athan') !== 'false');
 
   useEffect(() => {
     localStorage.setItem('salah_fajr_muezzin', fajrMuezzin);
@@ -349,6 +349,37 @@ export default function MoreSettings({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Gender Selection Section */}
+            <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-slate-800/50">
+              <label className="text-xs font-black text-slate-500 dark:text-slate-400 block">جنس ومستند المستخدم (لحساب الرخصة والعذر الشرعي)</label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'male', title: 'ذكر 👨', desc: 'الحساب العادي للفرائض والسنن' },
+                  { id: 'female', title: 'أنثى 👩', desc: 'يتيح تسجيل الأعذار الشرعية (الرخص)' }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSettings(prev => ({ ...prev, gender: item.id as any }))}
+                    className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
+                      (settings.gender || 'male') === item.id
+                        ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-350 font-black'
+                        : 'border-[#e2e8f0] dark:border-slate-800 bg-slate-50/55 dark:bg-[#111720] text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <span className="text-xs font-black">{item.title}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-1">{item.desc}</span>
+                  </button>
+                ))}
+              </div>
+              
+              {(settings.gender === 'female') && (
+                <div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/5 border border-indigo-500/20 rounded-2xl text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed font-semibold mt-2 animate-fade-in text-right">
+                  ✨ <strong>رخصة العذر الشرعي مفعلة:</strong> لقد تم تفعيل وضع المرأة المسلمة. يتيح لكِ التطبيق الآن تسجيل صلواتكِ كـ «عذر شرعي رخصة» في لوحة التحكم أثناء أيام عذركِ الشرعي. لن تؤثر هذه الأيام بالسلب على نسب إتمام العبادات أو تهدم تتابع السلاسل الإيمانية الخاص بكِ تيسيراً ورفقاً بكِ 🤍.
+                </div>
+              )}
             </div>
           </div>
 
@@ -659,6 +690,48 @@ export default function MoreSettings({
                 );
               })}
             </div>
+          </div>
+
+          {/* Gender Selector */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm animate-fade-in">
+            <div className="flex items-center gap-2">
+              <Heart className="w-4 h-4 text-rose-500 animate-pulse" />
+              <h3 className="text-sm font-black text-slate-800 dark:text-white">تحديد الجنس ومستند الرخصة الشرعية</h3>
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
+              تحديد الجنس يسمح للمرأة المسلمة بتفعيل «وضع الرخصة الشرعية» لعدم احتساب صلوات الفترات الخاصة كصلوات فائتة أو كسر التتابع الإيماني لتتبع الطاعات والورد اليومي.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSettings(prev => ({ ...prev, gender: 'male' }))}
+                className={`p-3 rounded-2xl border text-center flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${
+                  (settings.gender || 'male') === 'male'
+                    ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-350 font-bold shadow-xs scale-[1.02]'
+                    : 'border-slate-150 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900/40 hover:scale-[1.01]'
+                }`}
+              >
+                <span className="text-lg">👨</span>
+                <span className="text-xs font-black">ذكر</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettings(prev => ({ ...prev, gender: 'female' }))}
+                className={`p-3 rounded-2xl border text-center flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${
+                  settings.gender === 'female'
+                    ? 'border-rose-500 bg-rose-50/40 dark:bg-rose-950/20 text-rose-700 dark:text-rose-350 font-bold shadow-xs scale-[1.02]'
+                    : 'border-slate-150 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900/40 hover:scale-[1.01]'
+                }`}
+              >
+                <span className="text-lg">👩</span>
+                <span className="text-xs font-black">أنثى</span>
+              </button>
+            </div>
+            {settings.gender === 'female' && (
+              <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold leading-relaxed animate-fade-in text-center bg-rose-50/30 dark:bg-rose-950/10 p-2.5 rounded-xl border border-rose-500/10">
+                ✨ يتيح وضع المرأة المسلمة تسجيل صلواتك كـ «عذر شرعي رخصة» لا ينقص من إنجازكِ أو يقطع تتابعكِ الإيماني المبارك 🤍.
+              </p>
+            )}
           </div>
 
           {/* Clock Style Toggle */}

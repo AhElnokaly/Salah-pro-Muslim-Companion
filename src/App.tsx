@@ -21,7 +21,9 @@ import {
   RotateCcw,
   Clock,
   Bell,
-  Smartphone
+  Smartphone,
+  MapPin,
+  Download
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { 
@@ -92,6 +94,16 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas'>('prayer');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
 
   // App states
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -109,6 +121,48 @@ export default function App() {
   const [khatmat, setKhatmat] = useState<QuranKhatma[]>([]);
   const [dhikrLogs, setDhikrLogs] = useState<Record<string, Record<string, number>>>({});
   const [customDuas, setCustomDuas] = useState<CustomDua[]>([]);
+  const [notificationsCount, setNotificationsCount] = useState<number>(0);
+
+  // PWA states and event listeners
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+  const [showPwaInstallGuide, setShowPwaInstallGuide] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // Check if running in standalone mode (already installed PWA)
+    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone) {
+      setIsInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to install prompt: ${outcome}`);
+      setDeferredPrompt(null);
+    } else {
+      setShowPwaInstallGuide(true);
+    }
+  };
 
   // Clock State & Real-time Prayer/Date Synchronizations
   const [now, setNow] = useState<Date>(new Date());
@@ -117,6 +171,18 @@ export default function App() {
       setNow(new Date());
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Listen to spiritual notifications count dispatched from Dashboard
+  useEffect(() => {
+    const handleUpdateCount = (e: Event) => {
+      const customEvent = e as CustomEvent<number>;
+      setNotificationsCount(customEvent.detail || 0);
+    };
+    window.addEventListener('update-spiritual-notifications-count', handleUpdateCount);
+    return () => {
+      window.removeEventListener('update-spiritual-notifications-count', handleUpdateCount);
+    };
   }, []);
 
   const hijri = getHijriDate(now, settings.hijriOffset);
@@ -303,6 +369,55 @@ export default function App() {
     localStorage.setItem('mc_custom_duas', JSON.stringify(customDuas));
   }, [customDuas, isLoaded]);
 
+  // Prohibited Fasting Days check and automatic cancellation
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    const dates = Object.keys(fastingLogs);
+    let logsModified = false;
+    const newFastingLogs = { ...fastingLogs };
+    const removedReasons: string[] = [];
+
+    dates.forEach(dateStr => {
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return;
+        const h = getHijriDate(d, settings.hijriOffset);
+
+        // Eid al-Fitr (1 Shawwal)
+        const isEidFitr = h.month === 10 && h.day === 1;
+        // Eid al-Adha (10 Dhu al-Hijjah) & Tashreeq days (11, 12, 13 Dhu al-Hijjah)
+        const isEidAdhaOrTashreeq = h.month === 12 && (h.day === 10 || h.day === 11 || h.day === 12 || h.day === 13);
+
+        if ((isEidFitr || isEidAdhaOrTashreeq) && fastingLogs[dateStr]?.fasted) {
+          delete newFastingLogs[dateStr];
+          logsModified = true;
+          
+          let reasonStr = '';
+          if (isEidFitr) {
+            reasonStr = `يوم عيد الفطر المبارك (١ شوال)`;
+          } else if (h.day === 10) {
+            reasonStr = `يوم عيد الأضحى المبارك (١٠ ذو الحجة)`;
+          } else {
+            const dayArabic = h.day === 11 ? 'الحادي عشر' : h.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
+            reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
+          }
+          removedReasons.push(`التاريخ: ${dateStr} (${reasonStr})`);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    if (logsModified) {
+      setFastingLogs(newFastingLogs);
+      // Show warning to the user
+      alert(
+        `⚠️ تنبيه فقهي هام:\n\nيَحْرُم صيام أيام العيدين وأيام التشريق شرعاً.\nتم إلغاء صيام الأيام التالية تلقائياً من جدولك:\n\n${removedReasons.join('\n')}\n\nنسأل الله أن يتقبل طاعتكم وفرحكم بالعيد! 🤲🌸`
+      );
+    }
+  }, [fastingLogs, isLoaded, settings.hijriOffset]);
+
   // Handle completion of onboarding
   const handleOnboardingComplete = (
     finalSettings: AppSettings, 
@@ -335,10 +450,15 @@ export default function App() {
   // While loading, display a gorgeous, clean loading pulse
   if (!isLoaded) {
     return (
-      <div className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center text-center space-y-3" dir="rtl">
-        <Moon className="w-12 h-12 text-indigo-600 animate-spin" style={{ animationDuration: '3s' }} />
-        <h2 className="text-xl font-bold text-slate-800">رفيق المسلم</h2>
-        <p className="text-xs text-slate-400">تحميل السجلات المباركة...</p>
+      <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] flex flex-col items-center justify-center text-center space-y-4" dir="rtl">
+        <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse">
+          <img src="/src/assets/images/muslim_companion_icon_1784362373898.jpg" alt="Muslim Companion Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-black text-slate-800 dark:text-white">رفيق المسلم</h2>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">Muslim Companion</p>
+        </div>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold animate-pulse">جاري تحميل السجلات المباركة...</p>
       </div>
     );
   }
@@ -352,33 +472,66 @@ export default function App() {
     <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-right flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
       
       {/* 1. Sticky Top Header Bar */}
-      <header className="w-full max-w-md bg-white dark:bg-[#161d26]/90 backdrop-blur-md border-b border-[#e2e8f0]/85 dark:border-slate-800/80 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs transition-colors duration-300 rounded-b-3xl">
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all cursor-pointer flex items-center justify-center"
-          title="افتح القائمة الجانبية"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-        
-        <div className="flex items-center gap-2">
-          <MosqueIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-          <h1 className="text-sm font-black text-slate-800 dark:text-white">رفيق المسلم</h1>
-          <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 rounded-lg font-extrabold">
-            {settings.cityName}
-          </span>
+      <header className="w-full max-w-md bg-white/90 dark:bg-[#121820]/90 backdrop-blur-md border-b border-[#e2e8f0]/60 dark:border-slate-800/60 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-[0_4px_20px_rgba(0,0,0,0.01)] transition-colors duration-300 rounded-b-3xl">
+        {/* Right side: Menu + Logo & Location Vertical Stack */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-slate-800/30 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-slate-100 dark:border-slate-800/50 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
+            title="افتح القائمة الجانبية"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          
+          <div className="flex flex-col items-start gap-0.5">
+            <div className="flex items-center gap-1.5">
+              <MosqueIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h1 className="text-xs font-black text-slate-800 dark:text-white tracking-wide">رفيق المسلم</h1>
+            </div>
+            
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('trigger-gps-sync'));
+              }}
+              className="text-[9px] bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300 active:scale-95 transition-all cursor-pointer border border-slate-100 dark:border-slate-800/50 shadow-3xs"
+              title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
+            >
+              <MapPin className="w-2 h-2 text-indigo-500 dark:text-indigo-400 shrink-0" />
+              <span>{settings.cityName}</span>
+            </button>
+          </div>
         </div>
         
-        <div className="flex items-center gap-1.5">
+        {/* Left side: Integrated Actions Panel */}
+        <div className="flex items-center gap-2">
+          {/* Download / Install App Button (disappears when installed) */}
+          {!isInstalled && (
+            <button 
+              onClick={handleInstallApp}
+              className="w-10 h-10 rounded-2xl bg-amber-500/[0.08] dark:bg-amber-500/[0.06] text-amber-600 dark:text-amber-400 hover:bg-amber-500/[0.15] dark:hover:bg-amber-500/[0.12] border border-amber-500/25 dark:border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative animate-gentle-wiggle shadow-sm"
+              title="تنزيل رفيق المسلم كـ App 📱"
+            >
+              <Download className="w-4.5 h-4.5" />
+            </button>
+          )}
+
           {/* Notifications Bell Button */}
           <button 
             onClick={() => {
               window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
             }}
-            className="p-2 rounded-xl bg-amber-50 dark:bg-[#282114]/50 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-[#282114]/80 border border-amber-500/20 transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-2xl bg-amber-500/[0.04] dark:bg-amber-500/[0.03] text-amber-600 dark:text-amber-400 hover:bg-amber-500/[0.08] dark:hover:bg-amber-500/[0.06] border border-amber-500/15 dark:border-amber-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative"
             title="النفحات والإشعارات الإيمانية 🔔"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-4.5 h-4.5" />
+            {notificationsCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-[0_2px_8px_rgba(239,68,68,0.4)] border-2 border-white dark:border-[#121820] animate-pulse">
+                {(() => {
+                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+                })()}
+              </span>
+            )}
           </button>
 
           {/* Minaret / Athan Simulator Button */}
@@ -386,10 +539,10 @@ export default function App() {
             onClick={() => {
               window.dispatchEvent(new CustomEvent('trigger-athan-simulation'));
             }}
-            className="p-2 rounded-xl bg-emerald-50 dark:bg-[#14231b]/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-[#14231b]/80 border border-emerald-500/20 transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-2xl bg-emerald-500/[0.04] dark:bg-emerald-500/[0.03] text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/[0.08] dark:hover:bg-emerald-500/[0.06] border border-emerald-500/15 dark:border-emerald-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
             title="محاكاة تجربة الأذان الكاملة 🕌"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v2h3v-2A1.5 1.5 0 0 0 12 2z" />
               <path d="M9 7c0-2 1.5-3 3-3s3 1 3 3v2H9V7z" />
               <path d="M8 9h8v3H8z" />
@@ -399,20 +552,21 @@ export default function App() {
             </svg>
           </button>
 
+          {/* Theme toggle button */}
           <button 
             onClick={() => {
               const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
               setSettings(prev => ({ ...prev, theme: nextTheme }));
             }}
-            className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-2xl bg-indigo-500/[0.04] dark:bg-indigo-500/[0.03] text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/[0.08] dark:hover:bg-indigo-500/[0.06] border border-indigo-500/15 dark:border-indigo-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
             title="تغيير المظهر"
           >
             {settings.theme === 'light' ? (
-              <Sun className="w-5 h-5 text-amber-500" />
+              <Sun className="w-4.5 h-4.5 text-amber-500" />
             ) : settings.theme === 'dark' ? (
-              <Moon className="w-5 h-5 text-indigo-400" />
+              <Moon className="w-4.5 h-4.5 text-indigo-400" />
             ) : (
-              <Monitor className="w-5 h-5 text-slate-400" />
+              <Monitor className="w-4.5 h-4.5 text-slate-400" />
             )}
           </button>
         </div>
@@ -451,6 +605,8 @@ export default function App() {
             quranSessions={quranSessions}
             khatmat={khatmat}
             dhikrLogs={dhikrLogs}
+            onInstallApp={handleInstallApp}
+            isPwaInstalled={isInstalled}
           />
         )}
 
@@ -589,6 +745,65 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Gender/Spiritual Identity Selection Card - Placed at the very top for quick & instant access */}
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-800/20 dark:to-slate-800/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/60 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                      <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تخصيص الهوية الإيمانية</span>
+                    </div>
+                    <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md font-black">ذكي</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSettings(prev => ({ ...prev, gender: 'male' }));
+                        setToastMessage("تم تخصيص فقه وأحكام الرجال: مواقيت الجمعة، سنن الجماعة، والأذكار المخصصة تلقائياً 🕌");
+                      }}
+                      className={`flex-1 py-2 px-2.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border ${
+                        (settings.gender || 'male') === 'male'
+                          ? 'bg-indigo-600 text-white shadow-sm border-indigo-500 font-black'
+                          : 'bg-white dark:bg-[#161d26] text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 border-slate-100 dark:border-slate-800/60'
+                      }`}
+                    >
+                      <span>ذكر 👨</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSettings(prev => ({ ...prev, gender: 'female' }));
+                        setToastMessage("تم تخصيص فقه وأحكام النساء: تتبع الأعذار الشرعية، أيام قضاء الصيام، وتخصيص الصلوات تلقائياً 🌸");
+                      }}
+                      className={`flex-1 py-2 px-2.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border ${
+                        settings.gender === 'female'
+                          ? 'bg-rose-600 text-white shadow-sm border-rose-500 font-black'
+                          : 'bg-white dark:bg-[#161d26] text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 border-slate-100 dark:border-slate-800/60'
+                      }`}
+                    >
+                      <span>أنثى 👩</span>
+                    </button>
+                  </div>
+
+                  {/* Smart Dynamic helper tip */}
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className={`p-2 rounded-xl border text-[9.5px] leading-relaxed font-bold ${
+                      settings.gender === 'female'
+                        ? 'bg-rose-50/50 dark:bg-rose-950/10 text-rose-700 dark:text-rose-300 border-rose-100 dark:border-rose-950/20'
+                        : 'bg-indigo-50/50 dark:bg-indigo-950/10 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-950/20'
+                    }`}
+                  >
+                    {settings.gender === 'female' ? (
+                      <span>وضع المرأة نشط: تفعيل تتبع الأعذار، قضاء الصيام، وسنن الصلوات النسائية تلقائياً. 🌸</span>
+                    ) : (
+                      <span>وضع الرجل نشط: تفعيل سنن الجماعة بالمسجد، شعائر الجمعة، والأحكام المخصصة تلقائياً. 🕌</span>
+                    )}
+                  </motion.div>
+                </div>
+
                 {/* Main Worship Navigation */}
                 <div className="space-y-2 text-right">
                   <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">الأقسام والعبادات</span>
@@ -662,6 +877,30 @@ export default function App() {
                     })}
                   </div>
                 </div>
+
+                {/* PWA Install Promo inside Sidebar */}
+                {!isInstalled && (
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-right">
+                    <div className="flex items-center gap-2">
+                      <Download className="w-4 h-4 text-amber-500 animate-bounce" />
+                      <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل رفيق المسلم كـ App</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                      ثبّت التطبيق على جهازك للوصول السريع، وتلقي تنبيهات الأذان حتى بدون إنترنت!
+                    </p>
+                    <button
+                      onClick={() => {
+                        setIsSidebarOpen(false);
+                        handleInstallApp();
+                      }}
+                      className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[10.5px] rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تثبيت التطبيق الآن 📱</span>
+                    </button>
+                  </div>
+                )}
+
               </div>
 
               {/* Sidebar Footer */}
@@ -708,6 +947,90 @@ export default function App() {
         </button>
 
       </nav>
+
+      {/* Premium Glassmorphic In-App Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className="fixed bottom-24 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-slate-900/95 dark:bg-[#161d26]/98 backdrop-blur-md text-white px-5 py-4 rounded-2xl border border-slate-700/50 shadow-2xl z-50 flex items-start gap-3.5 text-right font-sans"
+            dir="rtl"
+          >
+            <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4 animate-pulse text-amber-400" />
+            </div>
+            <div className="space-y-1">
+              <h5 className="text-[10px] font-black tracking-wider text-indigo-300 uppercase">مساعد التخصيص الذكي</h5>
+              <p className="text-xs text-slate-100 font-extrabold leading-relaxed">{toastMessage}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PWA Installation Guide Modal */}
+      <AnimatePresence>
+        {showPwaInstallGuide && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-[#161d26] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-right"
+            >
+              <button
+                onClick={() => setShowPwaInstallGuide(false)}
+                className="absolute top-4 left-4 w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer text-xs font-bold"
+              >
+                ✕
+              </button>
+
+              <div className="text-center space-y-2 mb-5">
+                <span className="text-4xl block animate-bounce">📥</span>
+                <h3 className="text-sm font-black text-slate-800 dark:text-white">تثبيت تطبيق رفيق المسلم</h3>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">استمتع بتجربة تطبيق كامل ومنفصل بمميزات رائعة</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Option 1: iOS Safari */}
+                <div className="border-b border-slate-100 dark:border-slate-800/60 pb-3">
+                  <h4 className="text-xs font-black text-indigo-600 dark:text-indigo-400 mb-1.5 flex items-center gap-1">
+                    <span>🍎 أجهزة آيفون وآيباد (iOS Safari):</span>
+                  </h4>
+                  <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
+                    <li>اضغط على زر المشاركة 📤 في أسفل أو أعلى المتصفح.</li>
+                    <li>اختر "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) ➕.</li>
+                    <li>اضغط على "إضافة" (Add) في الزاوية العلوية لتثبيته كتطبيق منفصل.</li>
+                  </ul>
+                </div>
+
+                {/* Option 2: Android / Chrome */}
+                <div className="border-b border-slate-100 dark:border-slate-800/60 pb-3">
+                  <h4 className="text-xs font-black text-emerald-600 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
+                    <span>🤖 أجهزة أندرويد والكمبيوتر (Android & PC):</span>
+                  </h4>
+                  <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
+                    <li>انقر على قائمة المتصفح (الثلاث نقاط ⋮) في الزاوية.</li>
+                    <li>اختر "تثبيت التطبيق" (Install App) أو "إضافة إلى الشاشة الرئيسية".</li>
+                    <li>قم بتأكيد التثبيت ليظهر فوراً على شاشتك الرئيسية أو سطح المكتب!</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-2">
+                <button
+                  onClick={() => setShowPwaInstallGuide(false)}
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl transition-all shadow-sm cursor-pointer text-center"
+                >
+                  فهمت، شكراً لك 🤍
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -373,8 +373,15 @@ export default function PrayerManager({
       }
 
       audio.play().catch(err => {
-        console.error('Playback failed', err);
-        alert('حدث خطأ أثناء تشغيل الأذان، يرجى التحقق من اتصالك بالإنترنت.');
+        if (err.name === 'AbortError') {
+          console.log('[Audio] Playback was aborted or interrupted safely.');
+          return;
+        }
+        if (err.name === 'NotAllowedError') {
+          console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
+          return;
+        }
+        console.error('[Audio] Playback failed', err);
       });
     }
   };
@@ -795,6 +802,11 @@ export default function PrayerManager({
       return isSelected 
         ? 'bg-rose-500 dark:bg-rose-600 text-white border-rose-500 font-extrabold shadow-sm' 
         : 'bg-rose-500/5 hover:bg-rose-500/10 text-rose-600 border-rose-500/20';
+    }
+    if (status === 'E') { // Excused / Religious License
+      return isSelected 
+        ? 'bg-purple-600 dark:bg-purple-700 text-white border-purple-600 font-extrabold shadow-sm animate-pulse' 
+        : 'bg-purple-500/5 hover:bg-purple-500/10 text-purple-600 border-purple-500/20';
     }
     return '';
   };
@@ -1500,7 +1512,7 @@ export default function PrayerManager({
                   {/* Fard Status */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold block">حالة الفريضة:</span>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className={`grid ${settings.gender === 'female' ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'A')}
@@ -1522,6 +1534,15 @@ export default function PrayerManager({
                       >
                         فائتة
                       </button>
+                      {settings.gender === 'female' && (
+                        <button
+                          type="button"
+                          onClick={() => handleLogPrayerStatus(prayer, 'E')}
+                          className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'E')}`}
+                        >
+                          عذر شرعي 🌸
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1658,7 +1679,7 @@ export default function PrayerManager({
                   {/* Fard Status */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold block">حالة الفريضة:</span>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className={`grid ${settings.gender === 'female' ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'A')}
@@ -1680,6 +1701,15 @@ export default function PrayerManager({
                       >
                         فائتة
                       </button>
+                      {settings.gender === 'female' && (
+                        <button
+                          type="button"
+                          onClick={() => handleLogPrayerStatus(prayer, 'E')}
+                          className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'E')}`}
+                        >
+                          عذر شرعي 🌸
+                        </button>
+                      )}
                     </div>
                   </div>
 

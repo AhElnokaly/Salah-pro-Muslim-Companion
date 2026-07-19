@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, X, BellRing, Sparkles } from 'lucide-react';
+import { Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface AthanOverlayProps {
@@ -120,47 +120,64 @@ export default function AthanOverlay({
   const muezzinOptions = [
     { id: 'fajr_yusuf', name: 'أذان الفجر (يوسف إسلام)', isFajrOnly: true },
     { id: 'makkah', name: 'أذان مكة المكرمة (الحرم المكي)', isFajrOnly: false },
-    { id: 'medina', name: 'أذان المدينة المنورة (المسجد النبوي)', isFajrOnly: false },
+    { id: 'medina', name: 'أذان المسجد النبوي الشريف', isFajrOnly: false },
     { id: 'aqsa', name: 'أذان المسجد الأقصى المبارك', isFajrOnly: false },
   ];
 
   const filteredMuezzins = isFajr ? muezzinOptions : muezzinOptions.filter(m => !m.isFajrOnly);
 
+  // Determine beautiful backdrop image based on selected Muezzin (Athan)
+  const getMosqueBackground = (muezzinId: string) => {
+    switch (muezzinId) {
+      case 'makkah':
+        return 'https://images.unsplash.com/photo-1565552645632-d725f8bfc19a?auto=format&fit=crop&q=80&w=1200'; // Kaaba / Makkah
+      case 'medina':
+        return 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=1200'; // Masjid an-Nabawi Medina
+      case 'aqsa':
+        return 'https://images.unsplash.com/photo-1542856391-010fb87dcfed?auto=format&fit=crop&q=80&w=1200'; // Dome of the Rock / Jerusalem
+      case 'fajr_yusuf':
+      default:
+        return 'https://images.unsplash.com/photo-1542640244-7e672d6cef21?auto=format&fit=crop&q=80&w=1200'; // Dawn silhouette mosque / general
+    }
+  };
+
+  const bgImg = getMosqueBackground(activeMuezzinId);
+
   return (
     <div 
-      id="athan-full-screen-overlay"
-      className="fixed inset-0 z-50 bg-slate-950/98 flex flex-col justify-between p-6 overflow-y-auto text-white"
+      id="athan-minimalist-overlay"
+      className="fixed inset-0 z-50 bg-[#070b11] flex flex-col justify-between p-8 sm:p-12 text-white font-sans transition-all duration-500 overflow-hidden"
       dir="rtl"
     >
-      {/* Absolute Beautiful Starry Overlay and glowing particle effects */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
-        <div className="absolute top-10 right-20 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 left-10 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl animate-pulse" />
-        {/* Simple geometric Islamic patterns */}
-        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+      {/* Dynamic Mosque Background with Ken Burns effect */}
+      <div 
+        className="absolute inset-0 transition-all duration-1000 ease-in-out bg-cover bg-center scale-105"
+        style={{ backgroundImage: `url(${bgImg})` }}
+      />
+      {/* Spiritual gradient overlay to blend into dark, readable interface */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#04060a] via-[#070b11]/85 to-[#0b121c]/90 backdrop-blur-[2.5px] pointer-events-none" />
+
+      {/* Soft, meditative radial background glow */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[250px] h-[250px] bg-amber-500/10 dark:bg-amber-400/5 rounded-full blur-[80px] pointer-events-none" />
       </div>
 
-      {/* Header section */}
-      <div className="flex justify-between items-center z-10 w-full max-w-lg mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-xl animate-pulse">
-            <BellRing className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="text-right">
-            <span className="text-[10px] text-white/50 block font-bold">نداء الصلاة الآن</span>
-            <h3 className="text-xs font-black text-emerald-300 leading-none">مؤذن الرفيق الإلكتروني</h3>
-          </div>
+      {/* Top Bar (Mute and Close) */}
+      <div className="flex justify-between items-center z-10 w-full max-w-2xl mx-auto">
+        <div className="text-right">
+          <span className="text-[10px] tracking-widest text-emerald-400/70 font-black uppercase block">نداء الصلاة</span>
+          <h2 className="text-sm font-black text-white/90">صلاة {prayerName}</h2>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setIsMuted(!isMuted)}
-            className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/5 cursor-pointer transition-colors text-amber-300"
-            title={isMuted ? "إلغاء كتم الصوت" : "كتم صوت الأذان"}
+            className="p-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.05] cursor-pointer transition-colors text-white/70 hover:text-white"
+            title={isMuted ? "إلغاء الكتم" : "كتم الصوت"}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-rose-400 animate-pulse" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
           </button>
           
           <button
@@ -169,107 +186,86 @@ export default function AthanOverlay({
               stopAthan();
               onClose();
             }}
-            className="p-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 cursor-pointer transition-all text-rose-300"
-            title="إغلاق التنبيه"
+            className="p-2.5 rounded-full bg-white/[0.04] hover:bg-rose-500/10 border border-white/[0.05] hover:border-rose-500/20 cursor-pointer transition-colors text-white/70 hover:text-rose-400"
+            title="إغلاق"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Center Immersive Visualizer */}
-      <div className="flex flex-col items-center justify-center text-center my-auto z-10 space-y-6 w-full max-w-lg mx-auto">
-        {/* Mosque Dome Silhouette & Audio Waves */}
-        <div className="relative flex items-center justify-center w-36 h-36">
-          {/* Pulsing golden rings simulating sonic waves */}
+      {/* Main Content Area */}
+      <div className="flex flex-col items-center justify-center text-center my-auto z-10 space-y-10 w-full max-w-xl mx-auto">
+        
+        {/* Subtle, beautiful pulsing circle */}
+        <div className="relative flex items-center justify-center w-24 h-24 my-2">
           {!isMuted && isPlaying && (
             <>
-              <span className="absolute inset-0 rounded-full border border-amber-400/25 animate-ping-slow scale-[1.5]" />
-              <span className="absolute inset-0 rounded-full border border-emerald-500/20 animate-ping-slow scale-[2]" />
+              <div className="absolute inset-0 rounded-full border border-emerald-500/15 animate-ping" style={{ animationDuration: '4s' }} />
+              <div className="absolute inset-2 rounded-full border border-amber-400/10 animate-ping" style={{ animationDuration: '6s' }} />
             </>
           )}
-          
-          <div className="w-28 h-28 rounded-full bg-gradient-to-b from-emerald-600/30 to-amber-500/20 border-2 border-amber-400/40 flex items-center justify-center relative shadow-2xl overflow-hidden">
-            <span className="text-4xl">🕌</span>
+          <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-white/[0.08] flex items-center justify-center text-2xl select-none shadow-inner">
+            🌙
           </div>
         </div>
 
-        {/* Current Active Prayer Call */}
-        <div className="space-y-1">
-          <span className="text-[10px] text-amber-400/80 font-black tracking-widest block">حان الآن موعد أذان</span>
-          <h1 className="text-3xl font-black text-white leading-tight drop-shadow-md">
-            صلاة {prayerName}
-          </h1>
-          <p className="text-xs text-white/60 font-semibold">
-            حسب التوقيت المحلي لمدينتك في تمام الساعة <span className="font-mono text-amber-300 font-extrabold">{toArabicNumbers(prayerTime)}</span>
-          </p>
-        </div>
-
-        {/* Active Phrase Translation & Display */}
+        {/* Big Focal Phrase */}
         {!showDua ? (
-          <div className="bg-white/[0.03] border border-white/5 rounded-3xl p-6 w-full shadow-inner space-y-4 min-h-[140px] flex flex-col justify-center">
-            {/* Arabic Lyric */}
-            <span className="text-2xl sm:text-3xl font-black text-amber-300 tracking-wide block transition-all duration-300 leading-normal">
+          <div className="space-y-6 w-full py-4 min-h-[160px] flex flex-col justify-center">
+            <span className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-amber-200 tracking-wide block transition-all duration-500 leading-relaxed font-sans drop-shadow-sm">
               {activePhrase?.arabic}
             </span>
-            {/* Meaning */}
-            <p className="text-xs text-white/50 italic leading-relaxed max-w-sm mx-auto font-medium">
+            <span className="text-xs text-white/40 font-medium tracking-wide max-w-md mx-auto block leading-normal">
               {activePhrase?.english}
-            </p>
-            {/* Indicators dot bar */}
-            <div className="flex justify-center gap-1 mt-2">
-              {overlayPhrases.map((_, i) => (
-                <span 
-                  key={i} 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === activePhraseIdx ? 'w-5 bg-amber-400' : 'w-1.5 bg-white/10'
-                  }`}
-                />
-              ))}
-            </div>
+            </span>
           </div>
         ) : (
-          /* Post-Athan Du'a screen */
-          <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-3xl p-6 w-full shadow-xl space-y-3 text-right max-w-md animate-fade-in">
-            <div className="flex items-center gap-1.5 text-amber-300 mb-1">
-              <Sparkles className="w-3.5 h-3.5 animate-spin-slow" />
-              <span className="text-[10px] font-black uppercase">دعاء ما بعد الأذان</span>
+          /* Sleek Minimalist Post-Athan Du'a */
+          <div className="space-y-4 w-full max-w-md py-6 px-8 bg-white/[0.02] border border-white/[0.05] rounded-3xl text-right animate-fade-in shadow-xl">
+            <div className="flex items-center gap-1.5 text-amber-300">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="text-[10px] tracking-wider font-extrabold block">دعاء ما بعد الأذان المبارك</span>
             </div>
-            <p className="text-xs sm:text-sm font-bold text-white/95 leading-relaxed font-sans">
+            <p className="text-sm font-bold text-white/90 leading-relaxed font-sans">
               "اللَّهُمَّ رَبَّ هَذِهِ الدَّعْوَةِ التَّامَّةِ، وَالصَّلَاةِ الْقَائِمَةِ، آتِ مُحَمَّدًا الْوَسِيلَةَ وَالْفَضِيلَةَ، وَابْعَثْهُ مَقَامًا مَحْمُودًا الَّذِي وَعَدْتَهُ."
             </p>
-            <p className="text-[10px] text-emerald-400 font-semibold leading-relaxed border-t border-white/5 pt-2">
-              💡 من قال هذا الدعاء حين يسمع النداء حلت له شفاعة النبي ﷺ يوم القيامة.
+            <p className="text-[9px] text-emerald-400/80 font-medium leading-relaxed border-t border-white/5 pt-2">
+              حلت لك شفاعة الحبيب المصطفى ﷺ يوم القيامة بإذن الله 🌿.
             </p>
           </div>
         )}
 
-        {/* Muadhin Selector - Fully Integrated with Real Audio streams */}
-        <div className="flex flex-col gap-2 w-full max-w-sm items-center">
-          <span className="text-[9px] text-white/40 font-bold block">تغيير صوت المؤذن الحالي:</span>
-          <div className="bg-black/45 backdrop-blur-md rounded-2xl p-1 border border-white/5 flex flex-wrap gap-1 justify-center w-fit">
-            {filteredMuezzins.map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => handleMuezzinChange(opt.id)}
-                className={`px-3 py-1.5 rounded-xl text-[10px] font-black cursor-pointer transition-all ${
-                  activeMuezzinId === opt.id 
-                    ? 'bg-amber-400 text-slate-950 font-extrabold' 
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {opt.name.replace('أذان الفجر ', '').replace('أذان مكة المكرمة ', '').replace('أذان المدينة المنورة ', '').replace('أذان المسجد الأقصى ', '')}
-              </button>
-            ))}
+        {/* Quietly integrated muezzin controls */}
+        <div className="space-y-3 w-full max-w-xs pt-4">
+          <span className="text-[9px] text-white/30 font-bold block">مكثّف الصوت والمؤذن</span>
+          <div className="flex justify-center gap-1.5 flex-wrap">
+            {filteredMuezzins.map(opt => {
+              const isSelected = activeMuezzinId === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => handleMuezzinChange(opt.id)}
+                  className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    isSelected 
+                      ? 'bg-amber-400 text-slate-950 font-black' 
+                      : 'bg-white/[0.03] text-white/50 border border-white/[0.04] hover:bg-white/[0.06] hover:text-white'
+                  }`}
+                >
+                  {opt.name.replace('أذان الفجر ', '').replace('أذان مكة المكرمة ', '').replace('أذان المسجد النبوي ', '').replace('أذان المسجد الأقصى ', '')}
+                </button>
+              );
+            })}
           </div>
         </div>
+
       </div>
 
-      {/* Footer controls & sunnah recommendation */}
-      <div className="mt-auto z-10 w-full max-w-lg mx-auto border-t border-white/10 pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-        <span className="text-[10px] text-white/50 font-semibold text-center sm:text-right leading-relaxed">
-          🕌 صلاة الجماعة تفضل صلاة الفرد بسبع وعشرين درجة، احرص على الصف الأول!
+      {/* Footer minimal information & Close */}
+      <div className="mt-auto z-10 w-full max-w-2xl mx-auto border-t border-white/[0.05] pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <span className="text-[10px] text-white/40 font-medium text-center sm:text-right max-w-sm leading-relaxed">
+          حُضوركَ في الصف الأول صلاة جماعة تزيد عن صلاتك منفرداً بسبعٍ وعشرين درجة مباركة. تقبل الله طاعتك.
         </span>
         <button
           type="button"
@@ -277,9 +273,9 @@ export default function AthanOverlay({
             stopAthan();
             onClose();
           }}
-          className="w-full sm:w-auto py-2.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs transition-transform cursor-pointer hover:scale-105 active:scale-95 shadow-lg shadow-emerald-950/25 text-center"
+          className="w-full sm:w-auto py-2.5 px-8 bg-white text-slate-950 font-black rounded-full text-xs transition-transform cursor-pointer hover:scale-105 active:scale-95 shadow-md hover:bg-slate-100"
         >
-          أشهدت الأذان (الذهاب للمصلى)
+          تم الاستماع (الذهاب للمصلى)
         </button>
       </div>
     </div>

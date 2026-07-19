@@ -5,8 +5,8 @@
 
 export type PrayerName = 'Fajr' | 'Sunrise' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha';
 
-export type PrayerStatus = 'future' | 'A' | 'B' | 'C' | 'D' | 'not_yet';
-// A: In time (في وقتها), B: Late/Qada (قضاء/متأخر), C/D: Missed (لم يصلها/فائتة)
+export type PrayerStatus = 'future' | 'A' | 'B' | 'C' | 'D' | 'not_yet' | 'E';
+// A: In time (في وقتها), B: Late/Qada (قضاء/متأخر), C/D: Missed (لم يصلها/فائتة), E: Excused/License (عذر شرعي - لا تحسب كفائتة)
 
 export interface PrayerLog {
   status: PrayerStatus;
@@ -95,6 +95,7 @@ export interface AppSettings {
   backdropStyle?: 'gold' | 'classic' | 'banner' | 'auto';
   clockStyle?: 'digital' | 'analog';
   cardCompactMode?: boolean;
+  gender?: 'male' | 'female';
 }
 
 export interface ActiveNudge {
