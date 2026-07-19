@@ -2129,7 +2129,7 @@ export default function Dashboard({
 
                 {/* Predefined Quick Pill Selectors */}
                 <div className="grid grid-cols-4 gap-1.5 pt-2">
-                  {[2, 4, 8, 11].map((r) => (
+                  {[2, 4, 8, 10].map((r) => (
                     <button
                       key={r}
                       type="button"
