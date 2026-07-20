@@ -93,6 +93,210 @@ const DEFAULT_SETTINGS: AppSettings = {
   clockStyle: 'digital'
 };
 
+// --- GLOBAL DEEP REMEMBRANCE & AUDIO SYNTHESIS ENGINE ---
+const SPIRITUAL_CAPSULES = [
+  {
+    text: "أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ",
+    source: "سورة الرعد - الآية ٢٨",
+    category: "طمأنينة وطمأنة الروح"
+  },
+  {
+    text: "وَقَالَ رَبُّكُمُ ادْعُونِي أَسْتَجِبْ لَكُمْ",
+    source: "سورة غافر - الآية ٦٠",
+    category: "يقين بالإجابة والفرج"
+  },
+  {
+    text: "فَاذْكُرُونِي أَسْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
+    source: "سورة البقرة - الآية ١٥٢",
+    category: "ذكر رباني وشكر النعمة"
+  },
+  {
+    text: "وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ",
+    source: "سورة الطلاق - الآية ٢ - ٣",
+    category: "سعة الرزق والفرج العاجل"
+  },
+  {
+    text: "إِنَّ مَعَ الْعُسْرِ يُسْرًا",
+    source: "سورة الشرح - الآية ٦",
+    category: "بشرى وتيسير العسير"
+  },
+  {
+    text: "وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ",
+    source: "سورة الطلاق - الآية ٣",
+    category: "قوة التوكل والاعتماد على الله"
+  },
+  {
+    text: "وَاصْبِرْ لِحُكْمِ رَبِّكَ فَإِنَّكَ بِأَعْيُنِنَا",
+    source: "سورة الطور - الآية ٤٨",
+    category: "معية الله ورحمته ولطفه"
+  },
+  {
+    text: "كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ، ثَقِيلَتَانِ فِي الْمِيزَانِ، حَبِيبَتَانِ إِلَى الرَّحْمَنِ: سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
+    source: "حديث شريف - متفق عليه",
+    category: "كنز الميزان والذكر العظيم"
+  },
+  {
+    text: "مَنْ لَزِمَ الاسْتِغْفَارَ جَعَلَ اللهُ لَهُ مِنْ كُلِّ ضِيقٍ مَخْرَجاً، وَمِنْ كُلِّ هَمٍّ فَرَجاً، وَرَزَقَهُ مِنْ حَيْثُ لا يَحْتَسِبُ",
+    source: "حديث شريف - رواه أبو داود",
+    category: "سر الاستغفار وجلاء الهموم"
+  },
+  {
+    text: "أَقْرَبُ ما يَكونُ العَبْدُ مِن رَبِّهِ وهو ساجِدٌ، فأكْثِرُوا الدُّعاءَ",
+    source: "حديث شريف - رواه مسلم",
+    category: "قرب ومناجاة حارة في السجود"
+  }
+];
+
+let spiritualAudioCtx: AudioContext | null = null;
+let spiritualOscs: OscillatorNode[] = [];
+let spiritualGain: GainNode | null = null;
+
+const playSpiritualChime = (pitch: number = 523.25) => {
+  try {
+    if (!spiritualAudioCtx) {
+      spiritualAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (spiritualAudioCtx.state === 'suspended') {
+      spiritualAudioCtx.resume();
+    }
+    
+    const now = spiritualAudioCtx.currentTime;
+    const osc1 = spiritualAudioCtx.createOscillator();
+    const osc2 = spiritualAudioCtx.createOscillator();
+    const gainNode = spiritualAudioCtx.createGain();
+    const delayNode = spiritualAudioCtx.createDelay();
+    const delayGain = spiritualAudioCtx.createGain();
+    const filter = spiritualAudioCtx.createBiquadFilter();
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(pitch, now);
+    osc1.frequency.exponentialRampToValueAtTime(pitch / 2, now + 1.5);
+
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(pitch / 2, now);
+    
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1200, now);
+
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+
+    delayNode.delayTime.setValueAtTime(0.4, now);
+    delayGain.gain.setValueAtTime(0.06, now);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gainNode);
+    
+    gainNode.connect(delayNode);
+    delayNode.connect(delayGain);
+    delayGain.connect(spiritualAudioCtx.destination);
+    delayGain.connect(delayNode);
+
+    gainNode.connect(spiritualAudioCtx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    
+    osc1.stop(now + 2.0);
+    osc2.stop(now + 2.0);
+  } catch (err) {
+    console.warn("Spiritual chime audio failed:", err);
+  }
+};
+
+const toggleAmbientHealingFrequency = (isOn: boolean) => {
+  try {
+    if (!spiritualAudioCtx) {
+      spiritualAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    
+    if (!isOn) {
+      if (spiritualGain) {
+        const fadeTime = spiritualAudioCtx.currentTime;
+        spiritualGain.gain.linearRampToValueAtTime(0, fadeTime + 1.5);
+        setTimeout(() => {
+          try {
+            spiritualOscs.forEach(o => { o.stop(); o.disconnect(); });
+            spiritualOscs = [];
+            if (spiritualGain) {
+              spiritualGain.disconnect();
+              spiritualGain = null;
+            }
+          } catch (e) {}
+        }, 1600);
+      }
+      return;
+    }
+
+    if (spiritualAudioCtx.state === 'suspended') {
+      spiritualAudioCtx.resume();
+    }
+
+    spiritualOscs.forEach(o => { try { o.stop(); o.disconnect(); } catch (e) {} });
+    spiritualOscs = [];
+
+    const now = spiritualAudioCtx.currentTime;
+    spiritualGain = spiritualAudioCtx.createGain();
+    spiritualGain.gain.setValueAtTime(0, now);
+    spiritualGain.gain.linearRampToValueAtTime(0.08, now + 2.5);
+
+    const osc1 = spiritualAudioCtx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(432, now);
+
+    const osc2 = spiritualAudioCtx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(216, now);
+
+    const osc3 = spiritualAudioCtx.createOscillator();
+    osc3.type = 'sine';
+    osc3.frequency.setValueAtTime(433.5, now);
+
+    const warmFilter = spiritualAudioCtx.createBiquadFilter();
+    warmFilter.type = 'lowpass';
+    warmFilter.frequency.setValueAtTime(250, now);
+
+    osc1.connect(warmFilter);
+    osc2.connect(warmFilter);
+    osc3.connect(warmFilter);
+    warmFilter.connect(spiritualGain);
+    spiritualGain.connect(spiritualAudioCtx.destination);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc3.start(now);
+
+    spiritualOscs = [osc1, osc2, osc3];
+  } catch (err) {
+    console.warn("Ambient Healing Frequency failed:", err);
+  }
+};
+
+const speakSpiritualText = (text: string) => {
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ar-SA';
+      utterance.rate = 0.85;
+      utterance.pitch = 1.05;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
+      if (arabicVoice) {
+        utterance.voice = arabicVoice;
+      }
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  } catch (e) {
+    console.warn("Speech synthesis failed:", e);
+  }
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -126,6 +330,13 @@ export default function App() {
   const [dhikrLogs, setDhikrLogs] = useState<Record<string, Record<string, number>>>({});
   const [customDuas, setCustomDuas] = useState<CustomDua[]>([]);
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
+
+  // Portal of Serenity & Spiritual Breath States
+  const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
+  const [sessionTasbihCount, setSessionTasbihCount] = useState<number>(0);
+  const [activeDhikrPhrase, setActiveDhikrPhrase] = useState<string>("سُبْحَانَ اللَّهِ");
+  const [isAmbientSoundOn, setIsAmbientSoundOn] = useState<boolean>(false);
+  const [currentCapsuleIndex, setCurrentCapsuleIndex] = useState<number>(0);
 
   // PWA states and event listeners
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -538,8 +749,27 @@ export default function App() {
           </button>
           
           <div className="flex flex-col items-start gap-0.5">
-            <div className="flex items-center gap-1.5">
-              <MosqueIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.12, rotate: [0, -5, 5, -5, 0] }}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => {
+                  setShowSpiritualModal(true);
+                  playSpiritualChime(523.25);
+                }}
+                className="relative w-8 h-8 rounded-xl overflow-hidden border border-indigo-500/35 dark:border-indigo-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-[0_2px_10px_rgba(99,102,241,0.15)] focus:outline-hidden"
+                title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
+              >
+                <img 
+                  src={companionIcon} 
+                  alt="رفيق المسلم" 
+                  className="w-full h-full object-cover select-none"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="absolute inset-0 bg-indigo-500/10 mix-blend-color-burn" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full animate-ping" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
+              </motion.button>
               <h1 className="text-xs font-black text-slate-800 dark:text-white tracking-wide">رفيق المسلم</h1>
             </div>
             
@@ -1129,6 +1359,226 @@ export default function App() {
                   فهمت، شكراً لك 🤍
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* بوابة السكينة والنفحات الإيمانية */}
+      <AnimatePresence>
+        {showSpiritualModal && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-right flex flex-col items-center gap-5 text-white overflow-hidden"
+            >
+              {/* Background Glow */}
+              <div className="absolute top-0 inset-x-0 h-40 bg-radial-[at_top] from-emerald-500/20 via-transparent to-transparent pointer-events-none" />
+
+              {/* Header inside Modal */}
+              <div className="w-full flex items-center justify-between z-10">
+                <button
+                  onClick={() => {
+                    setShowSpiritualModal(false);
+                    setIsAmbientSoundOn(false);
+                    toggleAmbientHealingFrequency(false);
+                    if ('speechSynthesis' in window) {
+                      window.speechSynthesis.cancel();
+                    }
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-slate-300 transition-all cursor-pointer active:scale-95 text-sm font-black"
+                >
+                  ✕
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  <span className="text-xs font-black text-emerald-300 tracking-wide">بوابة السكينة والنفحات 🌸</span>
+                </div>
+              </div>
+
+              {/* Glowing Interactive Brand Avatar */}
+              <div className="relative mt-2 z-10 flex flex-col items-center">
+                <motion.div
+                  animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.7, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
+                  className="absolute inset-0 bg-emerald-500/10 rounded-full blur-md"
+                />
+                
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-400/40 p-1 bg-emerald-950/20 shadow-lg relative">
+                  <img 
+                    src={companionIcon} 
+                    alt="رفيق المسلم" 
+                    className="w-full h-full object-cover rounded-full select-none"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                
+                <h3 className="text-sm font-black text-white mt-3 text-center">سكينة الروح والوجدان</h3>
+                <p className="text-[10px] text-slate-400 font-extrabold text-center mt-1">«أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ»</p>
+              </div>
+
+              {/* 1. Interactive Tasbih Rosary Bead */}
+              <div className="w-full bg-slate-900/60 border border-slate-800/80 rounded-3xl p-4 flex flex-col items-center gap-3.5 z-10">
+                <span className="text-[10px] font-black text-emerald-400">مسبحة السكينة التفاعلية 📿</span>
+                
+                {/* Circular Bead Button */}
+                <div className="relative flex items-center justify-center w-28 h-28">
+                  <motion.div
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.15, 0, 0.15] }}
+                    transition={{ repeat: Infinity, duration: 2.2, ease: "linear" }}
+                    className="absolute inset-0 rounded-full bg-emerald-500 border border-emerald-500/30"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 1.25, 1] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                    className="absolute inset-2 rounded-full bg-indigo-500/10 border border-indigo-500/20"
+                  />
+                  
+                  <motion.button
+                    whileTap={{ scale: 0.90 }}
+                    onClick={() => {
+                      const nextCount = sessionTasbihCount + 1;
+                      setSessionTasbihCount(nextCount);
+                      if (navigator.vibrate) {
+                        navigator.vibrate(45);
+                      }
+                      const pitch = 392.00 * Math.pow(1.059463, (nextCount - 1) % 33);
+                      playSpiritualChime(pitch);
+                    }}
+                    className="relative w-22 h-22 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 hover:from-emerald-500 hover:to-teal-300 border-3 border-emerald-300/35 flex flex-col items-center justify-center cursor-pointer shadow-[0_10px_25px_rgba(16,185,129,0.3)] select-none focus:outline-hidden group"
+                  >
+                    <span className="text-[9px] font-black text-emerald-100 uppercase tracking-widest group-hover:scale-105 transition-all">اضغط وسبّح</span>
+                    <span className="text-xl font-black text-white mt-1 tracking-tight">
+                      {(() => {
+                        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                        return sessionTasbihCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+                      })()}
+                    </span>
+                  </motion.button>
+                </div>
+
+                {/* Phrase pill switcher */}
+                <div className="w-full flex flex-wrap items-center justify-center gap-1.5 pt-2">
+                  {["سُبْحَانَ اللَّهِ", "الْحَمْدُ لِلَّهِ", "لَا إِلَٰهَ إِلَّا اللَّهُ", "اللَّهُ أَكْبَرُ", "أَسْتَغْفِرُ اللَّهَ"].map((phrase) => (
+                    <button
+                      key={phrase}
+                      onClick={() => {
+                        setActiveDhikrPhrase(phrase);
+                        setSessionTasbihCount(0);
+                        playSpiritualChime(523.25);
+                      }}
+                      className={`px-3 py-1 rounded-full text-[9px] font-black transition-all cursor-pointer ${
+                        activeDhikrPhrase === phrase 
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20' 
+                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/50'
+                      }`}
+                    >
+                      {phrase}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Reset button */}
+                {sessionTasbihCount > 0 && (
+                  <button
+                    onClick={() => {
+                      setSessionTasbihCount(0);
+                      playSpiritualChime(329.63);
+                    }}
+                    className="text-[9px] font-black text-slate-400 hover:text-rose-400 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    <span>تصفير العداد</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Daily Spiritual Capsule (النفحة الإيمانية) */}
+              <div className="w-full bg-emerald-500/[0.03] border border-emerald-500/15 rounded-3xl p-4 relative text-center z-10">
+                <span className="text-emerald-500/20 text-4xl font-serif absolute top-1 right-3 leading-none">“</span>
+                <span className="text-[10px] font-black text-emerald-400/80 block mb-2">{SPIRITUAL_CAPSULES[currentCapsuleIndex].category}</span>
+                <p className="text-xs font-black text-emerald-100/90 leading-relaxed px-2 py-1 select-text">
+                  {SPIRITUAL_CAPSULES[currentCapsuleIndex].text}
+                </p>
+                <span className="text-[9px] text-emerald-400/75 font-extrabold block mt-2">
+                  — {SPIRITUAL_CAPSULES[currentCapsuleIndex].source}
+                </span>
+                
+                <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-emerald-500/10">
+                  <button 
+                    onClick={() => speakSpiritualText(SPIRITUAL_CAPSULES[currentCapsuleIndex].text)}
+                    className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer"
+                    title="استمع للنفحة بصوت عذب 🔊"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${SPIRITUAL_CAPSULES[currentCapsuleIndex].text} - ${SPIRITUAL_CAPSULES[currentCapsuleIndex].source}`);
+                      setToastMessage("تم نسخ النفحة الإيمانية بنجاح 📋");
+                    }}
+                    className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer"
+                    title="نسخ النفحة الإيمانية 📋"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                      const nextIndex = (currentCapsuleIndex + 1) % SPIRITUAL_CAPSULES.length;
+                      setCurrentCapsuleIndex(nextIndex);
+                      playSpiritualChime(587.33);
+                    }}
+                    className="p-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[9px] font-black px-3"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    <span>نفحة أخرى ✨</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Ambient Healing Frequency Toggle */}
+              <div className="w-full bg-slate-900/60 border border-slate-800 rounded-3xl p-4 flex items-center justify-between z-10">
+                <div className="flex flex-col items-start text-right">
+                  <span className="text-[11px] font-black text-indigo-300">تردد السكينة الكوني (432Hz) 🧘‍♂️</span>
+                  <span className="text-[9px] text-slate-400 font-extrabold leading-normal mt-0.5">موجات إيمانية عميقة لطرد القلق ومساعدة الروح على التركيز</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const nextState = !isAmbientSoundOn;
+                    setIsAmbientSoundOn(nextState);
+                    toggleAmbientHealingFrequency(nextState);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-[10px] font-black cursor-pointer transition-all active:scale-95 flex items-center gap-1 ${
+                    isAmbientSoundOn 
+                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-500/25 border border-indigo-400/30' 
+                      : 'bg-slate-800 text-slate-300 border border-slate-700/60 hover:bg-slate-700'
+                  }`}
+                >
+                  <span>{isAmbientSoundOn ? "شغال 🟢" : "تشغيل ⏸️"}</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowSpiritualModal(false);
+                  setIsAmbientSoundOn(false);
+                  toggleAmbientHealingFrequency(false);
+                  if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                  }
+                }}
+                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-slate-950 font-black text-xs rounded-2xl transition-all shadow-md active:scale-[0.98] cursor-pointer text-center z-10"
+              >
+                العودة للتطبيق ومواصلة الذكر 🤲
+              </button>
             </motion.div>
           </div>
         )}
