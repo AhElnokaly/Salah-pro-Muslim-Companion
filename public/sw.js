@@ -1,4 +1,4 @@
-const CACHE_NAME = 'muslim-companion-cache-v2';
+const CACHE_NAME = 'muslim-companion-cache-v3';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
