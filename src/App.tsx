@@ -333,6 +333,45 @@ export default function App() {
 
   // Portal of Serenity & Spiritual Breath States
   const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
+  const [headerRippleActive, setHeaderRippleActive] = useState<boolean>(false);
+
+  // Premium spiritual floating particles state
+  interface HeaderParticle {
+    id: string;
+    x: number;
+    y: number;
+    rotate: number;
+    emoji: string;
+    scale: number;
+  }
+  const [headerParticles, setHeaderParticles] = useState<HeaderParticle[]>([]);
+
+  const triggerHeaderParticles = () => {
+    const emojis = ['✨', '⭐', '🌸', '🤍', '💚', '🕌'];
+    const newParticles: HeaderParticle[] = Array.from({ length: 10 }).map((_, idx) => {
+      // Create a beautiful upward arc layout
+      const angle = (Math.random() * 120 + 30) * (Math.PI / 180); // 30 to 150 degrees
+      const distance = Math.random() * 60 + 50; // 50px to 110px distance
+      const x = Math.cos(angle) * distance;
+      const y = -Math.sin(angle) * distance - 15; // Float upwards
+      
+      return {
+        id: `${Date.now()}-${idx}-${Math.random()}`,
+        x,
+        y,
+        rotate: Math.random() * 360 - 180,
+        emoji: emojis[Math.floor(Math.random() * emojis.length)],
+        scale: Math.random() * 0.5 + 0.7 // 0.7 to 1.2
+      };
+    });
+    
+    setHeaderParticles(newParticles);
+    // Auto clear after 1.5s
+    setTimeout(() => {
+      setHeaderParticles([]);
+    }, 1500);
+  };
+
   const [sessionTasbihCount, setSessionTasbihCount] = useState<number>(0);
   const [activeDhikrPhrase, setActiveDhikrPhrase] = useState<string>("سُبْحَانَ اللَّهِ");
   const [isAmbientSoundOn, setIsAmbientSoundOn] = useState<boolean>(false);
@@ -750,26 +789,82 @@ export default function App() {
           
           <div className="flex flex-col items-start gap-0.5">
             <div className="flex items-center gap-2">
-              <motion.button
-                whileHover={{ scale: 1.12, rotate: [0, -5, 5, -5, 0] }}
-                whileTap={{ scale: 0.92 }}
-                onClick={() => {
-                  setShowSpiritualModal(true);
-                  playSpiritualChime(523.25);
-                }}
-                className="relative w-8 h-8 rounded-xl overflow-hidden border border-indigo-500/35 dark:border-indigo-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-[0_2px_10px_rgba(99,102,241,0.15)] focus:outline-hidden"
-                title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
-              >
-                <img 
-                  src={companionIcon} 
-                  alt="رفيق المسلم" 
-                  className="w-full h-full object-cover select-none"
-                  referrerPolicy="no-referrer"
-                />
-                <span className="absolute inset-0 bg-indigo-500/10 mix-blend-color-burn" />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full animate-ping" />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
-              </motion.button>
+              <div className="relative flex items-center justify-center">
+                {/* Concentric Expanding Spiritual Ripples */}
+                {headerRippleActive && (
+                  <>
+                    <motion.span
+                      initial={{ scale: 1, opacity: 0.8 }}
+                      animate={{ scale: 2.2, opacity: 0 }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="absolute inset-0 rounded-xl border-2 border-indigo-500/60 pointer-events-none z-0"
+                    />
+                    <motion.span
+                      initial={{ scale: 1, opacity: 0.6 }}
+                      animate={{ scale: 3.2, opacity: 0 }}
+                      transition={{ duration: 1.1, ease: "easeOut", delay: 0.15 }}
+                      className="absolute inset-0 rounded-xl border-2 border-emerald-400/50 pointer-events-none z-0"
+                    />
+                    <motion.span
+                      initial={{ scale: 1, opacity: 0.4 }}
+                      animate={{ scale: 4.2, opacity: 0 }}
+                      transition={{ duration: 1.4, ease: "easeOut", delay: 0.3 }}
+                      className="absolute inset-0 rounded-xl border border-teal-300/30 pointer-events-none z-0"
+                    />
+                  </>
+                )}
+
+                {/* Floating Spiritual Particles */}
+                <AnimatePresence>
+                  {headerParticles.map((p) => (
+                    <motion.span
+                      key={p.id}
+                      initial={{ opacity: 1, x: 0, y: 0, scale: 0.1, rotate: 0 }}
+                      animate={{ 
+                        opacity: 0, 
+                        x: p.x, 
+                        y: p.y, 
+                        scale: p.scale, 
+                        rotate: p.rotate 
+                      }}
+                      exit={{ opacity: 0 }}
+                      transition={{ 
+                        duration: 1.3, 
+                        ease: [0.19, 1, 0.22, 1] // Premium ultra-smooth deceleration
+                      }}
+                      className="absolute text-sm pointer-events-none z-20 select-none drop-shadow-[0_2px_8px_rgba(16,185,129,0.3)]"
+                    >
+                      {p.emoji}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+                
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: [0, -6, 6, -6, 0] }}
+                  whileTap={{ scale: 0.88 }}
+                  onClick={() => {
+                    setHeaderRippleActive(true);
+                    triggerHeaderParticles();
+                    setTimeout(() => setHeaderRippleActive(false), 1400);
+                    playSpiritualChime(523.25);
+                    setTimeout(() => {
+                      setShowSpiritualModal(true);
+                    }, 250);
+                  }}
+                  className="relative w-8 h-8 rounded-xl overflow-hidden border border-indigo-500/35 dark:border-indigo-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-[0_2px_10px_rgba(99,102,241,0.15)] focus:outline-hidden z-10"
+                  title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
+                >
+                  <img 
+                    src={companionIcon} 
+                    alt="رفيق المسلم" 
+                    className="w-full h-full object-cover select-none"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="absolute inset-0 bg-indigo-500/10 mix-blend-color-burn" />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full animate-ping" />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
+                </motion.button>
+              </div>
               <h1 className="text-xs font-black text-slate-800 dark:text-white tracking-wide">رفيق المسلم</h1>
             </div>
             

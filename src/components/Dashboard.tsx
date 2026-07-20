@@ -663,9 +663,9 @@ export default function Dashboard({
 
   const getStatusLabelArabic = (status: PrayerStatus | undefined) => {
     if (!status || status === 'future' || status === 'not_yet') return 'لم يحن بعد';
-    if (status === 'A') return 'في وقتها';
-    if (status === 'B') return 'قضاء / متأخر';
-    if (status === 'C' || status === 'D') return 'فائتة';
+    if (status === 'A') return 'حاضر';
+    if (status === 'B') return 'صليتها متأخر ⏱️';
+    if (status === 'C' || status === 'D') return 'قضاء ❌';
     return 'غير مسجل';
   };
 
@@ -2649,7 +2649,7 @@ export default function Dashboard({
                     <span className="text-[10px] leading-none whitespace-nowrap">حاضر</span>
                   </button>
 
-                  {/* option B: Late/Qada */}
+                  {/* option B: Late */}
                   <button
                     type="button"
                     onClick={() => {
@@ -2672,11 +2672,11 @@ export default function Dashboard({
                         : 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100/50'
                     }`}
                   >
-                    <span className="text-lg">🕒</span>
-                    <span className="text-[10px] leading-none whitespace-nowrap">قضاء</span>
+                    <span className="text-lg">⏱️</span>
+                    <span className="text-[10px] leading-none whitespace-nowrap">صليتها متأخر</span>
                   </button>
 
-                  {/* option D: Missed */}
+                  {/* option D: Missed/Qada */}
                   <button
                     type="button"
                     onClick={() => {
@@ -2709,7 +2709,7 @@ export default function Dashboard({
                     }`}
                   >
                     <span className="text-lg">❌</span>
-                    <span className="text-[10px] leading-none whitespace-nowrap">صليتها متأخر</span>
+                    <span className="text-[10px] leading-none whitespace-nowrap">قضاء</span>
                   </button>
 
                   {/* option E: Excused (Only visible if female) */}

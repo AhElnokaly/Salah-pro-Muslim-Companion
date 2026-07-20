@@ -617,13 +617,13 @@ export default function PrayerManager({
         };
         setPendingQadaPrayers(prev => [...prev, newQada]);
       }
-      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer)} كفائتة وإضافتها لقائمة القضاء.`);
+      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer)} كقضاء وإضافتها للفوائت.`);
     } else if (!isMissed && wasMissed) {
       // Remove Qada item
       setPendingQadaPrayers(prev => prev.filter(
         q => !(q.date === dateStr && q.prayerName === prayer)
       ));
-      setLogSuccessMessage(`تم تحديث صلاة ${getArabicPrayerName(prayer)} وإلغاؤها من الفوائت.`);
+      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer)} وإزالتها من الفوائت.`);
     } else {
       setLogSuccessMessage(`تم حفظ حالة صلاة ${getArabicPrayerName(prayer)} بنجاح.`);
     }
@@ -1518,21 +1518,21 @@ export default function PrayerManager({
                         onClick={() => handleLogPrayerStatus(prayer, 'A')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'A')}`}
                       >
-                        في وقتها
+                        حاضر
                       </button>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'B')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'B')}`}
                       >
-                        متأخرة / قضاء
+                        صليتها متأخر ⏱️
                       </button>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'D')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'D')}`}
                       >
-                        فائتة
+                        قضاء ❌
                       </button>
                       {settings.gender === 'female' && (
                         <button
@@ -1685,21 +1685,21 @@ export default function PrayerManager({
                         onClick={() => handleLogPrayerStatus(prayer, 'A')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'A')}`}
                       >
-                        في وقتها
+                        حاضر
                       </button>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'B')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'B')}`}
                       >
-                        متأخرة / قضاء
+                        صليتها متأخر ⏱️
                       </button>
                       <button
                         type="button"
                         onClick={() => handleLogPrayerStatus(prayer, 'D')}
                         className={`py-2 px-1 text-center text-[11px] font-black rounded-2xl border cursor-pointer transition-all ${getStatusBtnClass(prayer, 'D')}`}
                       >
-                        فائتة
+                        قضاء ❌
                       </button>
                       {settings.gender === 'female' && (
                         <button

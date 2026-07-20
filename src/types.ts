@@ -96,6 +96,11 @@ export interface AppSettings {
   clockStyle?: 'digital' | 'analog';
   cardCompactMode?: boolean;
   gender?: 'male' | 'female';
+  pinnedWidget?: {
+    type: string;
+    theme: string;
+    wallpaper: string;
+  };
 }
 
 export interface ActiveNudge {
