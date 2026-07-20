@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, BookOpen, Clock, Heart, Sparkles, RotateCw, MapPin, Calendar, Sun, Moon, ArrowRight, ChevronLeft, Volume2, Shield } from 'lucide-react';
+import { 
+  Smartphone, 
+  Sparkles, 
+  MapPin, 
+  Calendar, 
+  Sun, 
+  Moon, 
+  Download, 
+  Pin, 
+  Check, 
+  Clock, 
+  Volume2, 
+  Eye, 
+  Maximize2 
+} from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface WidgetSimulatorProps {
   prayerTimes: any;
   settings: any;
+  setSettings?: React.Dispatch<React.SetStateAction<any>>;
   currentPrayer?: string;
   nextPrayer?: string;
   timeRemainingStr?: string;
@@ -20,15 +35,16 @@ interface WidgetSimulatorProps {
 }
 
 const WALLPAPERS = [
-  { id: 'slate', name: 'رمادي غامق', style: 'bg-slate-950' },
-  { id: 'desert', name: 'غروب الصحراء', style: 'bg-gradient-to-tr from-[#1f1235] via-[#481d3d] to-[#99413b]' },
-  { id: 'forest', name: 'أوراق الشجر الخضراء', style: 'bg-gradient-to-b from-[#061f18] via-[#0c2e26] to-[#143d34]' },
-  { id: 'starry', name: 'سماء مرصعة بالنجوم', style: 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-950 via-slate-950 to-black' }
+  { id: 'slate', name: 'رمادي', style: 'bg-slate-900 border-slate-750' },
+  { id: 'desert', name: 'صحراء', style: 'bg-gradient-to-tr from-[#1f1235] via-[#481d3d] to-[#99413b] border-pink-900/30' },
+  { id: 'forest', name: 'غابة', style: 'bg-gradient-to-b from-[#061f18] via-[#0c2e26] to-[#143d34] border-emerald-950' },
+  { id: 'starry', name: 'نجوم', style: 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-950 via-slate-950 to-black border-sky-950' }
 ];
 
 export default function WidgetSimulator({
   prayerTimes,
   settings,
+  setSettings,
   currentPrayer = 'Dhuhr',
   nextPrayer = 'Asr',
   timeRemainingStr = '02:15:30',
@@ -40,8 +56,11 @@ export default function WidgetSimulator({
   const [widgetTheme, setWidgetTheme] = useState<'green' | 'gold' | 'glass' | 'dark-blue'>('dark-blue');
   const [activeWallpaper, setActiveWallpaper] = useState('starry');
   const [internalTime, setInternalTime] = useState<Date>(new Date());
+  const [isPinned, setIsPinned] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
-  // Keep a local timer for the analog clock hands
+  // Local timer for mock clock hands and updates
   useEffect(() => {
     const timer = setInterval(() => {
       setInternalTime(new Date());
@@ -64,13 +83,6 @@ export default function WidgetSimulator({
     }
   };
 
-  const getThemeTextClass = () => {
-    if (widgetTheme === 'gold') return 'text-amber-300';
-    if (widgetTheme === 'green') return 'text-emerald-400';
-    return 'text-amber-400';
-  };
-
-  // Helper to translate prayer names to Arabic
   const getArabicName = (p: string) => {
     const names: Record<string, string> = {
       Fajr: 'الفجر',
@@ -84,17 +96,15 @@ export default function WidgetSimulator({
     return names[p] || p;
   };
 
-  // Get countdown string in compact form (e.g. - 2h 15m)
   const getCompactCountdown = () => {
     const parts = timeRemainingStr.split(':');
     if (parts.length < 3) return timeRemainingStr;
     const h = parseInt(parts[0]);
     const m = parseInt(parts[1]);
-    const s = parseInt(parts[2]);
     return `-${toArabicNumbers(h)}س ${toArabicNumbers(m)}د`;
   };
 
-  // Calculate coordinates for analog clock mockup
+  // Clock calculations
   const sec = internalTime.getSeconds();
   const min = internalTime.getMinutes();
   const hr = internalTime.getHours();
@@ -107,367 +117,616 @@ export default function WidgetSimulator({
   const currentMonthName = hijri?.monthName || 'شوال';
   const currentYear = hijri?.year || 1448;
 
+  // Pin Widget configuration to local settings (which persist)
+  const handlePinWidget = () => {
+    if (setSettings) {
+      setSettings((prev: any) => ({
+        ...prev,
+        pinnedWidget: {
+          type: widgetType,
+          theme: widgetTheme,
+          wallpaper: activeWallpaper
+        }
+      }));
+      setIsPinned(true);
+      setToastMessage('📌 تم تثبيت هذا الـ Widget بنجاح! سيظهر الآن بشكل مخصص في شاشتك الرئيسية للتطبيق 🥳🤍');
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 5000);
+    }
+  };
+
+  // SVG High-Quality Vector Download Generator
+  const handleDownloadWidgetSVG = () => {
+    let svgContent = '';
+    const width = 400;
+    const height = 220;
+
+    // Define colors & gradients based on widgetTheme
+    let bgGradient = '';
+    let borderStroke = '';
+    let textPrimary = '';
+    let textAccent = '';
+
+    if (widgetType === 'teal') {
+      bgGradient = '<linearGradient id="widgetGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#029587" /><stop offset="50%" stop-color="#05ab95" /><stop offset="100%" stop-color="#0ea185" /></linearGradient>';
+      borderStroke = '#14b8a6';
+      textPrimary = '#ffffff';
+      textAccent = '#f59e0b';
+    } else {
+      switch (widgetTheme) {
+        case 'green':
+          bgGradient = '<linearGradient id="widgetGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#022c22" /><stop offset="100%" stop-color="#115e59" /></linearGradient>';
+          borderStroke = '#10b981';
+          textPrimary = '#ffffff';
+          textAccent = '#10b981';
+          break;
+        case 'gold':
+          bgGradient = '<linearGradient id="widgetGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#1c1917" /><stop offset="100%" stop-color="#292524" /></linearGradient>';
+          borderStroke = '#d97706';
+          textPrimary = '#fef3c7';
+          textAccent = '#f59e0b';
+          break;
+        case 'glass':
+          bgGradient = '<linearGradient id="widgetGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#1e293b" stop-opacity="0.95" /><stop offset="100%" stop-color="#0f172a" stop-opacity="0.95" /></linearGradient>';
+          borderStroke = '#ffffff';
+          textPrimary = '#ffffff';
+          textAccent = '#38bdf8';
+          break;
+        case 'dark-blue':
+        default:
+          bgGradient = '<linearGradient id="widgetGrad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0c1826" /><stop offset="100%" stop-color="#112236" /></linearGradient>';
+          borderStroke = '#1e3a8a';
+          textPrimary = '#ffffff';
+          textAccent = '#60a5fa';
+          break;
+      }
+    }
+
+    const startSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" dir="rtl">
+      <defs>
+        ${bgGradient}
+        <clipPath id="rectClip">
+          <rect width="${width}" height="${height}" rx="24" />
+        </clipPath>
+      </defs>
+      <rect width="${width}" height="${height}" rx="24" fill="url(#widgetGrad)" stroke="${borderStroke}" stroke-width="1.5" />
+      <g clip-path="url(#rectClip)">
+    `;
+
+    const endSvg = `</g></svg>`;
+
+    // Render contents inside SVG based on widgetType
+    if (widgetType === 'timeline') {
+      const timesArr = [
+        { name: 'الفجر', time: prayerTimes.Fajr || '٠٤:٣٠', key: 'Fajr' },
+        { name: 'الظهر', time: prayerTimes.Dhuhr || '١٢:١٥', key: 'Dhuhr' },
+        { name: 'العصر', time: prayerTimes.Asr || '١٥:٤٥', key: 'Asr' },
+        { name: 'المغرب', time: prayerTimes.Maghrib || '١٩:٠٢', key: 'Maghrib' },
+        { name: 'العشاء', time: prayerTimes.Isha || '٢٠:٣٥', key: 'Isha' }
+      ];
+
+      let timelineDots = '';
+      timesArr.forEach((p, idx) => {
+        const x = 50 + idx * 75;
+        const isActive = currentPrayer === p.key;
+        const dotColor = isActive ? '#fbbf24' : '#ffffff';
+        const opacVal = isActive ? '1' : '0.4';
+        timelineDots += `
+          <circle cx="${x}" cy="130" r="${isActive ? '8' : '5'}" fill="${dotColor}" />
+          ${isActive ? `<circle cx="${x}" cy="130" r="12" fill="none" stroke="#fbbf24" stroke-width="1" opacity="0.6" />` : ''}
+          <text x="${x}" y="160" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" opacity="${opacVal}">${p.name}</text>
+          <text x="${x}" y="180" fill="${isActive ? '#fbbf24' : textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="900" text-anchor="middle" opacity="${isActive ? '1' : '0.5'}">${toArabicNumbers(p.time)}</text>
+        `;
+      });
+
+      svgContent = `
+        <!-- Header -->
+        <rect x="25" y="25" width="40" height="40" rx="10" fill="#fbbf24" />
+        <text x="45" y="44" fill="#1e293b" font-family="system-ui, sans-serif" font-size="14" font-weight="900" text-anchor="middle">${toArabicNumbers(currentDayDigit)}</text>
+        <text x="45" y="56" fill="#1e293b" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${currentMonthName}</text>
+        
+        <text x="80" y="38" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="13" font-weight="bold" text-anchor="start">${dayNameArabic}</text>
+        <text x="80" y="54" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="500" text-anchor="start" opacity="0.6">${toArabicNumbers(gregorianStr.split(' ').slice(0, 3).join(' '))}</text>
+        
+        <!-- Countdown -->
+        <text x="375" y="38" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="end" opacity="0.5">متبقي للأذان</text>
+        <text x="375" y="58" fill="#fbbf24" font-family="monospace, system-ui" font-size="18" font-weight="900" text-anchor="end">-${toArabicNumbers(timeRemainingStr)}</text>
+        
+        <!-- Line divider -->
+        <line x1="25" y1="80" x2="375" y2="80" stroke="${textPrimary}" stroke-width="1" opacity="0.1" />
+        
+        <!-- Timeline track line -->
+        <line x1="50" y1="130" x2="350" y2="130" stroke="${textPrimary}" stroke-width="2" opacity="0.2" />
+        
+        <!-- Dots and text -->
+        ${timelineDots}
+      `;
+    } else if (widgetType === 'teal') {
+      svgContent = `
+        <!-- Mosque outline silhouette vector representation -->
+        <path d="M 20 220 L 20 180 Q 25 180 30 170 Q 30 150 45 150 Q 60 150 60 170 Q 65 180 70 180 L 70 220 Z" fill="#ffffff" opacity="0.08" />
+        <path d="M 330 220 L 330 170 L 340 120 L 350 170 L 350 220 Z" fill="#ffffff" opacity="0.08" />
+        <circle cx="340" cy="115" r="4" fill="#ffffff" opacity="0.08" />
+
+        <!-- Header -->
+        <text x="25" y="40" fill="#ccfbf1" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="start">📍 ${settings.cityName || 'الإسكندرية'}</text>
+        <text x="375" y="40" fill="#ccfbf1" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="end">${toArabicNumbers(currentDayDigit)} ${currentMonthName} ${toArabicNumbers(currentYear)}هـ</text>
+        
+        <line x1="25" y1="55" x2="375" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.15" />
+        
+        <!-- Center core content -->
+        <text x="25" y="90" fill="#ccfbf1" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" text-anchor="start" opacity="0.8">الأذان القادم</text>
+        <text x="25" y="125" fill="#ffffff" font-family="system-ui, sans-serif" font-size="24" font-weight="900" text-anchor="start">صلاة ${getArabicName(nextPrayer)}</text>
+        
+        <text x="375" y="120" fill="#fcd34d" font-family="monospace, system-ui" font-size="34" font-weight="900" text-anchor="end">${toArabicNumbers(timeRemainingStr)}</text>
+        
+        <!-- Mini-table of prayers -->
+        <rect x="25" y="155" width="350" height="40" rx="10" fill="#000000" fill-opacity="0.15" />
+        <g transform="translate(10, 0)">
+          <text x="45" y="172" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" opacity="0.6">الفجر</text>
+          <text x="45" y="187" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Fajr || '٠٤:٣٠')}</text>
+          
+          <text x="115" y="172" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" opacity="0.6">الظهر</text>
+          <text x="115" y="187" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Dhuhr || '١٢:١٥')}</text>
+          
+          <text x="185" y="172" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" opacity="0.6">العصر</text>
+          <text x="185" y="187" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Asr || '١٥:٤٥')}</text>
+          
+          <text x="255" y="172" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" opacity="0.6">المغرب</text>
+          <text x="255" y="187" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Maghrib || '١٩:٠٢')}</text>
+          
+          <text x="325" y="172" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" text-anchor="middle" opacity="0.6">العشاء</text>
+          <text x="325" y="187" fill="#ffffff" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Isha || '٢٠:٣٥')}</text>
+        </g>
+      `;
+    } else if (widgetType === 'analog') {
+      svgContent = `
+        <!-- Analog Clock face -->
+        <circle cx="100" cy="110" r="75" fill="#0c1a2c" stroke="${borderStroke}" stroke-width="3" />
+        <circle cx="100" cy="110" r="71" fill="none" stroke="#ffffff" stroke-dasharray="2, 5" stroke-width="1" opacity="0.1" />
+        
+        <!-- Hands -->
+        <g transform="translate(100, 110)">
+          <!-- Hour Hand -->
+          <line x1="0" y1="0" x2="0" y2="-40" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" transform="rotate(${hrDeg})" />
+          <!-- Minute Hand -->
+          <line x1="0" y1="0" x2="0" y2="-60" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" transform="rotate(${minDeg})" />
+          <!-- Second Hand -->
+          <line x1="0" y1="10" x2="0" y2="-65" stroke="#ef4444" stroke-width="1" stroke-linecap="round" transform="rotate(${secDeg})" />
+          <!-- Center Pin -->
+          <circle cx="0" cy="0" r="5" fill="#ef4444" />
+          <circle cx="0" cy="0" r="1.5" fill="#ffffff" />
+        </g>
+        
+        <!-- Numbers on clock face -->
+        <text x="100" y="51" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="9" font-weight="900" text-anchor="middle" opacity="0.5">١٢</text>
+        <text x="163" y="113" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="9" font-weight="900" text-anchor="middle" opacity="0.5">٣</text>
+        <text x="100" y="174" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="9" font-weight="900" text-anchor="middle" opacity="0.5">٦</text>
+        <text x="37" y="113" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="9" font-weight="900" text-anchor="middle" opacity="0.5">٩</text>
+
+        <!-- Right Side Stats -->
+        <text x="210" y="55" fill="${textAccent}" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="start">ساعة الصلاة الذكية 🕰️</text>
+        <text x="210" y="85" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="14" font-weight="900" text-anchor="start">صلاة ${getArabicName(nextPrayer)}</text>
+        <text x="210" y="110" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="start" opacity="0.5">متبقي للأذان:</text>
+        <text x="210" y="145" fill="#fbbf24" font-family="monospace, system-ui" font-size="28" font-weight="900" text-anchor="start">${toArabicNumbers(timeRemainingStr)}</text>
+        
+        <!-- Location details -->
+        <text x="210" y="185" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="start" opacity="0.4">📍 ${settings.cityName || 'الإسكندرية'} • رفيق المسلم</text>
+      `;
+    } else if (widgetType === 'grid') {
+      const gTimes = [
+        { name: 'الفجر', val: prayerTimes.Fajr || '٠٤:٣٠', key: 'Fajr' },
+        { name: 'الشروق', val: prayerTimes.Sunrise || '٠٦:٠٨', key: 'Sunrise' },
+        { name: 'الظهر', val: prayerTimes.Dhuhr || '١٢:١٥', key: 'Dhuhr' },
+        { name: 'العصر', val: prayerTimes.Asr || '١٥:٤٥', key: 'Asr' },
+        { name: 'المغرب', val: prayerTimes.Maghrib || '١٩:٠٢', key: 'Maghrib' },
+        { name: 'العشاء', val: prayerTimes.Isha || '٢٠:٣٥', key: 'Isha' }
+      ];
+
+      let gridBlocks = '';
+      gTimes.forEach((p, idx) => {
+        const row = Math.floor(idx / 3);
+        const col = idx % 3;
+        const x = 25 + col * 120;
+        const y = 80 + row * 60;
+        const isActive = currentPrayer === p.key;
+
+        gridBlocks += `
+          <rect x="${x}" y="${y}" width="110" height="50" rx="12" fill="#ffffff" fill-opacity="${isActive ? '0.12' : '0.03'}" stroke="${isActive ? '#fbbf24' : 'none'}" stroke-width="1" />
+          <text x="${x + 55}" y="${y + 22}" fill="${isActive ? '#fbbf24' : textPrimary}" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">${p.name}</text>
+          <text x="${x + 55}" y="${y + 38}" fill="${isActive ? '#ffffff' : textPrimary}" font-family="monospace, system-ui" font-size="11" font-weight="900" text-anchor="middle" opacity="${isActive ? '1' : '0.5'}">${toArabicNumbers(p.val)}</text>
+        `;
+      });
+
+      svgContent = `
+        <!-- Top bar info -->
+        <text x="25" y="40" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="start">${dayNameArabic} • ${toArabicNumbers(currentDayDigit)} ${currentMonthName}</text>
+        <text x="375" y="40" fill="#fbbf24" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="end">📍 ${settings.cityName || 'الإسكندرية'}</text>
+        
+        <line x1="25" y1="55" x2="375" y2="55" stroke="${textPrimary}" stroke-width="1" opacity="0.1" />
+        
+        <!-- Grid list -->
+        ${gridBlocks}
+      `;
+    } else if (widgetType === 'compact') {
+      svgContent = `
+        <!-- Compact Pill layout -->
+        <rect x="25" y="80" width="350" height="60" rx="30" fill="#000000" fill-opacity="0.2" stroke="${borderStroke}" stroke-width="1" />
+        <circle cx="55" cy="110" r="5" fill="#10b981" />
+        <text x="75" y="115" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="14" font-weight="900" text-anchor="start">${getArabicName(currentPrayer)} ${getCompactCountdown()}</text>
+        
+        <text x="345" y="114" fill="#fbbf24" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="end">📍 ${settings.cityName || 'مكة المكرمة'}</text>
+      `;
+    }
+
+    const fullSvg = startSvg + svgContent + endSvg;
+    const blob = new Blob([fullSvg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `muslim_companion_${widgetType}_widget.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setToastMessage('📥 تم تحميل ملف الـ Widget كملف SVG شعاعي عالي الدقة بنجاح! يمكنك الآن استخدامه 🥳');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 5000);
+  };
+
+  const isFaithBright = settings.appStyle === 'faith-bright';
+
   return (
     <div 
       id="widget-simulator-section" 
-      className={`rounded-3xl p-6 border transition-all duration-300 space-y-6 ${
-        settings.appStyle === 'glass-dark'
-          ? 'bg-[#111723]/80 backdrop-blur-md border-white/5 shadow-2xl text-slate-100'
-          : 'bg-white border-[#e2e8f0] shadow-sm text-slate-800'
+      className={`rounded-3xl border transition-all duration-300 relative overflow-hidden ${
+        isFaithBright
+          ? 'bg-gradient-to-b from-[#faf8f2] to-[#f4f0e4] border-[#e4dcbf] shadow-md text-slate-800'
+          : 'bg-[#0d131b]/95 backdrop-blur-md border-slate-800/80 shadow-2xl text-slate-100'
       }`}
       dir="rtl"
     >
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200/40 dark:border-slate-800/50 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center text-lg shadow-inner">
+      {/* Dynamic Animated Status Toast */}
+      {showToast && (
+        <div className="absolute top-4 inset-x-4 z-50 bg-emerald-600 text-white font-black text-xs py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between gap-2 animate-bounce">
+          <div className="flex items-center gap-2">
+            <span className="text-base">✨</span>
+            <p className="text-right leading-relaxed">{toastMessage}</p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setShowToast(false)} 
+            className="text-white hover:opacity-80 text-xs font-bold bg-white/10 px-2 py-1 rounded-lg shrink-0"
+          >
+            حسناً
+          </button>
+        </div>
+      )}
+
+      {/* Header Panel */}
+      <div className={`p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b ${
+        isFaithBright ? 'border-slate-200/60' : 'border-white/5'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg ${
+            isFaithBright ? 'bg-amber-100 text-amber-700' : 'bg-indigo-500/10 text-indigo-400'
+          }`}>
             📱
           </div>
           <div className="text-right">
-            <h3 className="text-base font-black text-slate-850 dark:text-white leading-none">تطبيقات شاشة الهاتف الذكية (HomeScreen Widgets)</h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold mt-1">
-              حاكي وجرب المكونات التفاعلية الراقية المستوحاة من تطبيقات الصلاة على هاتفك
+            <h3 className="text-sm font-black leading-tight">تطبيقات شاشة الهاتف (Widgets Lab)</h3>
+            <p className="text-[10.5px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">
+              صمّم، جرب، وحمل المكونات الذكية التفاعلية الخاصة بهاتفك مباشرة بالأسفل
             </p>
           </div>
         </div>
-        
-        {/* Wallpapers Switcher */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/30 dark:border-white/5">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-1">الخلفية:</span>
-          {WALLPAPERS.map(w => (
-            <button
-              key={w.id}
-              type="button"
-              onClick={() => setActiveWallpaper(w.id)}
-              className={`py-1 px-2.5 rounded-lg text-[10px] font-extrabold cursor-pointer transition-all ${
-                activeWallpaper === w.id
-                  ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-xs'
-                  : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
-            >
-              {w.name}
-            </button>
-          ))}
+
+        {/* Wallpapers inside header - ultra compact */}
+        <div className={`flex items-center gap-1.5 p-1 rounded-xl border ${
+          isFaithBright ? 'bg-slate-100/85 border-slate-200' : 'bg-slate-900/65 border-white/5'
+        }`}>
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 px-1">الخلفية:</span>
+          <div className="flex gap-1">
+            {WALLPAPERS.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                onClick={() => setActiveWallpaper(w.id)}
+                className={`w-4 h-4 rounded-full border transition-all hover:scale-125 cursor-pointer ${
+                  w.style
+                } ${activeWallpaper === w.id ? 'ring-2 ring-indigo-500 scale-110' : ''}`}
+                title={w.name}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Selector of Widget Presets - Inspired by Salatuk Images */}
-      <div className="space-y-2.5 text-right">
-        <label className="text-[11px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
-          <Sparkles className="w-3.5 h-3.5" />
-          اختر أحد تصميمات الـ Widgets المستوحاة من صورك لتجربتها مباشرة:
-        </label>
+      {/* TWO COLUMN GRID LAB: Sleek, compact and highly interactive */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 p-4 sm:p-5">
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {[
-            { id: 'timeline', label: 'الشريط الزمني المطور 📊', size: 'medium', desc: 'Salatuk Timeline' },
-            { id: 'grid', label: 'شبكة بطاقات الصلاة 🗂️', size: 'large', desc: 'Six Prayer Cards' },
-            { id: 'teal', label: 'عداد الوقت المضيء 🕌', size: 'medium', desc: 'Teal Modern Card' },
-            { id: 'analog', label: 'الساعة الكلاسيكية 🕒', size: 'medium', desc: 'Analog Clock Widget' },
-            { id: 'compact', label: 'الوجت الرياضي المصغر ⚡', size: 'small', desc: 'Compact Bar' }
-          ].map((type) => (
-            <button
-              key={type.id}
-              type="button"
-              onClick={() => {
-                setWidgetType(type.id as any);
-                // Auto adjust wallpaper or settings for optimal view if desired
-                if (type.id === 'teal') {
-                  setWidgetTheme('glass');
-                } else if (type.id === 'analog') {
-                  setWidgetTheme('dark-blue');
-                }
-              }}
-              className={`p-3 rounded-2xl border text-right transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col justify-between ${
-                widgetType === type.id
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 dark:shadow-none'
-                  : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/50 dark:border-slate-850 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
-              }`}
-            >
-              <span className="text-[11px] font-black leading-tight block">{type.label}</span>
-              <span className={`text-[8px] font-extrabold mt-1 block ${widgetType === type.id ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
-                {type.desc}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Simulator Interface Container */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        
-        {/* Left Side: Mockup Frame Settings & Customization */}
-        <div className="lg:col-span-5 space-y-4 flex flex-col justify-between bg-slate-50 dark:bg-slate-900/40 p-5 rounded-3xl border border-slate-100 dark:border-white/5">
-          <div className="space-y-4">
-            <h4 className="text-xs font-black text-slate-800 dark:text-white border-b border-slate-200/50 dark:border-slate-800 pb-2">لوحة تخصيص المكون اللاسلكي</h4>
+        {/* Left Column: Quick Config Panels (7 cols) */}
+        <div className="md:col-span-7 space-y-3.5 flex flex-col justify-between">
+          
+          {/* Quick Choice Grid: Widget Type */}
+          <div className="space-y-1.5 text-right">
+            <label className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 animate-pulse" />
+              ١. اختر شكل وتخطيط الـ Widget:
+            </label>
             
-            {/* Theme Selector - Hidden or overridden for Teal gradient layout */}
-            {widgetType !== 'teal' && widgetType !== 'compact' && (
-              <div className="space-y-2 text-right">
-                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">النمط البصري للمكون (Theme)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'dark-blue', label: '🔵 كحلي إيماني', style: 'border-blue-900/30' },
-                    { id: 'green', label: '🟢 أخضر مكة', style: 'border-emerald-500/20' },
-                    { id: 'gold', label: '🟡 ذهبي كلاسيك', style: 'border-amber-500/20' },
-                    { id: 'glass', label: '💎 زجاجي بلوري', style: 'border-white/10' }
-                  ].map(t => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {[
+                { id: 'timeline', label: 'الشريط الزمني 📊', size: 'medium', desc: 'Timeline Slider' },
+                { id: 'grid', label: 'شبكة الصلاة 🗂️', size: 'large', desc: 'Six Grid Cards' },
+                { id: 'teal', label: 'عداد الوقت المضيء 🕌', size: 'medium', desc: 'Modern Teal' },
+                { id: 'analog', label: 'الساعة الكلاسيكية 🕒', size: 'medium', desc: 'Analog Dial' },
+                { id: 'compact', label: 'الوجت الرياضي المصغر ⚡', size: 'small', desc: 'Compact Pill' }
+              ].map((type) => {
+                const isSel = widgetType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => {
+                      setWidgetType(type.id as any);
+                      if (type.id === 'teal') {
+                        setWidgetTheme('glass');
+                      } else if (type.id === 'analog') {
+                        setWidgetTheme('dark-blue');
+                      }
+                    }}
+                    className={`p-2.5 rounded-xl border text-right transition-all duration-200 hover:scale-[1.01] cursor-pointer flex flex-col justify-between h-[54px] ${
+                      isSel
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                        : isFaithBright
+                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        : 'bg-slate-900/45 border-white/5 text-slate-300 hover:bg-slate-800/80'
+                    }`}
+                  >
+                    <span className="text-[10.5px] font-black leading-none block">{type.label}</span>
+                    <span className={`text-[8px] font-bold block mt-0.5 ${isSel ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {type.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Color Themes & Palettes (Visible if not overridden by teal template) */}
+          {widgetType !== 'teal' && widgetType !== 'compact' && (
+            <div className="space-y-1.5 text-right">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                ٢. النمط البصري والألوان:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { id: 'dark-blue', label: '🔵 كحلي إيماني', activeBg: 'bg-blue-900/10 border-blue-400 text-blue-600 dark:text-blue-400' },
+                  { id: 'green', label: '🟢 أخضر مكة', activeBg: 'bg-emerald-950/20 border-emerald-500 text-emerald-600 dark:text-emerald-400' },
+                  { id: 'gold', label: '🟡 ذهبي كلاسيك', activeBg: 'bg-amber-950/20 border-amber-500 text-amber-600 dark:text-amber-400' },
+                  { id: 'glass', label: '💎 زجاجي بلوري', activeBg: 'bg-white/10 border-slate-300 text-slate-700 dark:text-slate-200' }
+                ].map(t => {
+                  const isThemeSel = widgetTheme === t.id;
+                  return (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setWidgetTheme(t.id as any)}
-                      className={`py-2 px-3 rounded-xl border text-[11px] font-black cursor-pointer text-center transition-all ${
-                        widgetTheme === t.id
-                          ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 text-indigo-600 dark:text-indigo-400 font-black shadow-xs'
-                          : 'bg-white dark:bg-slate-800/40 border-slate-200/50 dark:border-slate-800 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      className={`py-1.5 px-2.5 rounded-xl border text-[10px] font-black cursor-pointer text-center transition-all ${
+                        isThemeSel
+                          ? t.activeBg + ' shadow-inner font-black scale-[1.01]'
+                          : isFaithBright
+                          ? 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                          : 'bg-slate-900/40 border-white/5 text-slate-400 hover:bg-slate-800/80'
                       }`}
                     >
                       {t.label}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Simulated Live Info Block */}
-            <div className="p-3 bg-white dark:bg-slate-800/40 border border-slate-200/40 dark:border-white/5 rounded-2xl text-right space-y-1">
-              <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">بيانات الهاتف المستشعرة</span>
-              <div className="text-[10px] text-slate-600 dark:text-slate-300 font-bold space-y-0.5">
-                <p className="flex justify-between"><span>الموقع الجغرافي النشط:</span> <span className="text-amber-500 dark:text-amber-400">{settings.cityName || 'سان ستيفانو'} 📍</span></p>
-                <p className="flex justify-between"><span>التوقيت المحلي:</span> <span className="text-indigo-500 dark:text-indigo-400" dir="ltr">{internalTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></p>
-                <p className="flex justify-between"><span>الحدث القادم:</span> <span className="text-emerald-500 dark:text-emerald-400">صلاة {getArabicName(nextPrayer)} بعد {toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}</span></p>
-              </div>
+          {/* Interactive Actions Group - Pin & Download SVG side-by-side */}
+          <div className={`p-3 rounded-2xl border ${
+            isFaithBright ? 'bg-amber-50/55 border-amber-100/80' : 'bg-slate-900/40 border-white/5'
+          } space-y-2.5 text-right`}>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 block uppercase">٣. حفظ المكون وتصديره لهاتفك:</span>
+              <span className="text-[8.5px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                <Volume2 className="w-2.5 h-2.5" />
+                الدال على الخير كفاعله
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Pin Action */}
+              <button
+                type="button"
+                onClick={handlePinWidget}
+                className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-[10.5px] rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-indigo-100"
+              >
+                <Pin className="w-3.5 h-3.5" />
+                <span>📌 تثبيت باللوحة الرئيسية للتطبيق</span>
+              </button>
+
+              {/* Download Action (Real vector SVG download) */}
+              <button
+                type="button"
+                onClick={handleDownloadWidgetSVG}
+                className={`py-2.5 px-3 font-black text-[10.5px] rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  isFaithBright
+                    ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs'
+                    : 'bg-slate-900 border-white/10 text-white hover:bg-slate-800 shadow-sm'
+                }`}
+              >
+                <Download className="w-3.5 h-3.5 text-amber-500" />
+                <span>📥 تحميل الـ Widget كملف SVG بدقة عالية</span>
+              </button>
             </div>
           </div>
 
-          {/* Educational Quick Setup Steps */}
-          <div className="bg-amber-50/40 dark:bg-amber-950/10 p-4 rounded-2xl border border-amber-100/50 dark:border-amber-900/20 text-right space-y-2">
-            <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 tracking-wider uppercase block flex items-center gap-1">
-              <Volume2 className="w-3.5 h-3.5" />
-              كيفية تثبيت الـ Widgets على هاتفك الفعلي:
-            </span>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1.5 font-bold leading-relaxed">
-              <p>• <strong className="text-slate-750 dark:text-slate-200">هواتف الأندرويد (Android):</strong> انقر نقرة مطولة على مساحة فارغة بشاشتك الرئيسية ← اختر "أدوات / Widgets" ← ابحث عن تطبيق <span className="text-amber-600">رفيق المسلم</span> ← اسحب الـ Widget المفضل وضعه في أي مكان.</p>
-              <p>• <strong className="text-slate-750 dark:text-slate-200">هواتف الآيفون (iOS):</strong> اضغط مطولاً على أي أيقونة تطبيق ← اضغط على زر (+) في الزاوية العلوية ← ابحث عن <span className="text-amber-600">رفيق المسلم</span> ← اختر الحجم المناسب واضغط "إضافة أداة".</p>
+          {/* Quick installation short manual */}
+          <div className={`p-3 rounded-2xl text-right leading-relaxed font-medium space-y-1 ${
+            isFaithBright ? 'bg-slate-50 border border-slate-200/50' : 'bg-slate-900/20 border border-white/5'
+          }`}>
+            <span className="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">💡 دليل التثبيت السريع لشاشة الهاتف الفعلية:</span>
+            <div className="text-[9.5px] text-slate-500 dark:text-slate-400 space-y-0.5 font-bold">
+              <p>• <strong className="text-slate-700 dark:text-slate-300">أندرويد:</strong> انقر مطولاً على الشاشة الرئيسية ← أدوات (Widgets) ← ابحث عن <span className="text-indigo-500">رفيق المسلم</span> ← اسحب الوجت للشاشة.</p>
+              <p>• <strong className="text-slate-700 dark:text-slate-300">آيفون (iOS):</strong> انقر مطولاً بالخلفية ← علامة (+) بالأعلى ← ابحث عن <span className="text-indigo-500">رفيق المسلم</span> ← إضافة أداة.</p>
             </div>
           </div>
+
         </div>
 
-        {/* Right Side: Smartphone Live View Mockup Frame */}
-        <div className="lg:col-span-7 flex justify-center items-center">
-          <div className="relative w-full max-w-[320px] rounded-[48px] border-[10px] border-slate-800 dark:border-slate-900 bg-black overflow-hidden aspect-[9/16] shadow-2xl flex flex-col justify-between p-3.5 pb-6">
+        {/* Right Column: Smartphone frame with live-reacting Widget preview (5 cols) */}
+        <div className="md:col-span-5 flex justify-center items-center">
+          <div className="relative w-full max-w-[230px] rounded-[36px] border-[7px] border-slate-800 dark:border-slate-900 bg-black overflow-hidden aspect-[9/16] shadow-xl flex flex-col justify-between p-2.5 pb-4">
             
-            {/* Dynamic Island / Phone Notch */}
-            <div className="absolute top-0 inset-x-0 h-5 flex justify-center z-20">
-              <div className="w-24 h-4 bg-black rounded-b-xl flex items-center justify-center gap-1.5 px-3">
-                <span className="w-2 h-2 rounded-full bg-slate-900" />
-                <span className="w-10 h-1.5 bg-slate-900 rounded-full" />
+            {/* Dynamic Island / Notch */}
+            <div className="absolute top-0 inset-x-0 h-4 flex justify-center z-20">
+              <div className="w-16 h-3 bg-black rounded-b-lg flex items-center justify-center gap-1 px-2">
+                <span className="w-1 h-1 rounded-full bg-slate-950" />
+                <span className="w-7 h-1 bg-slate-950 rounded-full" />
               </div>
             </div>
 
-            {/* Live Mobile Wallpaper */}
+            {/* Simulated wallpaper background */}
             <div className={`absolute inset-0 z-0 ${currentWallpaper.style} transition-all duration-700`} />
 
-            {/* Phone Status bar */}
-            <div className="flex justify-between items-center z-10 text-[9px] text-white/95 font-sans font-bold px-3 pt-1.5">
+            {/* Mobile Status bar */}
+            <div className="flex justify-between items-center z-10 text-[7.5px] text-white/95 font-sans font-bold px-2 pt-1">
               <span dir="ltr">{internalTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-              <div className="flex items-center gap-1" dir="ltr">
+              <div className="flex items-center gap-0.5" dir="ltr">
                 <span>📶</span>
                 <span>🛜</span>
-                <span className="text-[8px]">🔋 ٩٥٪</span>
+                <span className="text-[7px]">🔋 ٩٥٪</span>
               </div>
             </div>
 
-            {/* Central Simulated Widget Area - Dynamic based on widgetType state */}
-            <div className="my-auto z-10 w-full flex items-center justify-center py-4 px-1 min-h-[170px]">
+            {/* Centered Widget Area - Real-time reacting */}
+            <div className="my-auto z-10 w-full flex items-center justify-center py-2 px-0.5 min-h-[120px]">
               
-              {/* STYLE 1: Salatuk Timeline Widget (4x2 / Medium) */}
+              {/* STYLE 1: Timeline widget */}
               {widgetType === 'timeline' && (
-                <div className={`w-full rounded-[24px] p-4 flex flex-col justify-between transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
-                  {/* Header Row */}
-                  <div className="flex justify-between items-start border-b border-white/10 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex flex-col items-center justify-center shadow-md font-sans">
-                        <span className="text-[12px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
-                        <span className="text-[7px] font-bold leading-none">{currentMonthName}</span>
+                <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-right select-none scale-100 ${getWidgetThemeClass()}`}>
+                  {/* Top line */}
+                  <div className="flex justify-between items-start border-b border-white/10 pb-1.5">
+                    <div className="flex items-center gap-1">
+                      <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex flex-col items-center justify-center shadow-xs font-sans scale-90">
+                        <span className="text-[10px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
+                        <span className="text-[6px] font-bold leading-none">{currentMonthName}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] font-black block text-white/90">{dayNameArabic}</span>
-                        <span className="text-[8px] font-bold block text-white/50">{toArabicNumbers(gregorianStr.split(' ').slice(0, 3).join(' '))}</span>
+                        <span className="text-[8px] font-black block text-white/90 leading-none">{dayNameArabic}</span>
+                        <span className="text-[6px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianStr.split(' ').slice(0, 2).join(' '))}</span>
                       </div>
                     </div>
-                    {/* Golden Countdown Display */}
                     <div className="text-left">
-                      <span className="text-[8px] font-bold block text-white/40">الوقت المتبقي للأذان</span>
-                      <span className="text-[13px] font-extrabold block text-amber-400 font-mono" dir="ltr">
-                        - {toArabicNumbers(timeRemainingStr)}
+                      <span className="text-[6px] font-bold block text-white/40">متبقي للأذان</span>
+                      <span className="text-[10px] font-extrabold block text-amber-400 font-mono leading-none mt-0.5" dir="ltr">
+                        -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
                       </span>
                     </div>
                   </div>
 
-                  {/* Horizontal Timeline Slider (Core of Salatuk layout) */}
-                  <div className="relative py-4 my-1 flex items-center justify-between">
-                    {/* The slider grey line */}
-                    <div className="absolute inset-x-2 h-[2px] bg-white/20 top-1/2 -translate-y-1/2 z-0 rounded-full" />
-                    
-                    {/* Yellow progress line connecting past prayers to current */}
+                  {/* Horizontal Timeline */}
+                  <div className="relative py-2.5 my-0.5 flex items-center justify-between">
+                    <div className="absolute inset-x-1.5 h-[1.5px] bg-white/20 top-1/2 -translate-y-1/2 z-0 rounded-full" />
                     <div 
-                      className="absolute right-2 h-[2.5px] bg-amber-400 top-1/2 -translate-y-1/2 z-0 rounded-full transition-all duration-1000"
+                      className="absolute right-1.5 h-[1.5px] bg-amber-400 top-1/2 -translate-y-1/2 z-0 rounded-full transition-all duration-1000"
                       style={{ 
-                        left: currentPrayer === 'Fajr' ? '80%' : currentPrayer === 'Dhuhr' ? '60%' : currentPrayer === 'Asr' ? '40%' : currentPrayer === 'Maghrib' ? '20%' : '2%' 
+                        left: currentPrayer === 'Fajr' ? '80%' : currentPrayer === 'Dhuhr' ? '60%' : currentPrayer === 'Asr' ? '40%' : currentPrayer === 'Maghrib' ? '20%' : '5%' 
                       }}
                     />
 
-                    {/* Timeline Dot Items */}
                     {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName, idx) => {
                       const isActive = currentPrayer === pName;
-                      const isNext = nextPrayer === pName;
                       const prayerTime = prayerTimes[pName] || '٠٠:٠٠';
-
-                      // Determine state of past/future for styling
                       const isPast = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].indexOf(currentPrayer) >= idx;
 
                       return (
-                        <div key={pName} className="flex flex-col items-center relative z-10">
-                          {/* Dot */}
-                          <div 
-                            className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${
-                              isActive 
-                                ? 'bg-amber-400 text-slate-900 border-2 border-white scale-125 shadow-lg shadow-amber-400/50' 
-                                : isPast 
-                                  ? 'bg-amber-400/90 text-slate-950 scale-100'
-                                  : 'bg-[#1b2b3c] border border-white/10'
-                            }`}
-                          >
-                            {isActive && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full animate-ping" />}
-                          </div>
-
-                          {/* Time label */}
-                          <span className={`text-[7px] font-bold font-sans mt-1.5 block ${isActive ? 'text-amber-400' : 'text-white/60'}`}>
-                            {getArabicName(pName)}
-                          </span>
-                          <span className={`text-[8px] font-extrabold font-mono mt-0.5 block ${isActive ? 'text-white' : 'text-white/40'}`}>
-                            {toArabicNumbers(prayerTime)}
-                          </span>
+                        <div key={pName} className="flex flex-col items-center relative z-10 scale-90">
+                          <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center transition-all ${
+                            isActive ? 'bg-amber-400 text-slate-900 ring-2 ring-white scale-110 shadow-xs' : isPast ? 'bg-amber-400/90' : 'bg-[#1b2b3c] border border-white/10'
+                          }`} />
+                          <span className={`text-[6.5px] font-bold mt-1 block ${isActive ? 'text-amber-400' : 'text-white/60'}`}>{getArabicName(pName)}</span>
+                          <span className={`text-[7px] font-black font-mono mt-0.2 block ${isActive ? 'text-white' : 'text-white/30'}`}>{toArabicNumbers(prayerTime)}</span>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Footer metadata */}
-                  <div className="flex justify-between items-center border-t border-white/5 pt-2 text-[8px] text-white/50 font-bold">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-2.5 h-2.5 text-amber-400" />
-                      {settings.cityName || 'الإسكندرية'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Sun className="w-2.5 h-2.5 text-amber-300" />
-                      الشروق {toArabicNumbers(prayerTimes.Sunrise || '٠٦:٠٨')} ص
-                    </span>
+                  {/* Footer */}
+                  <div className="flex justify-between items-center border-t border-white/5 pt-1.5 text-[7px] text-white/40 font-bold leading-none">
+                    <span className="flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
+                    <span className="flex items-center gap-0.5">الشروق {toArabicNumbers(prayerTimes.Sunrise || '٠٦:٠٨')} ص</span>
                   </div>
                 </div>
               )}
 
-              {/* STYLE 2: Salatuk Six Grid Cards Widget (4x4 / Large) */}
+              {/* STYLE 2: Grid view */}
               {widgetType === 'grid' && (
-                <div className={`w-full rounded-[24px] p-3 flex flex-col justify-between transition-all duration-500 border text-right select-none h-[220px] ${getWidgetThemeClass()}`}>
-                  {/* Top Bar info */}
-                  <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                      <span className="text-[9px] font-black text-white">{dayNameArabic} - {toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
-                    </div>
-                    <span className="text-[8px] font-black text-amber-400 font-mono tracking-wider flex items-center gap-1">
-                      <MapPin className="w-2.5 h-2.5" />
-                      {settings.cityName || 'الإسكندرية'}
-                    </span>
+                <div className={`w-full rounded-[18px] p-2 flex flex-col justify-between transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                  <div className="flex justify-between items-center border-b border-white/10 pb-1.5 text-[7.5px] font-black">
+                    <span className="text-white">{dayNameArabic} • {toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
+                    <span className="text-amber-400 flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
                   </div>
 
-                  {/* Grid layout of 6 cards */}
-                  <div className="grid grid-cols-3 gap-1.5 py-2">
+                  <div className="grid grid-cols-3 gap-1 py-1.5">
                     {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
                       const isActive = currentPrayer === pName;
-                      const isNext = nextPrayer === pName;
                       const prayerTime = prayerTimes[pName] || '٠٠:٠٠';
 
                       return (
                         <div 
                           key={pName}
-                          className={`p-1.5 rounded-xl border flex flex-col items-center justify-between text-center transition-all ${
-                            isActive 
-                              ? 'bg-[#15273b]/90 border-amber-400/80 shadow-[0_0_10px_rgba(251,191,36,0.2)]' 
-                              : 'bg-white/[0.03] border-white/5'
+                          className={`p-1 rounded-lg border flex flex-col items-center justify-center text-center transition-all scale-95 ${
+                            isActive ? 'bg-[#15273b]/95 border-amber-400' : 'bg-white/[0.03] border-white/5'
                           }`}
                         >
-                          {/* Dot / Indicator */}
-                          <div className="flex justify-between items-center w-full px-0.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-amber-400' : isNext ? 'bg-indigo-400' : 'bg-white/10'}`} />
-                            {isActive && (
-                              <span className="text-[6px] font-black bg-amber-400/25 text-amber-400 px-1 py-0.2 rounded-sm" dir="ltr">
-                                {getCompactCountdown()}
-                              </span>
-                            )}
-                          </div>
-
-                          <span className={`text-[8px] font-black mt-1 ${isActive ? 'text-amber-400' : 'text-white/70'}`}>
-                            {getArabicName(pName)}
-                          </span>
-                          
-                          <span className={`text-[9px] font-black font-mono mt-0.5 ${isActive ? 'text-white' : 'text-white/40'}`}>
-                            {toArabicNumbers(prayerTime)}
-                          </span>
+                          <span className={`text-[7px] font-black ${isActive ? 'text-amber-400' : 'text-white/70'}`}>{getArabicName(pName)}</span>
+                          <span className={`text-[7px] font-black font-mono mt-0.5 ${isActive ? 'text-white' : 'text-white/35'}`}>{toArabicNumbers(prayerTime)}</span>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Widget Footer */}
-                  <div className="text-center text-[7px] text-white/30 font-bold border-t border-white/5 pt-1.5">
-                    مواقيت الصلاة المزامنة • رفيق المسلم المطور
+                  <div className="text-center text-[6px] text-white/30 border-t border-white/5 pt-1 leading-none font-bold">
+                    مواقيت الصلاة • رفيق المسلم المطور
                   </div>
                 </div>
               )}
 
-              {/* STYLE 3: Teal Countdown Card Widget (4x2 / Medium) */}
+              {/* STYLE 3: Teal elegant countdown */}
               {widgetType === 'teal' && (
-                <div className="w-full rounded-[24px] p-4 flex flex-col justify-between transition-all duration-500 bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white shadow-2xl relative overflow-hidden select-none border border-teal-400/30">
-                  {/* Mosque Background Accents */}
-                  <div className="absolute -left-4 -bottom-6 opacity-10 pointer-events-none">
-                    <span className="text-[90px]">🕌</span>
+                <div className="w-full rounded-[18px] p-3 flex flex-col justify-between transition-all duration-500 bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white shadow-lg relative overflow-hidden select-none border border-teal-400/30 scale-100">
+                  <div className="absolute -left-3 -bottom-5 opacity-10 pointer-events-none text-4xl">🕌</div>
+                  
+                  <div className="flex justify-between items-center border-b border-white/15 pb-1 text-[7.5px] font-black">
+                    <span className="flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
+                    <span className="text-teal-100">{toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
                   </div>
 
-                  {/* Header */}
-                  <div className="flex justify-between items-center border-b border-white/15 pb-1.5">
-                    <span className="text-[8px] font-black flex items-center gap-1">
-                      <MapPin className="w-2.5 h-2.5 text-teal-200" />
-                      {settings.cityName || 'الإسكندرية'}
-                    </span>
-                    <span className="text-[8px] font-bold text-teal-100 font-mono">
-                      {toArabicNumbers(currentDayDigit)} {currentMonthName} {toArabicNumbers(currentYear)}هـ
-                    </span>
-                  </div>
-
-                  {/* Large countdown statement */}
-                  <div className="py-2.5 text-right space-y-0.5">
-                    <span className="text-[8px] font-black text-teal-100/70 block uppercase">الصلاة القادمة بعد قليل</span>
-                    <h3 className="text-[13px] font-black text-white flex justify-between items-center leading-none">
+                  <div className="py-1.5 text-right space-y-0.5">
+                    <span className="text-[6px] font-bold text-teal-100/70 block leading-none">الصلاة القادمة</span>
+                    <h3 className="text-[10px] font-black text-white flex justify-between items-center leading-none">
                       <span>صلاة {getArabicName(nextPrayer)}</span>
-                      <span className="text-[15px] font-black font-mono tracking-tight text-amber-300" dir="ltr">
-                        {toArabicNumbers(timeRemainingStr.split(':').slice(0, 3).join(':'))}
-                      </span>
+                      <span className="text-[11px] font-black font-mono text-amber-300" dir="ltr">{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}</span>
                     </h3>
                   </div>
 
-                  {/* Mini-table of prayers underneath */}
-                  <div className="grid grid-cols-5 gap-1 text-center bg-black/10 rounded-xl p-1 border border-white/5">
+                  <div className="grid grid-cols-5 gap-0.5 text-center bg-black/15 rounded-lg p-0.5 border border-white/5 scale-90">
                     {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
                       const isActive = currentPrayer === pName;
                       const prayerTime = prayerTimes[pName] || '٠٠:٠٠';
-
                       return (
-                        <div key={pName} className={`p-1 rounded-lg transition-all ${isActive ? 'bg-white/20 text-white font-extrabold' : ''}`}>
-                          <span className="text-[7px] block font-bold opacity-80">{getArabicName(pName)}</span>
-                          <span className="text-[8px] block font-extrabold font-mono mt-0.5">{toArabicNumbers(prayerTime)}</span>
+                        <div key={pName} className={`p-0.5 rounded transition-all ${isActive ? 'bg-white/20 text-white font-extrabold' : ''}`}>
+                          <span className="text-[5.5px] block font-bold opacity-80 leading-none">{getArabicName(pName)}</span>
+                          <span className="text-[6.5px] block font-extrabold font-mono mt-0.5 leading-none">{toArabicNumbers(prayerTime)}</span>
                         </div>
                       );
                     })}
@@ -475,114 +734,72 @@ export default function WidgetSimulator({
                 </div>
               )}
 
-              {/* STYLE 4: Salatuk Analog Clock Widget (2x2 / Small / Medium) */}
+              {/* STYLE 4: Analog style dial */}
               {widgetType === 'analog' && (
-                <div className={`w-full rounded-[24px] p-3.5 flex flex-col sm:flex-row items-center justify-center gap-3 transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
-                  {/* Left: Clock Face itself */}
-                  <div className="w-[85px] h-[85px] rounded-full bg-[#0a1520] border-2 border-[#192f44] relative flex items-center justify-center shadow-inner">
-                    {/* Clock ticks circle */}
-                    <div className="absolute inset-1 rounded-full border border-dashed border-white/5 pointer-events-none" />
+                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-2 transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                  {/* Miniature Clock Face */}
+                  <div className="w-[60px] h-[60px] rounded-full bg-[#0a1520] border border-[#192f44] relative flex items-center justify-center shrink-0">
+                    <div className="absolute inset-0.5 rounded-full border border-dashed border-white/5 pointer-events-none" />
+                    <span className="absolute top-0.5 text-[6px] font-black text-white/30 font-sans">١٢</span>
+                    <span className="absolute right-0.5 text-[6px] font-black text-white/30 font-sans">٣</span>
+                    <span className="absolute bottom-0.5 text-[6px] font-black text-white/30 font-sans">٦</span>
+                    <span className="absolute left-0.5 text-[6px] font-black text-white/30 font-sans">٩</span>
 
-                    {/* Clock Numbers */}
-                    <span className="absolute top-1 text-[8px] font-black text-white/40 font-sans">١٢</span>
-                    <span className="absolute right-1 text-[8px] font-black text-white/40 font-sans">٣</span>
-                    <span className="absolute bottom-1 text-[8px] font-black text-white/40 font-sans">٦</span>
-                    <span className="absolute left-1 text-[8px] font-black text-white/40 font-sans">٩</span>
-
-                    {/* Digital center readout */}
-                    <div className="absolute top-1/2 -translate-y-1/2 text-center pointer-events-none">
-                      <span className="text-[8px] font-bold text-sky-400 font-mono tracking-tight opacity-90 block pt-4">
-                        {toArabicNumbers(internalTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: false }))}
-                      </span>
-                      {/* Arabic day name inside dial bottom part */}
-                      <span className="text-[7px] font-black text-amber-400/80 leading-none block mt-0.5">
-                        {dayNameArabic}
-                      </span>
-                    </div>
-
-                    {/* Hour Hand */}
-                    <div 
-                      className="absolute w-1 h-7 bg-white rounded-full origin-bottom"
-                      style={{ 
-                        transform: `rotate(${hrDeg}deg)`, 
-                        top: 'calc(50% - 28px)',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                      }} 
-                    />
-
-                    {/* Minute Hand */}
-                    <div 
-                      className="absolute w-0.5 h-10 bg-white rounded-full origin-bottom"
-                      style={{ 
-                        transform: `rotate(${minDeg}deg)`, 
-                        top: 'calc(50% - 40px)',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.4)'
-                      }} 
-                    />
-
-                    {/* Second Hand */}
-                    <div 
-                      className="absolute w-[1px] h-10 bg-red-500 origin-bottom"
-                      style={{ 
-                        transform: `rotate(${secDeg}deg)`, 
-                        top: 'calc(50% - 40px)'
-                      }} 
-                    />
-
-                    {/* Center Pin */}
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 border border-white z-10" />
+                    {/* Clock Hands */}
+                    <div className="absolute w-[1.5px] h-4.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${hrDeg}deg)`, top: 'calc(50% - 4.5px)' }} />
+                    <div className="absolute w-[1px] h-6 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${minDeg}deg)`, top: 'calc(50% - 6px)' }} />
+                    <div className="absolute w-[0.5px] h-6 bg-red-500 origin-bottom" style={{ transform: `rotate(${secDeg}deg)`, top: 'calc(50% - 6px)' }} />
+                    <div className="w-1 h-1 rounded-full bg-red-500 border border-white z-10" />
                   </div>
 
-                  {/* Right: Companion stats panel (Making it 4x2 representation) */}
-                  <div className="flex-1 space-y-1 text-center sm:text-right">
-                    <span className="text-[8px] font-black text-amber-400 block uppercase tracking-wider">ساعة الصلاة الكلاسيكية</span>
-                    <h4 className="text-[10px] font-black text-white leading-tight">صلاة {getArabicName(nextPrayer)} القادمة بعد قليل</h4>
-                    <span className="text-[8px] font-bold text-white/50 block font-mono">
-                      متبقي {toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join('س ') + 'د')}
+                  <div className="flex-1 space-y-0.5 text-right">
+                    <span className="text-[6px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicName(nextPrayer)}</span>
+                    <h4 className="text-[8px] font-black text-white leading-none">متبقي للأذان</h4>
+                    <span className="text-[9px] font-black text-white block font-mono leading-none mt-0.5" dir="ltr">
+                      {toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
                     </span>
-                    <div className="text-[7px] font-bold text-white/30 pt-1 border-t border-white/5 flex items-center justify-center sm:justify-start gap-1">
-                      <MapPin className="w-2.5 h-2.5 text-white/35" />
-                      {settings.cityName || 'الإسكندرية'}
+                    <div className="text-[6px] font-bold text-white/30 pt-0.5 border-t border-white/5 leading-none">
+                      📍 {settings.cityName || 'الإسكندرية'}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* STYLE 5: Salatuk Minimal Compact Pill Widget (4x1 / Small) */}
+              {/* STYLE 5: Compact Pill style */}
               {widgetType === 'compact' && (
-                <div className="w-full bg-[#eeeeee] dark:bg-[#1a242d] text-slate-800 dark:text-white rounded-[20px] py-2.5 px-4 flex items-center justify-between shadow-xl border border-slate-200 dark:border-white/5 select-none transition-all duration-500">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-extrabold font-sans">
+                <div className="w-full bg-[#eeeeee] dark:bg-[#1a242d] text-slate-800 dark:text-white rounded-full py-2 px-3 flex items-center justify-between shadow-md border border-slate-200 dark:border-white/5 select-none scale-100">
+                  <div className="flex items-center gap-1 leading-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[8px] font-extrabold font-sans">
                       {getArabicName(currentPrayer)} {getCompactCountdown()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 text-[8px] font-black text-slate-400 dark:text-slate-500">
-                    <MapPin className="w-2.5 h-2.5 text-amber-500" />
-                    <span>{settings.cityName || 'مكة المكرمة'}</span>
-                  </div>
+                  <span className="text-[6.5px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-0.5 leading-none">
+                    📍 {settings.cityName || 'مكة'}
+                  </span>
                 </div>
               )}
 
             </div>
 
-            {/* Bottom simulated navigation shortcuts */}
-            <div className="mt-auto flex justify-center gap-5 z-10 py-1">
-              <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs">📞</div>
-              <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs">💬</div>
-              <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-xs">🌐</div>
-              <div className="w-7 h-7 rounded-full bg-indigo-600/60 flex items-center justify-center text-xs border border-indigo-400/20 shadow-inner">🕌</div>
+            {/* Bottom launcher shortcuts */}
+            <div className="mt-auto flex justify-center gap-4 z-10 py-0.5 border-t border-white/5 pt-1.5">
+              <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[9px]">📞</div>
+              <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[9px]">💬</div>
+              <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[9px]">🌐</div>
+              <div className="w-5 h-5 rounded-full bg-indigo-600/80 flex items-center justify-center text-[9px] border border-indigo-400/20 shadow-inner">🕌</div>
             </div>
 
-            {/* Simulated home swipe indicator bar */}
-            <div className="absolute bottom-1 inset-x-0 h-1 flex justify-center z-20">
-              <div className="w-20 h-1 bg-white/60 rounded-full" />
+            {/* Swipe home bar */}
+            <div className="absolute bottom-0.5 inset-x-0 h-0.5 flex justify-center z-20">
+              <div className="w-12 h-0.5 bg-white/50 rounded-full" />
             </div>
 
           </div>
         </div>
 
       </div>
+
     </div>
   );
 }

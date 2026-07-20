@@ -23,7 +23,8 @@ import {
   Bell,
   Smartphone,
   MapPin,
-  Download
+  Download,
+  Share2
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { 
@@ -48,6 +49,9 @@ import PrayerManager from './components/PrayerManager';
 import FastingTracker from './components/FastingTracker';
 import IslamicCalendar from './components/IslamicCalendar';
 import WidgetSimulator from './components/WidgetSimulator';
+
+// Import companion icon
+import companionIcon from './assets/images/muslim_companion_icon_1784362373898.jpg';
 
 // Calculations for standalone widget state synchronization
 import { calculatePrayerTimes, getCurrentAndNextPrayer } from './utils/prayerCalc';
@@ -186,6 +190,31 @@ export default function App() {
     } else {
       setToastMessage("عذراً، متصفحك يمنع التثبيت التلقائي حالياً (أو أنك تتصفح من داخل إطار المعاينة). تم تفعيل وعرض خطوات التثبيت اليدوي بالأسفل 📲");
       setShowManualSteps(true);
+    }
+  };
+
+  const handleShareApp = async () => {
+    const shareData = {
+      title: 'رفيق المسلم - Muslim Companion',
+      text: 'تطبيق رفيق المسلم: مواقيت الصلاة بدقة عالية، الأذكار اليومية، الختمات والقرآن الكريم، واتجاه القبلة مع ميزات رائعة وتصميم عصري!',
+      url: 'https://salah-pro-muslim-companion.vercel.app/',
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        setToastMessage("تم فتح قائمة المشاركة بنجاح 📤");
+      } catch (err) {
+        console.log("Share failed or was canceled:", err);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareData.url);
+        setToastMessage("تم نسخ رابط التطبيق بنجاح! شاركه الآن مع أحبابك 🔗🤍");
+      } catch (err) {
+        console.error("Clipboard copy failed:", err);
+        setToastMessage("عذراً، لم نتمكن من نسخ الرابط تلقائياً. يمكنك مشاركة هذا الرابط: https://salah-pro-muslim-companion.vercel.app/");
+      }
     }
   };
 
@@ -477,7 +506,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] flex flex-col items-center justify-center text-center space-y-4" dir="rtl">
         <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse">
-          <img src="/src/assets/images/muslim_companion_icon_1784362373898.jpg" alt="Muslim Companion Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          <img src={companionIcon} alt="Muslim Companion Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
         <div className="space-y-1">
           <h2 className="text-lg font-black text-slate-800 dark:text-white">رفيق المسلم</h2>
@@ -722,6 +751,7 @@ export default function App() {
             <WidgetSimulator 
               prayerTimes={times} 
               settings={settings}
+              setSettings={setSettings}
               currentPrayer={current}
               nextPrayer={next}
               timeRemainingStr={timeRemainingStr}
@@ -901,6 +931,27 @@ export default function App() {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Share App Action inside Sidebar */}
+                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-right">
+                  <div className="flex items-center gap-2">
+                    <Share2 className="w-4 h-4 text-indigo-500 animate-pulse" />
+                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">نشر الخير ومشاركة التطبيق</span>
+                  </div>
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                    الدال على الخير كفاعله. شارك رفيق المسلم مع أصدقائك وعائلتك ليكتب الله لك الأجر! 🤍
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsSidebarOpen(false);
+                      handleShareApp();
+                    }}
+                    className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-[10.5px] rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>مشاركة رابط التطبيق 📤</span>
+                  </button>
                 </div>
 
                 {/* PWA Install Promo inside Sidebar */}
