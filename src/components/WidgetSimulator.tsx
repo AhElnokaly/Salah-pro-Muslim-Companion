@@ -570,13 +570,21 @@ export default function WidgetSimulator({
           </div>
 
           {/* Quick installation short manual */}
-          <div className={`p-3 rounded-2xl text-right leading-relaxed font-medium space-y-1 ${
-            isFaithBright ? 'bg-slate-50 border border-slate-200/50' : 'bg-slate-900/20 border border-white/5'
+          <div className={`p-3.5 rounded-2xl text-right leading-relaxed font-medium space-y-1.5 ${
+            isFaithBright ? 'bg-amber-50/50 border border-amber-100/60' : 'bg-slate-900/40 border border-white/5'
           }`}>
-            <span className="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">💡 دليل التثبيت السريع لشاشة الهاتف الفعلية:</span>
-            <div className="text-[9.5px] text-slate-500 dark:text-slate-400 space-y-0.5 font-bold">
-              <p>• <strong className="text-slate-700 dark:text-slate-300">أندرويد:</strong> انقر مطولاً على الشاشة الرئيسية ← أدوات (Widgets) ← ابحث عن <span className="text-indigo-500">رفيق المسلم</span> ← اسحب الوجت للشاشة.</p>
-              <p>• <strong className="text-slate-700 dark:text-slate-300">آيفون (iOS):</strong> انقر مطولاً بالخلفية ← علامة (+) بالأعلى ← ابحث عن <span className="text-indigo-500">رفيق المسلم</span> ← إضافة أداة.</p>
+            <span className="text-[9.5px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block flex items-center gap-1">
+              <span>💡 توضيح هام بخصوص الـ Widgets على شاشة الهاتف:</span>
+            </span>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 space-y-1.5 font-bold">
+              <p>
+                نظراً للقيود الأمنية والتقنية لأنظمة التشغيل (<span className="text-indigo-500">iOS</span> و <span className="text-indigo-500">Android</span>)، فإن تطبيقات الويب المضافة للشاشة الرئيسية (<span className="text-amber-500 font-extrabold">PWA</span>) لا يُسمح لها برمجياً بإضافة "مكونات تفاعلية" (Widgets) مباشرة في درج الأدوات الرسمي للهاتف. هذا الامتياز حكر فقط على التطبيقات التي يتم تحميلها من المتاجر الرسمية.
+              </p>
+              <div className="pt-1 border-t border-slate-200 dark:border-white/5 space-y-1">
+                <p className="text-slate-700 dark:text-slate-300 font-black">ولكن، يقدم لك رفيق المسلم البدائل المبتكرة التالية:</p>
+                <p>• <strong className="text-indigo-500">١. التثبيت داخل التطبيق:</strong> انقر على زر <strong className="text-slate-700 dark:text-slate-300">"تثبيت باللوحة الرئيسية"</strong> بالأعلى، ليظهر الـ Widget المخصص لك داخل واجهة التطبيق الرئيسية مباشرة عند فتحه!</p>
+                <p>• <strong className="text-indigo-500">٢. تطبيق أدوات الصور المخصصة:</strong> يمكنك تحميل الـ Widget بصيغة <strong className="text-slate-700 dark:text-slate-300">SVG بدقة عالية</strong> ثم استخدام تطبيقات ودجات الصور المجانية مثل (<span className="text-amber-500">Widgetsmith</span> للآيفون أو <span className="text-amber-500">Simple Photo Widget</span> للأندرويد) لعرض الوجت كصورة جميلة على شاشتك!</p>
+              </div>
             </div>
           </div>
 

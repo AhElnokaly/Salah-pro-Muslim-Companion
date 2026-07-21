@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, X, Sparkles } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
+import { defaultMuezzins, getCustomAudios, archiveMuezzins } from '../utils/audioStorage';
 
 interface AthanOverlayProps {
   isOpen: boolean;
@@ -36,9 +37,24 @@ export default function AthanOverlay({
   const [isMuted, setIsMuted] = useState(false);
   const [showDua, setShowDua] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  const [muezzinOptions, setMuezzinOptions] = useState<any[]>(defaultMuezzins);
+
+  useEffect(() => {
+    getCustomAudios().then(tracks => {
+      setMuezzinOptions([...defaultMuezzins, ...archiveMuezzins, ...tracks]);
+    }).catch(err => {
+      console.error('Failed to load custom muezzins in overlay:', err);
+    });
+  }, [isOpen]);
 
   const isFajr = prayerName === 'الفجر';
   const activeMuezzinId = isFajr ? fajrMuezzin : currentMuezzin;
+
+  const activeMuezzin = React.useMemo(() => {
+    return muezzinOptions.find(m => m.id === activeMuezzinId);
+  }, [activeMuezzinId, muezzinOptions]);
+
+  const isFajrTrack = activeMuezzin?.isFajr ?? false;
 
   const overlayPhrases = React.useMemo(() => {
     const phrases = [
@@ -54,7 +70,7 @@ export default function AthanOverlay({
       { arabic: "حي على الفلاح", english: "Hasten to success" },
     ];
 
-    if (isFajr) {
+    if (isFajrTrack) {
       phrases.push(
         { arabic: "الصلاة خير من النوم", english: "Prayer is better than sleep" },
         { arabic: "الصلاة خير من النوم", english: "Prayer is better than sleep" }
@@ -67,7 +83,7 @@ export default function AthanOverlay({
     );
 
     return phrases;
-  }, [isFajr]);
+  }, [isFajrTrack]);
 
   // Handle auto-starting Athan if not yet playing
   useEffect(() => {
@@ -104,7 +120,7 @@ export default function AthanOverlay({
       localStorage.setItem('salah_fajr_muezzin', muezzinId);
     } else {
       setCurrentMuezzin(muezzinId);
-      localStorage.setItem('salah_current_muezzin', muezzinId);
+      localStorage.setItem('salah_general_muezzin', muezzinId);
     }
     // Micro-delay to let audio release cleanly
     setTimeout(() => {
@@ -117,23 +133,21 @@ export default function AthanOverlay({
   const activePhraseIdx = currentPhraseIdx >= 0 && currentPhraseIdx < overlayPhrases.length ? currentPhraseIdx : 0;
   const activePhrase = overlayPhrases[activePhraseIdx];
 
-  const muezzinOptions = [
-    { id: 'fajr_yusuf', name: 'أذان الفجر (يوسف إسلام)', isFajrOnly: true },
-    { id: 'makkah', name: 'أذان مكة المكرمة (الحرم المكي)', isFajrOnly: false },
-    { id: 'medina', name: 'أذان المسجد النبوي الشريف', isFajrOnly: false },
-    { id: 'aqsa', name: 'أذان المسجد الأقصى المبارك', isFajrOnly: false },
-  ];
-
-  const filteredMuezzins = isFajr ? muezzinOptions : muezzinOptions.filter(m => !m.isFajrOnly);
+  const filteredMuezzins = isFajr 
+    ? muezzinOptions.filter(m => m.isFajr) 
+    : muezzinOptions.filter(m => !m.isFajr);
 
   // Determine beautiful backdrop image based on selected Muezzin (Athan)
   const getMosqueBackground = (muezzinId: string) => {
     switch (muezzinId) {
       case 'makkah':
+      case 'fajr_makkah':
         return 'https://images.unsplash.com/photo-1565552645632-d725f8bfc19a?auto=format&fit=crop&q=80&w=1200'; // Kaaba / Makkah
       case 'medina':
+      case 'fajr_medina':
         return 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=1200'; // Masjid an-Nabawi Medina
       case 'aqsa':
+      case 'fajr_aqsa':
         return 'https://images.unsplash.com/photo-1542856391-010fb87dcfed?auto=format&fit=crop&q=80&w=1200'; // Dome of the Rock / Jerusalem
       case 'fajr_yusuf':
       default:

@@ -49,13 +49,16 @@ import PrayerManager from './components/PrayerManager';
 import FastingTracker from './components/FastingTracker';
 import IslamicCalendar from './components/IslamicCalendar';
 import WidgetSimulator from './components/WidgetSimulator';
+import WorshipAlarms from './components/WorshipAlarms';
+import AthanOverlay from './components/AthanOverlay';
+import { defaultMuezzins, getAudioUrl, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
 
 // Import companion icon
 import companionIcon from './assets/images/muslim_companion_icon_1784362373898.jpg';
 
 // Calculations for standalone widget state synchronization
-import { calculatePrayerTimes, getCurrentAndNextPrayer } from './utils/prayerCalc';
-import { getHijriDate, formatGregorianFullDateArabic } from './utils/hijri';
+import { calculatePrayerTimes, getCurrentAndNextPrayer, getArabicPrayerName } from './utils/prayerCalc';
+import { getHijriDate, formatGregorianFullDateArabic, toArabicNumbers } from './utils/hijri';
 
 // Premium Custom Mosque Icon SVG
 const MosqueIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -297,8 +300,14 @@ const speakSpiritualText = (text: string) => {
   }
 };
 
+// Simple helper to parse "HH:MM" string to minutes of the day
+const parseTimeToMinutes = (timeStr: string): number => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas'>('prayer');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -330,6 +339,45 @@ export default function App() {
   const [dhikrLogs, setDhikrLogs] = useState<Record<string, Record<string, number>>>({});
   const [customDuas, setCustomDuas] = useState<CustomDua[]>([]);
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
+
+  // Alarms & Alerts Global State
+  const [customAlarms, setCustomAlarms] = useState<any[]>(() => {
+    const saved = localStorage.getItem('salah_custom_alarms');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [alerts, setAlerts] = useState<any>(() => {
+    const saved = localStorage.getItem('salah_alerts');
+    return saved ? JSON.parse(saved) : {
+      before: { enabled: true, minutes: 10, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
+      after: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
+      duha: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6] }
+    };
+  });
+
+  const [audioVolume, setAudioVolume] = useState<number>(() => {
+    const saved = localStorage.getItem('salah_audio_volume');
+    return saved ? parseFloat(saved) : 0.8;
+  });
+
+  // Global Audio/Overlay States in App.tsx
+  const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
+  const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
+  const [isAthanPlaying, setIsAthanPlaying] = useState<boolean>(false);
+  const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
+  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+
+  const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => {
+    return localStorage.getItem('salah_general_muezzin') || 'makkah';
+  });
+  const [fajrMuezzin, setFajrMuezzin] = useState<string>(() => {
+    return localStorage.getItem('salah_fajr_muezzin') || 'fajr_yusuf';
+  });
+
+  // Custom Alarm ringing overlay state
+  const [activeRingingAlarm, setActiveRingingAlarm] = useState<any | null>(null);
+
+  const globalAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Portal of Serenity & Spiritual Breath States
   const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
@@ -672,6 +720,421 @@ export default function App() {
     if (!isLoaded) return;
     localStorage.setItem('mc_custom_duas', JSON.stringify(customDuas));
   }, [customDuas, isLoaded]);
+
+  useEffect(() => {
+    localStorage.setItem('salah_custom_alarms', JSON.stringify(customAlarms));
+  }, [customAlarms]);
+
+  useEffect(() => {
+    localStorage.setItem('salah_alerts', JSON.stringify(alerts));
+  }, [alerts]);
+
+  useEffect(() => {
+    localStorage.setItem('salah_audio_volume', audioVolume.toString());
+  }, [audioVolume]);
+
+  // Fetch custom muezzins on load
+  useEffect(() => {
+    getCustomAudios().then(tracks => {
+      setCustomMuezzins(tracks);
+    }).catch(err => {
+      console.error('Failed to load custom muezzins in App:', err);
+    });
+  }, []);
+
+  // Global Background Worker, Time-checking and Catch-up Engine
+  const checkTimesAndAlarms = React.useCallback((checkDate: Date, isCatchup = false) => {
+    const currentHour = checkDate.getHours();
+    const currentMin = checkDate.getMinutes();
+    const currentDay = checkDate.getDay();
+    const timeKey = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+    const todayStr = checkDate.toISOString().split('T')[0];
+
+    // Calculate prayer times for checkDate
+    const currentTimes = calculatePrayerTimes(
+      checkDate,
+      settings.latitude,
+      settings.longitude,
+      -checkDate.getTimezoneOffset() / 60,
+      settings.calcMethod,
+      settings.madhab,
+      settings.prayerOffsets || {}
+    );
+
+    // 1. Check Adhans
+    const prayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    for (const prayer of prayers) {
+      if (settings.adhanEnabled[prayer] === false) continue;
+      const prayerTimeStr = currentTimes[prayer];
+      if (prayerTimeStr) {
+        let isMatch = false;
+        if (isCatchup) {
+          const prayerMins = parseTimeToMinutes(prayerTimeStr);
+          const currentMins = currentHour * 60 + currentMin;
+          isMatch = currentMins >= prayerMins && currentMins <= prayerMins + 15;
+        } else {
+          isMatch = prayerTimeStr === timeKey;
+        }
+
+        if (isMatch) {
+          const playedKey = `salah_played_${todayStr}_${prayer}`;
+          if (!localStorage.getItem(playedKey)) {
+            localStorage.setItem(playedKey, 'true');
+            triggerAthan(prayer, currentTimes[prayer]);
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Check Custom Alarms
+    customAlarms.forEach(alarm => {
+      if (!alarm.enabled) return;
+      if (alarm.days.includes(currentDay)) {
+        let isMatch = false;
+        if (isCatchup) {
+          const alarmMins = parseTimeToMinutes(alarm.time);
+          const currentMins = currentHour * 60 + currentMin;
+          isMatch = currentMins >= alarmMins && currentMins <= alarmMins + 15;
+        } else {
+          isMatch = alarm.time === timeKey;
+        }
+
+        if (isMatch) {
+          const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
+          if (!localStorage.getItem(triggeredKey)) {
+            localStorage.setItem(triggeredKey, 'true');
+            triggerCustomAlarm(alarm);
+          }
+        }
+      }
+    });
+
+    // 3. Check Spiritual Alerts (Before/After/Duha)
+    // Before Prayer Alert
+    if (alerts.before?.enabled && alerts.before.days.includes(currentDay)) {
+      alerts.before.prayers.forEach((prayer: PrayerName) => {
+        const prayerTimeStr = currentTimes[prayer];
+        if (prayerTimeStr) {
+          const prayerMins = parseTimeToMinutes(prayerTimeStr);
+          const alertMins = prayerMins - alerts.before.minutes;
+          const currentMins = currentHour * 60 + currentMin;
+          
+          let isMatch = false;
+          if (isCatchup) {
+            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
+          } else {
+            isMatch = currentMins === alertMins;
+          }
+
+          if (isMatch) {
+            const triggeredKey = `alert_before_${prayer}_${todayStr}`;
+            if (!localStorage.getItem(triggeredKey)) {
+              localStorage.setItem(triggeredKey, 'true');
+              triggerSpiritualAlert(`الاستعداد لصلاة ${getArabicPrayerName(prayer)}`, `حان موعد الاستعداد لصلاة ${getArabicPrayerName(prayer)} خلال ${alerts.before.minutes} دقائق.`);
+            }
+          }
+        }
+      });
+    }
+
+    // After Prayer Alert
+    if (alerts.after?.enabled && alerts.after.days.includes(currentDay)) {
+      alerts.after.prayers.forEach((prayer: PrayerName) => {
+        const prayerTimeStr = currentTimes[prayer];
+        if (prayerTimeStr) {
+          const prayerMins = parseTimeToMinutes(prayerTimeStr);
+          const alertMins = prayerMins + alerts.after.minutes;
+          const currentMins = currentHour * 60 + currentMin;
+
+          let isMatch = false;
+          if (isCatchup) {
+            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
+          } else {
+            isMatch = currentMins === alertMins;
+          }
+
+          if (isMatch) {
+            const triggeredKey = `alert_after_${prayer}_${todayStr}`;
+            if (!localStorage.getItem(triggeredKey)) {
+              localStorage.setItem(triggeredKey, 'true');
+              triggerSpiritualAlert(`أذكار صلاة ${getArabicPrayerName(prayer)}`, `تذكير مبارك بقراءة الأذكار والسنن البعدية لصلاة ${getArabicPrayerName(prayer)}.`);
+            }
+          }
+        }
+      });
+    }
+
+    // Duha Prayer Alert
+    if (alerts.duha?.enabled && alerts.duha.days.includes(currentDay)) {
+      const sunriseStr = currentTimes['Sunrise'];
+      if (sunriseStr) {
+        const sunriseMins = parseTimeToMinutes(sunriseStr);
+        const alertMins = sunriseMins + alerts.duha.minutes;
+        const currentMins = currentHour * 60 + currentMin;
+
+        let isMatch = false;
+        if (isCatchup) {
+          isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
+        } else {
+          isMatch = currentMins === alertMins;
+        }
+
+        if (isMatch) {
+          const triggeredKey = `alert_duha_${todayStr}`;
+          if (!localStorage.getItem(triggeredKey)) {
+            localStorage.setItem(triggeredKey, 'true');
+            triggerSpiritualAlert("صلاة الضحى (صلاة الأوابين) ☀️", `صلاة الضحى تجزئ عن صدقة كل سلامى من جسدك. حان الآن موعدها المبارك.`);
+          }
+        }
+      }
+    }
+  }, [customAlarms, alerts, settings, fajrMuezzin, currentMuezzin, audioVolume, customMuezzins]);
+
+  const triggerAthan = async (prayer: PrayerName, timeStr: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)}`, {
+          body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
+          icon: '/favicon.ico',
+          dir: 'rtl'
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const activeMuezzinId = prayer === 'Fajr' ? fajrMuezzin : currentMuezzin;
+    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
+    const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
+    
+    if (globalAudioRef.current) {
+      globalAudioRef.current.pause();
+    }
+
+    try {
+      const resolvedUrl = await getAudioUrl(muezzinObj.url);
+      const audio = new Audio(resolvedUrl);
+      globalAudioRef.current = audio;
+      audio.volume = audioVolume;
+
+      const phraseTimings = [
+        { start: 0, end: 12 },
+        { start: 12, end: 24 },
+        { start: 24, end: 34 },
+        { start: 34, end: 44 },
+        { start: 44, end: 54 },
+        { start: 54, end: 64 },
+        { start: 64, end: 72 },
+        { start: 72, end: 80 },
+        { start: 80, end: 90 },
+        { start: 90, end: 100 },
+        { start: 100, end: 110 },
+        { start: 110, end: 120 }
+      ];
+
+      audio.addEventListener('play', () => {
+        setIsAthanPlaying(true);
+      });
+
+      audio.addEventListener('pause', () => {
+        setIsAthanPlaying(false);
+        setCurrentPhraseIdx(-1);
+      });
+
+      audio.addEventListener('ended', () => {
+        setIsAthanPlaying(false);
+        setCurrentPhraseIdx(-1);
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        const time = audio.currentTime;
+        const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
+        setCurrentPhraseIdx(activeIdx);
+      });
+
+      setAthanOverlayPrayer(prayer);
+      setShowAthanOverlay(true);
+
+      audio.play().catch(e => {
+        console.warn("Autoplay blocked or play failed:", e);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const triggerCustomAlarm = (alarm: any) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(`تنبيه مخصص: ${alarm.title}`, {
+          body: `حان الآن موعد: ${alarm.title} (${toArabicNumbers(alarm.time)})`,
+          icon: '/favicon.ico',
+          dir: 'rtl'
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    if (alarm.soundType !== 'silent') {
+      let soundUrl = '/audio/azan3.mp3';
+      if (alarm.soundType === 'beep') {
+        soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
+      } else if (alarm.soundType === 'vibrate') {
+        if ('vibrate' in navigator) {
+          navigator.vibrate([200, 100, 200]);
+        }
+      }
+
+      if (alarm.soundType !== 'vibrate') {
+        if (globalAudioRef.current) {
+          globalAudioRef.current.pause();
+        }
+
+        const audio = new Audio(soundUrl);
+        globalAudioRef.current = audio;
+        audio.volume = audioVolume;
+
+        audio.play().catch(e => console.error(e));
+      }
+    }
+
+    setActiveRingingAlarm(alarm);
+  };
+
+  const triggerSpiritualAlert = (title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body: body,
+          icon: '/favicon.ico',
+          dir: 'rtl'
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const chimeUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
+    const audio = new Audio(chimeUrl);
+    audio.volume = audioVolume * 0.5;
+    audio.play().catch(e => console.error(e));
+
+    setToastMessage(`⏰ ${title}: ${body}`);
+  };
+
+  const togglePlayAthanGlobal = async (muezzinId?: string) => {
+    const activeMuezzinId = muezzinId || (athanOverlayPrayer === 'Fajr' ? fajrMuezzin : currentMuezzin);
+    
+    if (isAthanPlaying) {
+      if (globalAudioRef.current) {
+        globalAudioRef.current.pause();
+      }
+      setIsAthanPlaying(false);
+      setCurrentPhraseIdx(-1);
+    } else {
+      const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
+      const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
+      
+      try {
+        const resolvedUrl = await getAudioUrl(muezzinObj.url);
+        const audio = new Audio(resolvedUrl);
+        globalAudioRef.current = audio;
+        audio.volume = audioVolume;
+
+        audio.addEventListener('play', () => {
+          setIsAthanPlaying(true);
+        });
+
+        audio.addEventListener('pause', () => {
+          setIsAthanPlaying(false);
+          setCurrentPhraseIdx(-1);
+        });
+
+        audio.addEventListener('ended', () => {
+          setIsAthanPlaying(false);
+          setCurrentPhraseIdx(-1);
+        });
+
+        audio.play().catch(e => console.error(e));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const stopAthanGlobal = () => {
+    if (globalAudioRef.current) {
+      globalAudioRef.current.pause();
+    }
+    setIsAthanPlaying(false);
+    setCurrentPhraseIdx(-1);
+  };
+
+  // Background Web Worker and 1-second Interval Init
+  useEffect(() => {
+    let worker: Worker | null = null;
+    try {
+      const workerCode = `
+        let intervalId = null;
+        self.onmessage = function(e) {
+          if (e.data === 'start') {
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(() => {
+              self.postMessage('tick');
+            }, 1000);
+          } else if (e.data === 'stop') {
+            if (intervalId) clearInterval(intervalId);
+            intervalId = null;
+          }
+        };
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      worker = new Worker(URL.createObjectURL(blob));
+      
+      worker.onmessage = () => {
+        window.dispatchEvent(new CustomEvent('background-tick'));
+      };
+      
+      worker.postMessage('start');
+    } catch (err) {
+      console.warn("Background web worker failed to initialize:", err);
+    }
+    
+    const handleTick = () => {
+      const d = new Date();
+      setNow(d);
+      checkTimesAndAlarms(d, false);
+    };
+
+    window.addEventListener('background-tick', handleTick);
+
+    const mainInterval = setInterval(handleTick, 1000);
+
+    return () => {
+      if (worker) {
+        worker.postMessage('stop');
+        worker.terminate();
+      }
+      window.removeEventListener('background-tick', handleTick);
+      clearInterval(mainInterval);
+    };
+  }, [checkTimesAndAlarms]);
+
+  // Page visibility & wake up Catch-up check
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const d = new Date();
+        setNow(d);
+        checkTimesAndAlarms(d, true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [checkTimesAndAlarms]);
 
   // Prohibited Fasting Days check and automatic cancellation
   useEffect(() => {
@@ -1086,6 +1549,19 @@ export default function App() {
             />
           </div>
         )}
+
+        {activeTab === 'alarms' && (
+          <WorshipAlarms
+            settings={settings}
+            setSettings={setSettings}
+            customAlarms={customAlarms}
+            setCustomAlarms={setCustomAlarms}
+            alerts={alerts}
+            setAlerts={setAlerts}
+            audioVolume={audioVolume}
+            setAudioVolume={setAudioVolume}
+          />
+        )}
       </main>
 
       {/* 4. Slide-out Sidebar Drawer with motion */}
@@ -1195,6 +1671,7 @@ export default function App() {
                       { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
                       { id: 'fasting', label: 'متابعة وتتبع الصيام', icon: Moon },
                       { id: 'adhkar', label: 'الأذكار اليومية والاستغفار', icon: Sparkles },
+                      { id: 'alarms', label: 'منبهات العبادات والصلوات ⏰', icon: Bell },
                       { id: 'qibla', label: 'تحديد اتجاه القبلة', icon: Compass },
                       { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
                     ].map((item) => {
@@ -1678,6 +2155,88 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Global Immersive Athan Overlay Screen */}
+      <AthanOverlay 
+        isOpen={showAthanOverlay} 
+        onClose={() => {
+          setShowAthanOverlay(false);
+          stopAthanGlobal();
+        }} 
+        prayerName={getArabicPrayerName(athanOverlayPrayer)} 
+        prayerTime={times[athanOverlayPrayer]} 
+        audioRef={globalAudioRef}
+        isPlaying={isAthanPlaying}
+        currentPhraseIdx={currentPhraseIdx}
+        currentMuezzin={currentMuezzin}
+        fajrMuezzin={fajrMuezzin}
+        setCurrentMuezzin={setCurrentMuezzin}
+        setFajrMuezzin={setFajrMuezzin}
+        togglePlayAthan={togglePlayAthanGlobal}
+        stopAthan={stopAthanGlobal}
+      />
+
+      {/* Global Custom Alarm Ringing Modal */}
+      {activeRingingAlarm && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" dir="rtl">
+          <div className="bg-white dark:bg-[#161d26] border border-indigo-500/30 w-full max-w-sm rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
+            
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 animate-bounce">
+              <Bell className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-slate-800 dark:text-white">تنبيه مخصص: {activeRingingAlarm.title}</h3>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-black font-mono">الوقت الحالي: {toArabicNumbers(activeRingingAlarm.time)}</p>
+            </div>
+
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold leading-relaxed">
+              تذكير مبارك من رفيق المسلم للقيام بالعبادة المخصصة والتقرب إلى الله سبحانه وتعالى.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (globalAudioRef.current) {
+                    globalAudioRef.current.pause();
+                  }
+                  const snoozedAlarm = {
+                    ...activeRingingAlarm,
+                    id: `snooze_${Date.now()}`,
+                    title: `${activeRingingAlarm.title} (غفوة)`,
+                    time: (() => {
+                      const d = new Date();
+                      d.setMinutes(d.getMinutes() + 5);
+                      return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                    })(),
+                    days: [new Date().getDay()],
+                    enabled: true,
+                    soundType: activeRingingAlarm.soundType
+                  };
+                  setCustomAlarms(prev => [...prev, snoozedAlarm]);
+                  setActiveRingingAlarm(null);
+                  setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-black cursor-pointer transition-all active:scale-95"
+              >
+                تأجيل ٥ دقائق
+              </button>
+              <button
+                onClick={() => {
+                  if (globalAudioRef.current) {
+                    globalAudioRef.current.pause();
+                  }
+                  setActiveRingingAlarm(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                إيقاف الرنين
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -54,6 +54,7 @@ import { generateActiveNudge } from '../utils/nudgeRules';
 import CompanionInsights from './CompanionInsights';
 import FridayMode from './FridayMode';
 import AthanOverlay from './AthanOverlay';
+import { defaultMuezzins, getCustomAudios, getAudioUrl, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
@@ -176,12 +177,17 @@ export default function Dashboard({
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const lastTriggeredMin = React.useRef<string>('');
 
-  const muezzins = [
-    { id: 'fajr_yusuf', name: 'أذان الفجر (يوسف إسلام - بالتحية والتثويب)', url: 'https://www.islamcan.com/audio/adhan/azan20.mp3', isFajr: true },
-    { id: 'makkah', name: 'أذان الحرم المكي الشريف', url: 'https://www.islamcan.com/audio/adhan/azan2.mp3', isFajr: false },
-    { id: 'medina', name: 'أذان المسجد النبوي الشريف', url: 'https://www.islamcan.com/audio/adhan/azan3.mp3', isFajr: false },
-    { id: 'aqsa', name: 'أذان المسجد الأقصى المبارك', url: 'https://www.islamcan.com/audio/adhan/azan1.mp3', isFajr: false },
-  ];
+  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    getCustomAudios().then(tracks => {
+      setCustomMuezzins(tracks);
+    }).catch(err => {
+      console.error('Failed to load custom muezzins in Dashboard:', err);
+    });
+  }, []);
+
+  const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
 
   const athanPhrases = [
     { text: 'الله أكبر، الله أكبر', duration: 12 },
@@ -202,7 +208,7 @@ export default function Dashboard({
     { text: 'لا إله إلا الله', duration: 10 },
   ];
 
-  const togglePlayAthan = (muezzinId?: string) => {
+  const togglePlayAthan = async (muezzinId?: string) => {
     const targetMuezzinId = muezzinId || currentMuezzin;
     const muezzin = muezzins.find(m => m.id === targetMuezzinId);
     if (!muezzin) return;
@@ -218,53 +224,59 @@ export default function Dashboard({
         audioRef.current.pause();
       }
 
-      const audio = new Audio(muezzin.url);
-      audioRef.current = audio;
-      audio.volume = audioVolume;
-      
-      audio.addEventListener('play', () => {
-        setIsPlaying(true);
-      });
+      try {
+        const resolvedUrl = await getAudioUrl(muezzin.url);
+        const audio = new Audio(resolvedUrl);
+        audioRef.current = audio;
+        audio.volume = audioVolume;
+        
+        audio.addEventListener('play', () => {
+          setIsPlaying(true);
+        });
 
-      audio.addEventListener('pause', () => {
-        setIsPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
+        audio.addEventListener('pause', () => {
+          setIsPlaying(false);
+          setCurrentPhraseIdx(-1);
+        });
 
-      audio.addEventListener('ended', () => {
-        setIsPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
+        audio.addEventListener('ended', () => {
+          setIsPlaying(false);
+          setCurrentPhraseIdx(-1);
+        });
 
-      const isFajrTrack = muezzin.isFajr;
-      const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
+        const isFajrTrack = muezzin.isFajr;
+        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
 
-      let accumulatedTime = 0;
-      const phraseTimings = activePhrases.map(p => {
-        const start = accumulatedTime;
-        const end = accumulatedTime + p.duration;
-        accumulatedTime += p.duration;
-        return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
-      });
+        let accumulatedTime = 0;
+        const phraseTimings = activePhrases.map(p => {
+          const start = accumulatedTime;
+          const end = accumulatedTime + p.duration;
+          accumulatedTime += p.duration;
+          return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
+        });
 
-      audio.addEventListener('timeupdate', () => {
-        const time = audio.currentTime;
-        const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-        setCurrentPhraseIdx(activeIdx);
-      });
+        audio.addEventListener('timeupdate', () => {
+          const time = audio.currentTime;
+          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
+          setCurrentPhraseIdx(activeIdx);
+        });
 
-      setCurrentMuezzin(targetMuezzinId);
-      audio.play().catch(err => {
-        if (err.name === 'AbortError') {
-          console.log('[Audio] Playback was aborted or interrupted safely.');
-          return;
-        }
-        if (err.name === 'NotAllowedError') {
-          console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
-          return;
-        }
-        console.error('[Audio] Playback failed', err);
-      });
+        setCurrentMuezzin(targetMuezzinId);
+        audio.play().catch(err => {
+          if (err.name === 'AbortError') {
+            console.log('[Audio] Playback was aborted or interrupted safely.');
+            return;
+          }
+          if (err.name === 'NotAllowedError') {
+            console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
+            return;
+          }
+          console.error('[Audio] Playback failed', err);
+        });
+      } catch (err) {
+        console.error('[Audio] Failed to play Athan in Dashboard:', err);
+        alert('فشل تشغيل الملف الصوتي. قد يكون الملف المرفوع غير صالح أو محذوف.');
+      }
     }
   };
 
@@ -329,6 +341,9 @@ export default function Dashboard({
     }
   })();
 
+  // Bypassed local auto-play checker to prevent duplicate audio triggers.
+  // Consolidated under the unified Global Root Prayer & Alarm Service inside App.tsx.
+  /*
   React.useEffect(() => {
     if (!autoPlayOnTime) return;
 
@@ -368,6 +383,7 @@ export default function Dashboard({
       }
     }
   }, [now, autoPlayOnTime, times, settings.cityName, settings.adhanEnabled, fajrMuezzin, currentMuezzin]);
+  */
 
   // Handle global header simulation trigger
   React.useEffect(() => {

@@ -1,11 +1,18 @@
-const CACHE_NAME = 'muslim-companion-cache-v3';
+const CACHE_NAME = 'muslim-companion-cache-v4';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './muslim_companion_icon.jpg'
+  './muslim_companion_icon.jpg',
+  './audio/azan1.mp3',
+  './audio/azan2.mp3',
+  './audio/azan3.mp3',
+  './audio/azan4.mp3',
+  './audio/azan8.mp3',
+  './audio/azan20.mp3',
+  './audio/azan22.mp3'
 ];
 
 // Install Event

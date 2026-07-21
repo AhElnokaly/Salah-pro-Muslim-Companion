@@ -35,6 +35,14 @@ import {
 import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
+import { 
+  defaultMuezzins, 
+  getCustomAudios, 
+  saveCustomAudio, 
+  deleteCustomAudio, 
+  getAudioUrl,
+  archiveMuezzins
+} from '../utils/audioStorage';
 
 // Premium Custom Mosque Icon SVG
 const MosqueIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -145,23 +153,17 @@ export default function PrayerManager({
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Custom Muezzins State and definition
-  const [customMuezzins, setCustomMuezzins] = useState<{ id: string; name: string; url: string; isFajr: boolean; isCustom?: boolean }[]>(() => {
-    const saved = localStorage.getItem('salah_custom_muezzins');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [customMuezzins, setCustomMuezzins] = useState<{ id: string; name: string; url: string; isFajr: boolean; isCustom?: boolean; fileName?: string }[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('salah_custom_muezzins', JSON.stringify(customMuezzins));
-  }, [customMuezzins]);
+    getCustomAudios().then(tracks => {
+      setCustomMuezzins(tracks);
+    }).catch(err => {
+      console.error('Failed to load custom muezzins from IndexedDB:', err);
+    });
+  }, []);
 
-  const defaultMuezzins = [
-    { id: 'fajr_yusuf', name: 'أذان الفجر (يوسف إسلام - بالتحية والتثويب)', url: 'https://www.islamcan.com/audio/adhan/azan20.mp3', isFajr: true },
-    { id: 'makkah', name: 'أذان الحرم المكي الشريف', url: 'https://www.islamcan.com/audio/adhan/azan2.mp3', isFajr: false },
-    { id: 'medina', name: 'أذان المسجد النبوي الشريف', url: 'https://www.islamcan.com/audio/adhan/azan3.mp3', isFajr: false },
-    { id: 'aqsa', name: 'أذان المسجد الأقصى المبارك', url: 'https://www.islamcan.com/audio/adhan/azan1.mp3', isFajr: false },
-  ];
-
-  const muezzins = [...defaultMuezzins, ...customMuezzins];
+  const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
 
   // Custom Alarms Interface & State
   interface CustomAlarm {
@@ -195,6 +197,7 @@ export default function PrayerManager({
   const [newMuezzinIsFajr, setNewMuezzinIsFajr] = useState(false);
   const [uploadFileName, setUploadFileName] = useState('');
   const [muezzinSourceType, setMuezzinSourceType] = useState<'url' | 'file'>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Alarms triggered tracking
   const [lastTriggeredAlarms, setLastTriggeredAlarms] = useState<Record<string, string>>(() => {
@@ -206,45 +209,75 @@ export default function PrayerManager({
     localStorage.setItem('salah_last_triggered_alarms', JSON.stringify(lastTriggeredAlarms));
   }, [lastTriggeredAlarms]);
 
-  const handleAddCustomMuezzin = (e: React.FormEvent) => {
+  const handleAddCustomMuezzin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMuezzinName.trim()) {
       alert('الرجاء إدخال اسم المؤذن أو الصوت.');
       return;
     }
-    if (!newMuezzinUrl.trim()) {
-      alert('الرجاء إدخال رابط صوتي أو رفع ملف.');
-      return;
-    }
 
-    const newMuezzin = {
-      id: `custom_${Date.now()}`,
-      name: `${newMuezzinName} (مخصص)`,
-      url: newMuezzinUrl,
-      isFajr: newMuezzinIsFajr,
-      isCustom: true
-    };
-
-    try {
-      const updated = [...customMuezzins, newMuezzin];
-      localStorage.setItem('salah_custom_muezzins', JSON.stringify(updated));
-      setCustomMuezzins(updated);
-      setLogSuccessMessage(`تمت إضافة الصوت المخصص: "${newMuezzinName}" بنجاح!`);
-      
-      // Reset form
-      setNewMuezzinName('');
-      setNewMuezzinUrl('');
-      setUploadFileName('');
-    } catch (err) {
-      console.error(err);
-      alert('فشل حفظ الصوت في الذاكرة المحلية بسبب كبر حجم الملف المرفوع. يرجى استخدام رابط ويب (URL) لملف الصوت أو اختيار ملف ذي حجم أصغر جداً.');
+    if (muezzinSourceType === 'file') {
+      if (!selectedFile) {
+        alert('الرجاء اختيار ملف صوتي.');
+        return;
+      }
+      try {
+        const newTrack = await saveCustomAudio(
+          newMuezzinName,
+          selectedFile.name,
+          selectedFile,
+          null,
+          newMuezzinIsFajr
+        );
+        setCustomMuezzins(prev => [...prev, newTrack]);
+        setLogSuccessMessage(`تمت إضافة الصوت المخصص: "${newMuezzinName}" بنجاح!`);
+        
+        // Reset form
+        setNewMuezzinName('');
+        setNewMuezzinUrl('');
+        setUploadFileName('');
+        setSelectedFile(null);
+      } catch (err) {
+        console.error(err);
+        alert('فشل حفظ الملف في التخزين المحلي للمتصفح.');
+      }
+    } else {
+      if (!newMuezzinUrl.trim()) {
+        alert('الرجاء إدخال رابط صوتي.');
+        return;
+      }
+      try {
+        const newTrack = await saveCustomAudio(
+          newMuezzinName,
+          'رابط ويب',
+          null,
+          newMuezzinUrl,
+          newMuezzinIsFajr
+        );
+        setCustomMuezzins(prev => [...prev, newTrack]);
+        setLogSuccessMessage(`تمت إضافة الصوت المخصص: "${newMuezzinName}" بنجاح!`);
+        
+        // Reset form
+        setNewMuezzinName('');
+        setNewMuezzinUrl('');
+        setUploadFileName('');
+      } catch (err) {
+        console.error(err);
+        alert('فشل حفظ الرابط في التخزين المحلي للمتصفح.');
+      }
     }
   };
 
-  const handleDeleteCustomMuezzin = (id: string, name: string) => {
+  const handleDeleteCustomMuezzin = async (id: string, name: string) => {
     if (window.confirm(`هل تريد حذف الصوت المخصص "${name}"؟`)) {
-      setCustomMuezzins(prev => prev.filter(m => m.id !== id));
-      setLogSuccessMessage(`تم حذف الصوت المخصص "${name}".`);
+      try {
+        await deleteCustomAudio(id);
+        setCustomMuezzins(prev => prev.filter(m => m.id !== id));
+        setLogSuccessMessage(`تم حذف الصوت المخصص "${name}".`);
+      } catch (err) {
+        console.error(err);
+        alert('فشل حذف الصوت المخصص.');
+      }
     }
   };
 
@@ -307,7 +340,7 @@ export default function PrayerManager({
     { text: 'لا إله إلا الله', duration: 10 },
   ];
 
-  const togglePlayAthan = (prayerName?: PrayerName, forcedMuezzinId?: string) => {
+  const togglePlayAthan = async (prayerName?: PrayerName, forcedMuezzinId?: string) => {
     const isFajr = prayerName === 'Fajr';
     const activeMuezzinId = forcedMuezzinId || (prayerName ? prayerMuezzins[prayerName] : (isFajr ? fajrMuezzin : currentMuezzin));
     const muezzin = muezzins.find(m => m.id === activeMuezzinId);
@@ -325,64 +358,70 @@ export default function PrayerManager({
         audioRef.current.pause();
       }
 
-      const audio = new Audio(muezzin.url);
-      audioRef.current = audio;
-      const vol = prayerName ? (settings.prayerVolumes?.[prayerName] ?? audioVolume) : audioVolume;
-      audio.volume = vol;
-      
-      audio.addEventListener('play', () => {
-        setIsPlaying(true);
-        setCurrentPlayingPrayer(prayerName || null);
-      });
+      try {
+        const resolvedUrl = await getAudioUrl(muezzin.url);
+        const audio = new Audio(resolvedUrl);
+        audioRef.current = audio;
+        const vol = prayerName ? (settings.prayerVolumes?.[prayerName] ?? audioVolume) : audioVolume;
+        audio.volume = vol;
+        
+        audio.addEventListener('play', () => {
+          setIsPlaying(true);
+          setCurrentPlayingPrayer(prayerName || null);
+        });
 
-      audio.addEventListener('pause', () => {
-        setIsPlaying(false);
-        setCurrentPlayingPrayer(null);
-        setCurrentPhraseIdx(-1);
-      });
+        audio.addEventListener('pause', () => {
+          setIsPlaying(false);
+          setCurrentPlayingPrayer(null);
+          setCurrentPhraseIdx(-1);
+        });
 
-      audio.addEventListener('ended', () => {
-        setIsPlaying(false);
-        setCurrentPlayingPrayer(null);
-        setCurrentPhraseIdx(-1);
-      });
+        audio.addEventListener('ended', () => {
+          setIsPlaying(false);
+          setCurrentPlayingPrayer(null);
+          setCurrentPhraseIdx(-1);
+        });
 
-      const isFajrTrack = muezzin.isFajr || isFajr;
-      const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
+        const isFajrTrack = muezzin.isFajr || isFajr;
+        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
 
-      let accumulatedTime = 0;
-      const phraseTimings = activePhrases.map(p => {
-        const start = accumulatedTime;
-        const end = accumulatedTime + p.duration;
-        accumulatedTime += p.duration;
-        return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
-      });
+        let accumulatedTime = 0;
+        const phraseTimings = activePhrases.map(p => {
+          const start = accumulatedTime;
+          const end = accumulatedTime + p.duration;
+          accumulatedTime += p.duration;
+          return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
+        });
 
-      audio.addEventListener('timeupdate', () => {
-        const time = audio.currentTime;
-        const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-        setCurrentPhraseIdx(activeIdx);
-      });
+        audio.addEventListener('timeupdate', () => {
+          const time = audio.currentTime;
+          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
+          setCurrentPhraseIdx(activeIdx);
+        });
 
-      if (isFajr) {
-        setFajrMuezzin(activeMuezzinId);
-        localStorage.setItem('salah_fajr_muezzin', activeMuezzinId);
-      } else {
-        setCurrentMuezzin(activeMuezzinId);
-        localStorage.setItem('salah_general_muezzin', activeMuezzinId);
+        if (isFajr) {
+          setFajrMuezzin(activeMuezzinId);
+          localStorage.setItem('salah_fajr_muezzin', activeMuezzinId);
+        } else {
+          setCurrentMuezzin(activeMuezzinId);
+          localStorage.setItem('salah_general_muezzin', activeMuezzinId);
+        }
+
+        audio.play().catch(err => {
+          if (err.name === 'AbortError') {
+            console.log('[Audio] Playback was aborted or interrupted safely.');
+            return;
+          }
+          if (err.name === 'NotAllowedError') {
+            console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
+            return;
+          }
+          console.error('[Audio] Playback failed', err);
+        });
+      } catch (err) {
+        console.error('[Audio] Failed to resolve audio URL:', err);
+        alert('فشل تشغيل الملف الصوتي. قد يكون الملف المرفوع غير صالح أو محذوف.');
       }
-
-      audio.play().catch(err => {
-        if (err.name === 'AbortError') {
-          console.log('[Audio] Playback was aborted or interrupted safely.');
-          return;
-        }
-        if (err.name === 'NotAllowedError') {
-          console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
-          return;
-        }
-        console.error('[Audio] Playback failed', err);
-      });
     }
   };
 
@@ -423,6 +462,9 @@ export default function PrayerManager({
     settings.prayerOffsets || {}
   );
 
+  // Bypassed local auto-play and custom alarms checkers to prevent conflicts.
+  // Root level background service inside App.tsx now handles all automated triggers.
+  /*
   useEffect(() => {
     if (!autoPlayOnTime) return;
 
@@ -493,7 +535,7 @@ export default function PrayerManager({
 
           // 2. Play Sound based on soundType
           if (alarm.soundType !== 'silent') {
-            let soundUrl = 'https://www.islamcan.com/audio/adhan/azan3.mp3'; // Medina adhan as default
+            let soundUrl = '/audio/azan3.mp3'; // Medina adhan as default
             if (alarm.soundType === 'beep') {
               soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav'; // Standard beep sound
             } else if (alarm.soundType === 'vibrate') {
@@ -506,7 +548,8 @@ export default function PrayerManager({
               audioRef.current.pause();
             }
             
-            const audio = new Audio(soundUrl);
+            const resolvedSoundUrl = soundUrl.startsWith('/') ? new URL(soundUrl, window.location.origin).href : soundUrl;
+            const audio = new Audio(resolvedSoundUrl);
             audioRef.current = audio;
             audio.volume = audioVolume;
 
@@ -531,6 +574,7 @@ export default function PrayerManager({
       }
     });
   }, [currentTime, customAlarms, lastTriggeredAlarms, audioVolume]);
+  */
 
   // Alarms and alerts state
   interface AlertConfig {
@@ -1092,9 +1136,13 @@ export default function PrayerManager({
                 };
 
                 const getShortMuezzinName = (id: string) => {
-                  if (id === 'fajr_yusuf') return 'يوسف إسلام';
+                  if (id === 'fajr_yusuf') return 'الفجر - يوسف إسلام';
+                  if (id === 'fajr_makkah') return 'الفجر - الحرم المكي';
+                  if (id === 'fajr_medina') return 'الفجر - المسجد النبوي';
+                  if (id === 'fajr_aqsa') return 'الفجر - الأقصى';
                   if (id === 'makkah') return 'الحرم المكي';
                   if (id === 'medina') return 'المسجد النبوي';
+                  if (id === 'yusuf_islam') return 'يوسف إسلام';
                   if (id === 'aqsa') return 'المسجد الأقصى';
                   return id;
                 };
@@ -2174,17 +2222,14 @@ export default function PrayerManager({
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              if (file.size > 8 * 1024 * 1024) {
-                                alert('حجم الملف كبير جداً! الحد الأقصى هو 8 ميجابايت لضمان الأداء السلس.');
+                              if (file.size > 20 * 1024 * 1024) {
+                                alert('حجم الملف كبير جداً! الحد الأقصى هو ٢٠ ميجابايت لضمان الأداء السلس.');
                                 return;
                               }
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                const base64Data = event.target?.result as string;
-                                setNewMuezzinUrl(base64Data);
-                                setUploadFileName(file.name);
-                              };
-                              reader.readAsDataURL(file);
+                              setSelectedFile(file);
+                              setUploadFileName(file.name);
+                              // Set a dummy URL so validation passes
+                              setNewMuezzinUrl(file.name);
                             }
                           }}
                           className="absolute inset-0 opacity-0 cursor-pointer"
