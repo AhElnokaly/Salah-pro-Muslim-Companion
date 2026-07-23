@@ -30,12 +30,14 @@ import {
   Volume1,
   Search,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua } from '../types';
 import { POPULAR_CITIES } from '../utils/prayerCalc';
 import { toArabicNumbers, formatArabicDayCount, getHijriDate } from '../utils/hijri';
-import { defaultMuezzins, getCustomAudios, getAudioUrl, archiveMuezzins } from '../utils/audioStorage';
+import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins, downloadAndSaveAudio, deleteDownloadedAudio, getDownloadedTrackIds, getAudioStorageStats } from '../utils/audioStorage';
 
 interface MoreSettingsProps {
   subTab: 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas';
@@ -133,6 +135,17 @@ export default function MoreSettings({
   const [showArchiveGeneral, setShowArchiveGeneral] = useState(false);
   const [fajrSearch, setFajrSearch] = useState('');
   const [generalSearch, setGeneralSearch] = useState('');
+  const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [audioSuccessMessage, setAudioSuccessMessage] = useState<string | null>(null);
+  const [storageStats, setStorageStats] = useState<{ count: number; totalMB: string }>({ count: 0, totalMB: '0.0' });
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const refreshStorageData = () => {
+    getDownloadedTrackIds().then(setDownloadedTrackIds).catch(console.error);
+    getAudioStorageStats().then(setStorageStats).catch(console.error);
+  };
 
   useEffect(() => {
     getCustomAudios().then(tracks => {
@@ -140,7 +153,66 @@ export default function MoreSettings({
     }).catch(err => {
       console.error('Failed to load custom muezzins in Settings:', err);
     });
+    refreshStorageData();
   }, []);
+
+  const handleDownloadTrack = async (track: any) => {
+    setDownloadingId(track.id);
+    setAudioError(null);
+    setAudioSuccessMessage(null);
+    try {
+      await downloadAndSaveAudio(track);
+      refreshStorageData();
+      setAudioSuccessMessage(`تم تحميل وتخزين "${track.name}" بنجاح للعمل أوفلاين بدون إنترنت!`);
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      setAudioError('فشل تحميل الصوت أوفلاين: ' + (err.message || 'خطأ في الشبكة'));
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleDeleteDownloadedTrack = async (trackId: string) => {
+    try {
+      await deleteDownloadedAudio(trackId);
+      refreshStorageData();
+      setAudioSuccessMessage('تم حذف النسخة المحفوظة أوفلاين بنجاح.');
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  const handleBatchDownloadDefaults = async () => {
+    setIsBulkDownloading(true);
+    setAudioError(null);
+    setAudioSuccessMessage(null);
+    try {
+      const toDownload = defaultMuezzins.filter(m => !downloadedTrackIds.has(m.id));
+      if (toDownload.length === 0) {
+        setAudioSuccessMessage('جميع الأذانات الأساسية محفوظة أوفلاين بالفعل! ⚡');
+        setIsBulkDownloading(false);
+        return;
+      }
+      setBulkProgress({ current: 0, total: toDownload.length });
+      let downloadedCount = 0;
+      for (let i = 0; i < toDownload.length; i++) {
+        try {
+          await downloadAndSaveAudio(toDownload[i]);
+          downloadedCount++;
+        } catch (e) {
+          console.warn(`Failed to download ${toDownload[i].name}`, e);
+        }
+        setBulkProgress({ current: i + 1, total: toDownload.length });
+      }
+      refreshStorageData();
+      setAudioSuccessMessage(`تم تحميل وتخزين ${downloadedCount} صوت أذان بنجاح للعمل أوفلاين! ⚡`);
+    } catch (err: any) {
+      setAudioError('حدث خطأ أثناء التحميل: ' + (err.message || 'خطأ في الاتصال'));
+    } finally {
+      setIsBulkDownloading(false);
+      setBulkProgress(null);
+    }
+  };
 
   const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
 
@@ -166,17 +238,20 @@ export default function MoreSettings({
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      try {
-        const resolvedUrl = await getAudioUrl(url);
-        const audio = new Audio(resolvedUrl);
+
+      setPlayingAudio({ id, url, name, isFajr });
+      setAudioCurrentTime(0);
+      setAudioDuration(0);
+
+      const playAudioTrack = (srcUrl: string, isFallback = false) => {
+        const audio = new Audio(srcUrl);
         audioRef.current = audio;
         audio.volume = audioVolume;
         audio.playbackRate = playbackSpeed;
-        
-        setPlayingAudio({ id, url, name, isFajr });
-        
+
         audio.addEventListener('play', () => {
           setAudioIsPlaying(true);
+          setAudioError(null);
         });
 
         audio.addEventListener('pause', () => {
@@ -193,21 +268,52 @@ export default function MoreSettings({
         });
 
         audio.addEventListener('durationchange', () => {
-          setAudioDuration(audio.duration || 0);
+          if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+            setAudioDuration(audio.duration);
+          }
         });
 
         audio.addEventListener('loadedmetadata', () => {
-          setAudioDuration(audio.duration || 0);
+          if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+            setAudioDuration(audio.duration);
+          }
+        });
+
+        audio.addEventListener('error', () => {
+          if (!isFallback) {
+            const fallbackUrl = isFajr 
+              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+            playAudioTrack(fallbackUrl, true);
+          } else {
+            setAudioError('تعذر تشغيل الملف الصوتي.');
+          }
         });
 
         audio.play().catch(e => {
-          console.error("Error playing audio", e);
-          setAudioError('فشل تشغيل الملف الصوتي. يرجى التأكد من أن صيغة الملف مدعومة وصالحة.');
+          console.warn("Audio play error:", e);
+          if (e.name === 'NotAllowedError') {
+            setAudioError('⚠️ يرجى الضغط على زر التشغيل ▶ لبدء الصوت (بسبب قيود التشغيل التلقائي بالمتصفح).');
+          } else if (!isFallback) {
+            const fallbackUrl = isFajr 
+              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+            playAudioTrack(fallbackUrl, true);
+          } else {
+            setAudioError('تعذر تشغيل الملف الصوتي.');
+          }
         });
-      } catch (err) {
+      };
+
+      getAudioUrl(url, id).then(resolvedUrl => {
+        playAudioTrack(resolvedUrl, false);
+      }).catch(err => {
         console.error('Failed to resolve settings audio:', err);
-        setAudioError('فشل تحميل أو تشغيل الملف الصوتي.');
-      }
+        const fallbackUrl = isFajr 
+          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+        playAudioTrack(fallbackUrl, true);
+      });
     }
   };
 
@@ -582,6 +688,11 @@ export default function MoreSettings({
                     ⚠️ {audioError}
                   </p>
                 )}
+                {audioSuccessMessage && (
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50/50 dark:bg-emerald-950/10 p-2 rounded-lg border border-emerald-100 dark:border-emerald-950/20">
+                    ✅ {audioSuccessMessage}
+                  </p>
+                )}
               </div>
 
               {/* Scrubber / Timeline Slider */}
@@ -666,6 +777,46 @@ export default function MoreSettings({
               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">معاينة الصوت فورية</span>
             </div>
 
+            {/* Offline Storage Dashboard & Batch Download */}
+            <div className="p-3.5 bg-gradient-to-r from-indigo-900/10 via-slate-900/5 to-emerald-900/10 dark:from-indigo-950/30 dark:via-slate-900/30 dark:to-emerald-950/30 rounded-2xl border border-indigo-200/40 dark:border-indigo-800/40 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-indigo-700 dark:text-indigo-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>إدارة التخزين المحلي (أوفلاين)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
+                    تم حفظ <strong className="text-emerald-600 dark:text-emerald-400">{toArabicNumbers(storageStats.count)}</strong> أصوات محلياً ({toArabicNumbers(storageStats.totalMB)} ميجابايت). تعمل بدون إنترنت!
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBatchDownloadDefaults}
+                  disabled={isBulkDownloading}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="تحميل جميع الأصوات الافتراضية دفعة واحدة للعمل بدون اتصال"
+                >
+                  {isBulkDownloading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>جارٍ التحميل ({toArabicNumbers(bulkProgress?.current || 0)}/{toArabicNumbers(bulkProgress?.total || 0)})...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>⚡ تحميل كافة الأساسية أوفلاين</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/50 dark:border-slate-800/50 flex items-center gap-1.5">
+                <span className="text-amber-500 font-bold">💡 ملاحظة ذكية:</span>
+                <span>عند تشغيل أي أذان وأنت أونلاين، يتم حفظه تلقائياً أوفلاين بالخلفية ليكون جاهزاً دائماً بدون إنترنت!</span>
+              </div>
+            </div>
+
             {/* General Volume Control */}
             <div className="space-y-2 p-3 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/40">
               <div className="flex items-center justify-between">
@@ -711,6 +862,8 @@ export default function MoreSettings({
               <div className="space-y-2">
                 {muezzins.filter(m => m.isFajr && !m.id.startsWith('archive_')).map((m) => {
                   const isSelected = fajrMuezzin === m.id;
+                  const isDownloaded = downloadedTrackIds.has(m.id) || m.id.startsWith('custom_');
+                  const isDownloading = downloadingId === m.id;
                   const isPlaying = playingAudio?.id === m.id && audioIsPlaying;
                   return (
                     <div 
@@ -725,17 +878,51 @@ export default function MoreSettings({
                       <div className="flex items-center gap-2">
                         {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
                         <span className="text-xs font-black text-slate-700 dark:text-slate-200">{m.name}</span>
+                        {isDownloaded ? (
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">⚡ أوفلاين</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">🌐 أونلاين</span>
+                        )}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePlayAudio(m.id, m.url);
-                        }}
-                        className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                        title="اختبر صوت المؤذن"
-                      >
-                        {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      </button>
+                      
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {isDownloaded ? (
+                          <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 px-2 py-1 rounded-lg text-[10px] font-bold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span className="hidden sm:inline">محفوظ أوفلاين</span>
+                            {!m.id.startsWith('custom_') && (
+                              <button
+                                onClick={() => handleDeleteDownloadedTrack(m.id)}
+                                className="p-0.5 hover:text-rose-500 transition-colors ml-1 cursor-pointer"
+                                title="حذف النسخة المحفوظة أوفلاين"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleDownloadTrack(m)}
+                            disabled={isDownloading}
+                            className="flex items-center gap-1 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-950/40 text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border border-slate-200 dark:border-slate-700 cursor-pointer disabled:opacity-50"
+                            title="تحميل الأذان لحفظه والعمل أوفلاين بدون إنترنت"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                            ) : (
+                              <Download className="w-3 h-3" />
+                            )}
+                            <span className="hidden sm:inline">{isDownloading ? 'جارٍ الحفظ...' : 'تحميل أوفلاين'}</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => togglePlayAudio(m.id, m.url)}
+                          className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                          title="اختبر صوت المؤذن"
+                        >
+                          {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -774,6 +961,8 @@ export default function MoreSettings({
                         .filter(m => m.isFajr && m.id.startsWith('archive_') && m.name.toLowerCase().includes(fajrSearch.toLowerCase()))
                         .map((m) => {
                           const isSelected = fajrMuezzin === m.id;
+                          const isDownloaded = downloadedTrackIds.has(m.id);
+                          const isDownloading = downloadingId === m.id;
                           const isPlaying = playingAudio?.id === m.id && audioIsPlaying;
                           return (
                             <div 
@@ -789,16 +978,37 @@ export default function MoreSettings({
                                 {isSelected && <Check className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />}
                                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{m.name}</span>
                               </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  togglePlayAudio(m.id, m.url);
-                                }}
-                                className={`p-1 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                                title="اختبر صوت المؤذن"
-                              >
-                                {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                              </button>
+                              
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                {isDownloaded ? (
+                                  <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <button
+                                      onClick={() => handleDeleteDownloadedTrack(m.id)}
+                                      className="p-0.5 hover:text-rose-500 transition-colors cursor-pointer"
+                                      title="حذف النسخة المحفوظة"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleDownloadTrack(m)}
+                                    disabled={isDownloading}
+                                    className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-600 hover:text-indigo-600 transition-all border border-slate-200 dark:border-slate-700 cursor-pointer disabled:opacity-50"
+                                    title="تحميل للعمل أوفلاين"
+                                  >
+                                    {isDownloading ? <Loader2 className="w-3 h-3 animate-spin text-indigo-500" /> : <Download className="w-3 h-3" />}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => togglePlayAudio(m.id, m.url)}
+                                  className={`p-1 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                  title="اختبر صوت المؤذن"
+                                >
+                                  {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -814,6 +1024,8 @@ export default function MoreSettings({
               <div className="space-y-2">
                 {muezzins.filter(m => !m.isFajr && !m.id.startsWith('archive_')).map((m) => {
                   const isSelected = generalMuezzin === m.id;
+                  const isDownloaded = downloadedTrackIds.has(m.id) || m.id.startsWith('custom_');
+                  const isDownloading = downloadingId === m.id;
                   const isPlaying = playingAudio?.id === m.id && audioIsPlaying;
                   return (
                     <div 
@@ -828,17 +1040,51 @@ export default function MoreSettings({
                       <div className="flex items-center gap-2">
                         {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
                         <span className="text-xs font-black text-slate-700 dark:text-slate-200">{m.name}</span>
+                        {isDownloaded ? (
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">⚡ أوفلاين</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">🌐 أونلاين</span>
+                        )}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePlayAudio(m.id, m.url);
-                        }}
-                        className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                        title="اختبر صوت المؤذن"
-                      >
-                        {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      </button>
+                      
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {isDownloaded ? (
+                          <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40 px-2 py-1 rounded-lg text-[10px] font-bold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span className="hidden sm:inline">محفوظ أوفلاين</span>
+                            {!m.id.startsWith('custom_') && (
+                              <button
+                                onClick={() => handleDeleteDownloadedTrack(m.id)}
+                                className="p-0.5 hover:text-rose-500 transition-colors ml-1 cursor-pointer"
+                                title="حذف النسخة المحفوظة أوفلاين"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleDownloadTrack(m)}
+                            disabled={isDownloading}
+                            className="flex items-center gap-1 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-950/40 text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border border-slate-200 dark:border-slate-700 cursor-pointer disabled:opacity-50"
+                            title="تحميل الأذان لحفظه والعمل أوفلاين بدون إنترنت"
+                          >
+                            {isDownloading ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-indigo-500" />
+                            ) : (
+                              <Download className="w-3 h-3" />
+                            )}
+                            <span className="hidden sm:inline">{isDownloading ? 'جارٍ الحفظ...' : 'تحميل أوفلاين'}</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => togglePlayAudio(m.id, m.url)}
+                          className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                          title="اختبر صوت المؤذن"
+                        >
+                          {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -877,6 +1123,8 @@ export default function MoreSettings({
                         .filter(m => !m.isFajr && m.id.startsWith('archive_') && m.name.toLowerCase().includes(generalSearch.toLowerCase()))
                         .map((m) => {
                           const isSelected = generalMuezzin === m.id;
+                          const isDownloaded = downloadedTrackIds.has(m.id);
+                          const isDownloading = downloadingId === m.id;
                           const isPlaying = playingAudio?.id === m.id && audioIsPlaying;
                           return (
                             <div 
@@ -892,16 +1140,37 @@ export default function MoreSettings({
                                 {isSelected && <Check className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />}
                                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{m.name}</span>
                               </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  togglePlayAudio(m.id, m.url);
-                                }}
-                                className={`p-1 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                                title="اختبر صوت المؤذن"
-                              >
-                                {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                              </button>
+                              
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                {isDownloaded ? (
+                                  <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    <button
+                                      onClick={() => handleDeleteDownloadedTrack(m.id)}
+                                      className="p-0.5 hover:text-rose-500 transition-colors cursor-pointer"
+                                      title="حذف النسخة المحفوظة"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleDownloadTrack(m)}
+                                    disabled={isDownloading}
+                                    className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-600 hover:text-indigo-600 transition-all border border-slate-200 dark:border-slate-700 cursor-pointer disabled:opacity-50"
+                                    title="تحميل للعمل أوفلاين"
+                                  >
+                                    {isDownloading ? <Loader2 className="w-3 h-3 animate-spin text-indigo-500" /> : <Download className="w-3 h-3" />}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => togglePlayAudio(m.id, m.url)}
+                                  className={`p-1 rounded-lg text-white transition-colors cursor-pointer ${isPlaying ? 'bg-rose-500 hover:bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                  title="اختبر صوت المؤذن"
+                                >
+                                  {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -920,9 +1189,10 @@ export default function MoreSettings({
             </p>
 
             <div className="space-y-3 pt-2">
-              {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as PrayerName[]).map((prayer) => {
+              {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as PrayerName[]).map((prayer) => {
                 const arabicName = 
                   prayer === 'Fajr' ? 'صلاة الفجر والصبح' :
+                  prayer === 'Sunrise' ? 'تنبيه شروق الشمس' :
                   prayer === 'Dhuhr' ? 'صلاة الظهر وعصر الجمعة' :
                   prayer === 'Asr' ? 'صلاة العصر والوسطى' :
                   prayer === 'Maghrib' ? 'صلاة المغرب والغروب' : 'صلاة العشاء والقيام';

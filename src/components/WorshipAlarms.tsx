@@ -210,7 +210,7 @@ export default function WorshipAlarms({
       }
       const soundUrl = type === 'beep' 
         ? 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav' 
-        : '/audio/azan3.mp3'; // Medina adhan
+        : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3'; // Medina adhan
       
       const audio = new Audio(soundUrl);
       testAudioRef.current = audio;

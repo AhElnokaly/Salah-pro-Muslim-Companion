@@ -171,7 +171,7 @@ export default function IslamicCalendar({
         break;
       }
       currentHijriDays.push({
-        dayNum: h.day,
+        dayNum: dIter.getDate(),
         date: new Date(dIter.getTime()),
         isCurrentMonth: true
       });
@@ -183,9 +183,8 @@ export default function IslamicCalendar({
     let prevIter = new Date(firstOfHijriGregorian.getTime());
     prevIter.setDate(prevIter.getDate() - 1);
     for (let i = 0; i < firstHijriDayIndex; i++) {
-      const h = getHijriDate(prevIter, settings.hijriOffset);
       prevHijriDays.unshift({
-        dayNum: h.day,
+        dayNum: prevIter.getDate(),
         date: new Date(prevIter.getTime()),
         isCurrentMonth: false
       });
@@ -197,9 +196,8 @@ export default function IslamicCalendar({
     const remainingCells = 42 - (prevHijriDays.length + currentHijriDays.length);
     let nextIter = new Date(dIter.getTime());
     for (let i = 0; i < remainingCells; i++) {
-      const h = getHijriDate(nextIter, settings.hijriOffset);
       nextHijriDays.push({
-        dayNum: h.day,
+        dayNum: nextIter.getDate(),
         date: new Date(nextIter.getTime()),
         isCurrentMonth: false
       });
@@ -478,12 +476,12 @@ export default function IslamicCalendar({
 
                 {/* Primary Day Count (Larger, Center-Top) */}
                 <span className={`text-[12px] leading-none block font-extrabold mt-1.5 ${primaryTextClass}`}>
-                  {toArabicNumbers(isPrimaryHijri ? hDate.day : cell.dayNum)}
+                  {toArabicNumbers(isPrimaryHijri ? hDate.day : cell.date.getDate())}
                 </span>
 
                 {/* Secondary Day Count (Smaller, Bottom) */}
                 <span className={`text-[8px] leading-none block font-bold mb-1 ${secondaryTextClass}`}>
-                  {toArabicNumbers(isPrimaryHijri ? cell.dayNum : hDate.day)}
+                  {toArabicNumbers(isPrimaryHijri ? cell.date.getDate() : hDate.day)}
                 </span>
               </button>
             );

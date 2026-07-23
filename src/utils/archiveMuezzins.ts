@@ -3,541 +3,541 @@ import { AudioTrack } from "./audioStorage";
 export const archiveMuezzins: AudioTrack[] = [
   {
     "id": "archive_001",
-    "name": "أذان - الشيخ حمزة الحلبية",
+    "name": "الشيخ حمزة الحلبية",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/001-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_002",
-    "name": "أذان - أحمد العمادي - قطر",
+    "name": "الشيخ أحمد العمادي (قطر)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/002--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_003",
-    "name": "أذان - الكويت",
+    "name": "أذان دولة الكويت",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_004",
-    "name": "أذان - بروني - دار السلام - 1",
+    "name": "بروناي دار السلام (الأول)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/004----1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_005",
-    "name": "أذان - بروني - دار السلام - 2",
+    "name": "بروناي دار السلام (الثاني)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/005----2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_006",
-    "name": "أذان - حسين ايرك",
+    "name": "الشيخ حسين إيرك",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/006--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_007",
-    "name": "أذان - القدس",
+    "name": "القدس الشريف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/007--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_008",
-    "name": "أذان - الهند",
+    "name": "جمهورية الهند",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/008--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_009",
-    "name": "أذان - اندونيسيا",
+    "name": "جمهورية إندونيسيا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/009--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_010",
-    "name": "أذان - باكستان",
+    "name": "جمهورية باكستان",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/010--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_011",
-    "name": "أذان - تركيا -1",
+    "name": "جمهورية تركيا (تسجيل 1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/011---1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_012",
-    "name": "أذان - تركيا -2",
+    "name": "جمهورية تركيا (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/012---2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_013",
-    "name": "أذان - جورجيا",
+    "name": "جمهورية جورجيا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/013--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_014",
-    "name": "أذان زهير محمد طارش",
+    "name": "الشيخ زهير محمد طارش",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/014-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_015",
-    "name": "أذان - عجمان - الإمارات",
+    "name": "إمارة عجمان (الإمارات)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/015---.mp3",
     "isFajr": false
   },
   {
     "id": "archive_016",
-    "name": "أذان - مكة المكرمة -2",
+    "name": "مكة المكرمة (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/016---2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_017",
-    "name": "أذان - الشيخ عبد الباسط عبدالصمد",
+    "name": "الشيخ عبد الباسط عبد الصمد",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/017-_-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_018",
-    "name": "أذان الحرم المدني",
+    "name": "الحرم المدني الشريف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/018-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_019",
-    "name": "أذان الحرم المكي - 1",
+    "name": "الحرم المكي الشريف (تسجيل 1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/019--1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_020",
-    "name": "أذان الحرم المكي - 2",
+    "name": "الحرم المكي الشريف (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_021",
-    "name": "أذان الحرم المكي - محمد رمل",
+    "name": "الحرم المكي الشريف (الشيخ محمد رمل)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/021--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_022",
-    "name": "أذان الحرم المكي 4",
+    "name": "الحرم المكي الشريف (تسجيل 4)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/022-4.mp3",
     "isFajr": false
   },
   {
     "id": "archive_023",
-    "name": "أذان الحرم المكي5",
+    "name": "الحرم المكي الشريف (تسجيل 5)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/023-5.mp3",
     "isFajr": false
   },
   {
     "id": "archive_024",
-    "name": "أذان الحرم المكي6",
+    "name": "الحرم المكي الشريف (تسجيل 6)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/024-6.mp3",
     "isFajr": false
   },
   {
     "id": "archive_025",
-    "name": "أذان - الشيخ البهلول أبوعرقوب1",
+    "name": "الشيخ البهلول أبوعرقوب (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/025-1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_026",
-    "name": "أذان - الشيخ البهلول أبوعرقوب2",
+    "name": "الشيخ البهلول أبوعرقوب (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/026-2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_027",
-    "name": "أذان العشاء الشيخ عبد الباسط عبدالصمد",
+    "name": "الشيخ عبد الباسط عبد الصمد (أذان العشاء)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/027-_-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_028",
-    "name": "أذان الفجر - الكويت - 1",
+    "name": "أذان الفجر - دولة الكويت (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/028---1.mp3",
     "isFajr": true
   },
   {
     "id": "archive_029",
-    "name": "أذان الفجر - الكويت - 2",
+    "name": "أذان الفجر - دولة الكويت (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/029---2.mp3",
     "isFajr": true
   },
   {
     "id": "archive_030",
-    "name": "أذان الفجر - بروني - دار السلام",
+    "name": "أذان الفجر - بروناي دار السلام",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/030---.mp3",
     "isFajr": true
   },
   {
     "id": "archive_031",
-    "name": "أذان الفجر - جزائر",
+    "name": "أذان الفجر - دولة الجزائر",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/031--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_032",
-    "name": "أذان الفجر - ماليزيا",
+    "name": "أذان الفجر - دولة ماليزيا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/032--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_033",
-    "name": "أذان الفجر - مكة المكرمة",
+    "name": "أذان الفجر - الحرم المكي الشريف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/033--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_034",
-    "name": "أذان الفجر - المدينة المنورة",
+    "name": "أذان الفجر - المسجد النبوي الشريف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/034--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_035",
-    "name": "أذان الفجر بصوت أحمد نعينع",
+    "name": "أذان الفجر - الدكتور أحمد نعينع",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/035-.mp3",
     "isFajr": true
   },
   {
     "id": "archive_036",
-    "name": "أذان الفجر - مصر",
+    "name": "أذان الفجر - جمهورية مصر العربية",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/036--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_037",
-    "name": "أذان الفجر، بصوت أحمد نواف المجلاد",
+    "name": "أذان الفجر - الشيخ أحمد نواف المجلاد",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/037-.mp3",
     "isFajr": true
   },
   {
     "id": "archive_038",
-    "name": "أذان الفجر1 الشيخ مشاري بن راشد العفاسي",
+    "name": "أذان الفجر - الشيخ مشاري العفاسي (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/038-1.mp3",
     "isFajr": true
   },
   {
     "id": "archive_039",
-    "name": "أذان الفجر2 الشيخ مشاري بن راشد العفاسي",
+    "name": "أذان الفجر - الشيخ مشاري العفاسي (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/039-2.mp3",
     "isFajr": true
   },
   {
     "id": "archive_040",
-    "name": "أذان القاهرة - أحمد نعينع",
+    "name": "أذان القاهرة - الدكتور أحمد نعينع",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/040--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_041",
-    "name": "أذان القاهرة - عبدالباسط عبدالصمد",
+    "name": "أذان القاهرة - الشيخ عبد الباسط عبد الصمد",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/041--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_042",
-    "name": "أذان القاهرة - محمد رفعت",
+    "name": "أذان القاهرة - الشيخ محمد رفعت",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/042--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_043",
-    "name": "أذان القاهرة - محمد علي البنا",
+    "name": "أذان القاهرة - الشيخ محمود علي البنا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/043--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_044",
-    "name": "أذان القاهرة - محمود خليل الحصري",
+    "name": "أذان القاهرة - الشيخ محمود خليل الحصري",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/044--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_045",
-    "name": "أذان المسجد الأقصى - ناجي قزاز",
+    "name": "أذان المسجد الأقصى - الشيخ ناجي قزاز (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/045--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_046",
-    "name": "أذان المسجد الأقصى- ناجي قزا",
+    "name": "أذان المسجد الأقصى - الشيخ ناجي قزاز (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/046--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_047",
-    "name": "أذان الملا - مكة المكرمة",
+    "name": "الحرم المكي - الشيخ علي أحمد ملا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/047--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_048",
-    "name": "أأذان - الشيخ محمد صديق المنشاوي",
+    "name": "الشيخ محمد صديق المنشاوي (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/048-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_049",
-    "name": "أذان - الشيخ عبد الباسط",
+    "name": "الشيخ عبد الباسط عبد الصمد",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/049-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_050",
-    "name": "أذان - الشيخ محمد صديق المنشاوي",
+    "name": "الشيخ محمد صديق المنشاوي (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/050-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_051",
-    "name": "أذان - بصوت حاج سليمان مختار -الجزائر",
+    "name": "الشيخ حاج سليمان مختار (الجزائر)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/051--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_052",
-    "name": "أذان - بصوت عبدالباسط عبد الصمد",
+    "name": "الشيخ عبد الباسط عبد الصمد (تسجيل نادر)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/052-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_053",
-    "name": "أذان عبدالكريم جباري",
+    "name": "الشيخ عبد الكريم جباري",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/053-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_054",
-    "name": "أذان من فلسطين-بصوت صهيب هاني",
+    "name": "أذان فلسطين - القارئ صهيب هاني",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/054--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_055",
-    "name": "أذان من مسجد الملك فهد بنجران بصوت حمدان المالكي",
+    "name": "جامع الملك فهد بنجران - الشيخ حمدان المالكي",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/055-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_056",
-    "name": "أذن الحرم المكي - 3",
+    "name": "الحرم المكي الشريف (تسجيل 3)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/056--3.mp3",
     "isFajr": false
   },
   {
     "id": "archive_057",
-    "name": "أذان - جزر المالديف",
+    "name": "أذان جزر المالديف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/057--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_058",
-    "name": "أذان - دبي - الإمارات",
+    "name": "إمارة دبي (الإمارات)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/058---.mp3",
     "isFajr": false
   },
   {
     "id": "archive_059",
-    "name": "أذان - ماليزيا",
+    "name": "أذان دولة ماليزيا",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/059--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_060",
-    "name": "أذان - مسقط عمان",
+    "name": "مسقط - سلطنة عمان",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/060--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_061",
-    "name": "أذان - السيد متولي العال - لبنان",
+    "name": "الشيخ السيد متولي عبد العال (لبنان)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/061---.mp3",
     "isFajr": false
   },
   {
     "id": "archive_062",
-    "name": "أذان - المدينة المنورة",
+    "name": "المسجد النبوي الشريف",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/062--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_063",
-    "name": "أذان - تونس",
+    "name": "الجمهورية التونسية",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/063--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_064",
-    "name": "أذان - جزائر",
+    "name": "الجمهورية الجزائرية",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/064--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_065",
-    "name": "أذان - سوريا",
+    "name": "الجمهورية العربية السورية",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/065--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_066",
-    "name": "أذان - عبدالرزاق صالح - لبنان",
+    "name": "الشيخ عبد الرزاق صالح (لبنان)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/066---.mp3",
     "isFajr": false
   },
   {
     "id": "archive_067",
-    "name": "أذان - مهدي البيشي",
+    "name": "الشيخ مهدي البيشي",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/067--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_068",
-    "name": "أذان - الشيخ مصطفى إسماعيل",
+    "name": "الشيخ مصطفى إسماعيل",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/068-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_069",
-    "name": "أذان الفجر - القدس",
+    "name": "أذان الفجر - المسجد الأقصى المبارك",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/069--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_070",
-    "name": "أذان الفجر - أم القوين",
+    "name": "أذان الفجر - أم القيوين",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/070--.mp3",
     "isFajr": true
   },
   {
     "id": "archive_071",
-    "name": "أذان القاهرة - أبو العنين شعيشع",
+    "name": "أذان القاهرة - الشيخ أبو العينين شعيشع",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/071--.mp3",
     "isFajr": false
   },
   {
     "id": "archive_072",
-    "name": "أذان - بصوت أحمد نواف المجلاد",
+    "name": "الشيخ أحمد نواف المجلاد",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/072-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_073",
-    "name": "أذان",
+    "name": "أذان مميز وطرب إسلامي",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/073-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_074",
-    "name": "أذان1 الشيخ -مشاري بن راشد العفاسي",
+    "name": "الشيخ مشاري بن راشد العفاسي (تسجيل 1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/074-1_-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_075",
-    "name": "أذان1",
+    "name": "أذان عذب ومؤثر (1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/075-1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_076",
-    "name": "أذان2 الشيخ -مشاري بن راشد العفاسي",
+    "name": "الشيخ مشاري بن راشد العفاسي (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/076-2_-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_077",
-    "name": "أذان2",
+    "name": "أذان عذب ومؤثر (2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/077-2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_078",
-    "name": "أذان3",
+    "name": "أذان عذب ومؤثر (3)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/078-3.mp3",
     "isFajr": false
   },
   {
     "id": "archive_079",
-    "name": "أذان4",
+    "name": "أذان عذب ومؤثر (4)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/079-4.mp3",
     "isFajr": false
   },
   {
     "id": "archive_080",
-    "name": "أذان5",
+    "name": "أذان عذب ومؤثر (5)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/080-5.mp3",
     "isFajr": false
   },
   {
     "id": "archive_081",
-    "name": "أذان6",
+    "name": "أذان عذب ومؤثر (6)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/081-6.mp3",
     "isFajr": false
   },
   {
     "id": "archive_082",
-    "name": "أذان7",
+    "name": "أذان عذب ومؤثر (7)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/082-7.mp3",
     "isFajr": false
   },
   {
     "id": "archive_083",
-    "name": "أذان8",
+    "name": "أذان عذب ومؤثر (8)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/083-8.mp3",
     "isFajr": false
   },
   {
     "id": "archive_084",
-    "name": "أذان9",
+    "name": "أذان عذب ومؤثر (9)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/084-9.mp3",
     "isFajr": false
   },
   {
     "id": "archive_085",
-    "name": "أذان10",
+    "name": "أذان عذب ومؤثر (10)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/085-10.mp3",
     "isFajr": false
   },
   {
     "id": "archive_086",
-    "name": "أذان11",
+    "name": "أذان عذب ومؤثر (11)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/086-11.mp3",
     "isFajr": false
   },
   {
     "id": "archive_087",
-    "name": "أذان - الحرم المدني - 2",
+    "name": "المسجد النبوي الشريف (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/087--2.mp3",
     "isFajr": false
   },
   {
     "id": "archive_088",
-    "name": "تكبير العيد",
+    "name": "تكبيرات عيد الفطر والأضحى المبارك",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/088-.mp3",
     "isFajr": false
   },
   {
     "id": "archive_089",
-    "name": "أذان - مؤذن جامع الراجحي بالرياض (1)",
+    "name": "جامع الراجحي بالرياض - (تسجيل 1)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/089-1.mp3",
     "isFajr": false
   },
   {
     "id": "archive_090",
-    "name": "أذان - مؤذن جامع الراجحي بالرياض (2)",
+    "name": "جامع الراجحي بالرياض - (تسجيل 2)",
     "url": "https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/090-2.mp3",
     "isFajr": false
   }

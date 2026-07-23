@@ -51,7 +51,7 @@ import IslamicCalendar from './components/IslamicCalendar';
 import WidgetSimulator from './components/WidgetSimulator';
 import WorshipAlarms from './components/WorshipAlarms';
 import AthanOverlay from './components/AthanOverlay';
-import { defaultMuezzins, getAudioUrl, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
+import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
 
 // Import companion icon
 import companionIcon from './assets/images/muslim_companion_icon_1784362373898.jpg';
@@ -365,6 +365,7 @@ export default function App() {
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
   const [isAthanPlaying, setIsAthanPlaying] = useState<boolean>(false);
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
 
   const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => {
@@ -762,7 +763,7 @@ export default function App() {
     );
 
     // 1. Check Adhans
-    const prayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    const prayers: PrayerName[] = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
     for (const prayer of prayers) {
       if (settings.adhanEnabled[prayer] === false) continue;
       const prayerTimeStr = currentTimes[prayer];
@@ -891,30 +892,94 @@ export default function App() {
     }
   }, [customAlarms, alerts, settings, fajrMuezzin, currentMuezzin, audioVolume, customMuezzins]);
 
+  const handleRetryAudioWithLocal = () => {
+    setAudioError(null);
+    const isFajr = athanOverlayPrayer === 'Fajr';
+    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
+    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
+    const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
+    const fallbackUrl = isFajr 
+      ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+      : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+
+    if (globalAudioRef.current) {
+      try {
+        globalAudioRef.current.pause();
+      } catch (e) {
+        console.warn('Error pausing previous audio element:', e);
+      }
+    }
+
+    getAudioUrl(muezzinObj.url, muezzinObj.id).then((srcUrl) => {
+      const audioUrlToPlay = srcUrl || fallbackUrl;
+      console.log(`[Audio Retry]: Loading audio track: ${audioUrlToPlay}`);
+      const audio = new Audio(audioUrlToPlay);
+      globalAudioRef.current = audio;
+      audio.volume = audioVolume > 0 ? audioVolume : 1.0;
+
+      audio.addEventListener('play', () => {
+        setIsAthanPlaying(true);
+        setAudioError(null);
+      });
+
+      audio.addEventListener('pause', () => {
+        setIsAthanPlaying(false);
+        setCurrentPhraseIdx(-1);
+      });
+
+      audio.addEventListener('ended', () => {
+        setIsAthanPlaying(false);
+        setCurrentPhraseIdx(-1);
+      });
+
+      audio.onerror = (err) => {
+        console.error('[Audio Error Details]:', { error: err, src: audioUrlToPlay, prayer: athanOverlayPrayer });
+        setAudioError('تعذر تحميل صوت الأذان. يرجى التأكد من اتصال الإنترنت أو تحميل الأذان أوفلاين.');
+      };
+
+      audio.play().then(() => {
+        setIsAthanPlaying(true);
+        setAudioError(null);
+      }).catch((err: Error) => {
+        setAudioError(`فشل بدء التشغيل: ${err.message || 'حظر المتصفح الصوت'}`);
+      });
+    }).catch(() => {
+      setAudioError('تعذر الحصول على رابط الصوت.');
+    });
+  };
+
   const triggerAthan = async (prayer: PrayerName, timeStr: string) => {
+    setAudioError(null);
+    // 1. Try Native Browser Notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)}`, {
+        new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)} 🕌`, {
           body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
           icon: '/favicon.ico',
           dir: 'rtl'
         });
       } catch (e) {
-        console.error(e);
+        console.error('Native notification error:', e);
       }
     }
 
-    const activeMuezzinId = prayer === 'Fajr' ? fajrMuezzin : currentMuezzin;
+    // 2. Always show interactive In-App Toast Alert
+    setToastMessage(`🕌 حان الآن موعد صلاة ${getArabicPrayerName(prayer)} حسب توقيت ${settings.cityName || 'القاهرة'}!`);
+
+    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${prayer}`) || (prayer === 'Fajr' ? fajrMuezzin : currentMuezzin);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
     
     if (globalAudioRef.current) {
-      globalAudioRef.current.pause();
+      try {
+        globalAudioRef.current.pause();
+      } catch (e) {
+        console.warn('Error pausing previous global audio:', e);
+      }
     }
 
-    try {
-      const resolvedUrl = await getAudioUrl(muezzinObj.url);
-      const audio = new Audio(resolvedUrl);
+    const startAudioPlay = (srcUrl: string) => {
+      const audio = new Audio(srcUrl);
       globalAudioRef.current = audio;
       audio.volume = audioVolume;
 
@@ -935,6 +1000,7 @@ export default function App() {
 
       audio.addEventListener('play', () => {
         setIsAthanPlaying(true);
+        setAudioError(null);
       });
 
       audio.addEventListener('pause', () => {
@@ -953,14 +1019,39 @@ export default function App() {
         setCurrentPhraseIdx(activeIdx);
       });
 
+      audio.onerror = () => {
+        const onlineFallback = prayer === 'Fajr' 
+          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3' 
+          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+        if (srcUrl !== onlineFallback) {
+          console.warn(`[Audio Fallback]: Attempting fallback to online stream: ${onlineFallback}`);
+          startAudioPlay(onlineFallback);
+        } else {
+          setAudioError('تعذر تحميل صوت الأذان. يرجى التحقق من اتصال الإنترنت.');
+        }
+      };
+
       setAthanOverlayPrayer(prayer);
       setShowAthanOverlay(true);
 
-      audio.play().catch(e => {
-        console.warn("Autoplay blocked or play failed:", e);
+      audio.play().catch((e: Error) => {
+        if (e.name === 'NotAllowedError') {
+          setAudioError('حظر المتصفح التشغيل التلقائي للصوت (Autoplay Policy). انقر على زر "إعادة المحاولة" لفتح الصوت فوراً.');
+        } else {
+          setAudioError(`تعذر بدء الصوت تلقائياً: ${e.message || 'خطأ غير معروف'}. اضغط على "إعادة المحاولة" لتشغيل الصوت.`);
+        }
       });
+    };
+
+    try {
+      const resolvedUrl = await getAudioUrl(muezzinObj.url, muezzinObj.id);
+      startAudioPlay(resolvedUrl);
     } catch (err) {
-      console.error(err);
+      console.error("Error resolving audio URL:", err);
+      const onlineFallback = prayer === 'Fajr' 
+        ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3' 
+        : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+      startAudioPlay(onlineFallback);
     }
   };
 
@@ -978,7 +1069,7 @@ export default function App() {
     }
 
     if (alarm.soundType !== 'silent') {
-      let soundUrl = '/audio/azan3.mp3';
+      let soundUrl = 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
       if (alarm.soundType === 'beep') {
         soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
       } else if (alarm.soundType === 'vibrate') {
@@ -1024,27 +1115,53 @@ export default function App() {
     setToastMessage(`⏰ ${title}: ${body}`);
   };
 
-  const togglePlayAthanGlobal = async (muezzinId?: string) => {
-    const activeMuezzinId = muezzinId || (athanOverlayPrayer === 'Fajr' ? fajrMuezzin : currentMuezzin);
+  const athanPhrases = [
+    { text: 'الله أكبر، الله أكبر', duration: 10 },
+    { text: 'الله أكبر، الله أكبر', duration: 10 },
+    { text: 'أشهد أن لا إله إلا الله', duration: 12 },
+    { text: 'أشهد أن لا إله إلا الله', duration: 12 },
+    { text: 'أشهد أن محمداً رسول الله', duration: 12 },
+    { text: 'أشهد أن محمداً رسول الله', duration: 12 },
+    { text: 'حي على الصلاة', duration: 10 },
+    { text: 'حي على الصلاة', duration: 10 },
+    { text: 'حي على الفلاح', duration: 10 },
+    { text: 'حي على الفلاح', duration: 10 },
+    { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
+    { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
+    { text: 'الله أكبر، الله أكبر', duration: 10 },
+    { text: 'لا إله إلا الله', duration: 10 },
+  ];
+
+  const togglePlayAthanGlobal = async (muezzinId?: string, overridePrayer?: PrayerName) => {
+    setAudioError(null);
+    const prayerToUse = overridePrayer || athanOverlayPrayer;
+    const isFajr = prayerToUse === 'Fajr';
+    const isSunrise = prayerToUse === 'Sunrise';
+    const savedPrayerMuezzin = localStorage.getItem(`salah_muezzin_${prayerToUse}`);
+    const activeMuezzinId = muezzinId || savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
     
     if (isAthanPlaying) {
       if (globalAudioRef.current) {
-        globalAudioRef.current.pause();
+        try {
+          globalAudioRef.current.pause();
+        } catch (e) {
+          console.warn('Error pausing audio:', e);
+        }
       }
       setIsAthanPlaying(false);
       setCurrentPhraseIdx(-1);
     } else {
       const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
-      const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
+      const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || (isFajr ? defaultMuezzins[0] : defaultMuezzins[4]);
       
-      try {
-        const resolvedUrl = await getAudioUrl(muezzinObj.url);
-        const audio = new Audio(resolvedUrl);
+      const playWithFallback = (srcUrl: string) => {
+        const audio = new Audio(srcUrl);
         globalAudioRef.current = audio;
-        audio.volume = audioVolume;
+        audio.volume = audioVolume > 0 ? audioVolume : 1.0;
 
         audio.addEventListener('play', () => {
           setIsAthanPlaying(true);
+          setAudioError(null);
         });
 
         audio.addEventListener('pause', () => {
@@ -1057,12 +1174,98 @@ export default function App() {
           setCurrentPhraseIdx(-1);
         });
 
-        audio.play().catch(e => console.error(e));
-      } catch (err) {
-        console.error(err);
-      }
+        // Track active phrase during adhan playback
+        const isFajrTrack = muezzinObj.isFajr || isFajr;
+        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
+        let accumulatedTime = 0;
+        const phraseTimings = activePhrases.map(p => {
+          const start = accumulatedTime;
+          const end = accumulatedTime + p.duration;
+          accumulatedTime += p.duration;
+          return { text: p.text, start, end };
+        });
+
+        audio.addEventListener('timeupdate', () => {
+          const time = audio.currentTime;
+          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
+          setCurrentPhraseIdx(activeIdx);
+        });
+
+        audio.onerror = () => {
+          const fallbackUrl = isFajr 
+            ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+            : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+          if (srcUrl !== fallbackUrl) {
+            playWithFallback(fallbackUrl);
+          } else {
+            setIsAthanPlaying(false);
+            setAudioError('تعذر تحميل أذان المؤذن. يرجى التحقق من الاتصال بالإنترنت.');
+          }
+        };
+
+        audio.play().catch((e: Error) => {
+          if (e.name === 'NotAllowedError') {
+            setAudioError('حظر المتصفح التشغيل التلقائي للصوت (Autoplay Policy). انقر على زر "إعادة المحاولة" لفتح الصوت.');
+            setIsAthanPlaying(false);
+          } else {
+            console.warn('Audio play failed, trying fallback track:', e);
+            const fallbackUrl = isFajr 
+              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+            if (srcUrl !== fallbackUrl) {
+              playWithFallback(fallbackUrl);
+            } else {
+              setIsAthanPlaying(false);
+              setAudioError('تعذر تشغيل الصوت.');
+            }
+          }
+        });
+      };
+
+      getAudioUrl(muezzinObj.url, muezzinObj.id).then(resolvedUrl => {
+        playWithFallback(resolvedUrl);
+      }).catch(err => {
+        console.error("Error resolving audio URL:", err);
+        const fallbackUrl = isFajr 
+          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+        playWithFallback(fallbackUrl);
+      });
     }
   };
+
+  // Listen to simulation trigger globally
+  useEffect(() => {
+    const handleSimulationTrigger = (e: Event) => {
+      const customEv = e as CustomEvent;
+      const detail = customEv?.detail || {};
+      const activePrayer = (detail.prayerName as PrayerName) || (current && current !== 'Sunrise' ? current : (next === 'Sunrise' ? 'Dhuhr' : next)) || 'Dhuhr';
+      const savedPrayerMuezzin = localStorage.getItem(`salah_muezzin_${activePrayer}`);
+      const isFajr = activePrayer === 'Fajr';
+      const targetMuezzinId = detail.muezzinId || savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
+
+      setAthanOverlayPrayer(activePrayer);
+      setShowAthanOverlay(true);
+
+      // Stop any existing audio first to prevent overlapping or duplication
+      if (globalAudioRef.current) {
+        try {
+          globalAudioRef.current.pause();
+          globalAudioRef.current.currentTime = 0;
+        } catch (err) {
+          console.warn('Error pausing audio:', err);
+        }
+      }
+      setIsAthanPlaying(false);
+
+      togglePlayAthanGlobal(targetMuezzinId, activePrayer);
+    };
+
+    window.addEventListener('trigger-athan-simulation', handleSimulationTrigger);
+    return () => {
+      window.removeEventListener('trigger-athan-simulation', handleSimulationTrigger);
+    };
+  }, [current, next, fajrMuezzin, currentMuezzin, customMuezzins, audioVolume]);
 
   const stopAthanGlobal = () => {
     if (globalAudioRef.current) {
@@ -1218,8 +1421,8 @@ export default function App() {
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] flex flex-col items-center justify-center text-center space-y-4" dir="rtl">
-        <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse">
-          <img src={companionIcon} alt="Muslim Companion Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse bg-[#16202c]">
+          <img src={companionIcon} alt="Muslim Companion Logo" className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
         </div>
         <div className="space-y-1">
           <h2 className="text-lg font-black text-slate-800 dark:text-white">رفيق المسلم</h2>
@@ -1239,152 +1442,135 @@ export default function App() {
     <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-right flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
       
       {/* 1. Sticky Top Header Bar */}
-      <header className="w-full max-w-md bg-white/90 dark:bg-[#121820]/90 backdrop-blur-md border-b border-[#e2e8f0]/60 dark:border-slate-800/60 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-[0_4px_20px_rgba(0,0,0,0.01)] transition-colors duration-300 rounded-b-3xl">
-        {/* Right side: Menu + Logo & Location Vertical Stack */}
-        <div className="flex items-center gap-3">
+      <header className="w-full max-w-md md:max-w-xl bg-white/95 dark:bg-[#121820]/95 backdrop-blur-md border-b border-[#e2e8f0]/80 dark:border-slate-800/80 px-3 md:px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-xs transition-colors duration-300 rounded-b-3xl">
+        {/* Right side: Menu + App Brand & Location */}
+        <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-slate-800/30 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 border border-slate-100 dark:border-slate-800/50 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
+            className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="افتح القائمة الجانبية"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-4.5 h-4.5 md:w-5 md:h-5" />
           </button>
           
-          <div className="flex flex-col items-start gap-0.5">
-            <div className="flex items-center gap-2">
-              <div className="relative flex items-center justify-center">
-                {/* Concentric Expanding Spiritual Ripples */}
-                {headerRippleActive && (
-                  <>
-                    <motion.span
-                      initial={{ scale: 1, opacity: 0.8 }}
-                      animate={{ scale: 2.2, opacity: 0 }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="absolute inset-0 rounded-xl border-2 border-indigo-500/60 pointer-events-none z-0"
-                    />
-                    <motion.span
-                      initial={{ scale: 1, opacity: 0.6 }}
-                      animate={{ scale: 3.2, opacity: 0 }}
-                      transition={{ duration: 1.1, ease: "easeOut", delay: 0.15 }}
-                      className="absolute inset-0 rounded-xl border-2 border-emerald-400/50 pointer-events-none z-0"
-                    />
-                    <motion.span
-                      initial={{ scale: 1, opacity: 0.4 }}
-                      animate={{ scale: 4.2, opacity: 0 }}
-                      transition={{ duration: 1.4, ease: "easeOut", delay: 0.3 }}
-                      className="absolute inset-0 rounded-xl border border-teal-300/30 pointer-events-none z-0"
-                    />
-                  </>
-                )}
-
-                {/* Floating Spiritual Particles */}
-                <AnimatePresence>
-                  {headerParticles.map((p) => (
-                    <motion.span
-                      key={p.id}
-                      initial={{ opacity: 1, x: 0, y: 0, scale: 0.1, rotate: 0 }}
-                      animate={{ 
-                        opacity: 0, 
-                        x: p.x, 
-                        y: p.y, 
-                        scale: p.scale, 
-                        rotate: p.rotate 
-                      }}
-                      exit={{ opacity: 0 }}
-                      transition={{ 
-                        duration: 1.3, 
-                        ease: [0.19, 1, 0.22, 1] // Premium ultra-smooth deceleration
-                      }}
-                      className="absolute text-sm pointer-events-none z-20 select-none drop-shadow-[0_2px_8px_rgba(16,185,129,0.3)]"
-                    >
-                      {p.emoji}
-                    </motion.span>
-                  ))}
-                </AnimatePresence>
-                
-                <motion.button
-                  whileHover={{ scale: 1.15, rotate: [0, -6, 6, -6, 0] }}
-                  whileTap={{ scale: 0.88 }}
-                  onClick={() => {
-                    setHeaderRippleActive(true);
-                    triggerHeaderParticles();
-                    setTimeout(() => setHeaderRippleActive(false), 1400);
-                    playSpiritualChime(523.25);
-                    setTimeout(() => {
-                      setShowSpiritualModal(true);
-                    }, 250);
-                  }}
-                  className="relative w-8 h-8 rounded-xl overflow-hidden border border-indigo-500/35 dark:border-indigo-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-[0_2px_10px_rgba(99,102,241,0.15)] focus:outline-hidden z-10"
-                  title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
-                >
-                  <img 
-                    src={companionIcon} 
-                    alt="رفيق المسلم" 
-                    className="w-full h-full object-cover select-none"
-                    referrerPolicy="no-referrer"
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative flex items-center justify-center shrink-0">
+              {/* Concentric Expanding Spiritual Ripples */}
+              {headerRippleActive && (
+                <>
+                  <motion.span
+                    initial={{ scale: 1, opacity: 0.8 }}
+                    animate={{ scale: 2.2, opacity: 0 }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="absolute inset-0 rounded-2xl border-2 border-indigo-500/60 pointer-events-none z-0"
                   />
-                  <span className="absolute inset-0 bg-indigo-500/10 mix-blend-color-burn" />
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full animate-ping" />
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
-                </motion.button>
-              </div>
-              <h1 className="text-xs font-black text-slate-800 dark:text-white tracking-wide">رفيق المسلم</h1>
+                  <motion.span
+                    initial={{ scale: 1, opacity: 0.6 }}
+                    animate={{ scale: 3.2, opacity: 0 }}
+                    transition={{ duration: 1.1, ease: "easeOut", delay: 0.15 }}
+                    className="absolute inset-0 rounded-2xl border-2 border-emerald-400/50 pointer-events-none z-0"
+                  />
+                  <motion.span
+                    initial={{ scale: 1, opacity: 0.4 }}
+                    animate={{ scale: 4.2, opacity: 0 }}
+                    transition={{ duration: 1.4, ease: "easeOut", delay: 0.3 }}
+                    className="absolute inset-0 rounded-2xl border border-teal-300/30 pointer-events-none z-0"
+                  />
+                </>
+              )}
+
+              {/* Floating Spiritual Particles */}
+              <AnimatePresence>
+                {headerParticles.map((p) => (
+                  <motion.span
+                    key={p.id}
+                    initial={{ opacity: 1, x: 0, y: 0, scale: 0.1, rotate: 0 }}
+                    animate={{ 
+                      opacity: 0, 
+                      x: p.x, 
+                      y: p.y, 
+                      scale: p.scale, 
+                      rotate: p.rotate 
+                    }}
+                    exit={{ opacity: 0 }}
+                    transition={{ 
+                      duration: 1.3, 
+                      ease: [0.19, 1, 0.22, 1]
+                    }}
+                    className="absolute text-sm pointer-events-none z-20 select-none drop-shadow-[0_2px_8px_rgba(16,185,129,0.3)]"
+                  >
+                    {p.emoji}
+                  </motion.span>
+                ))}
+              </AnimatePresence>
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setHeaderRippleActive(true);
+                  triggerHeaderParticles();
+                  setTimeout(() => setHeaderRippleActive(false), 1400);
+                  playSpiritualChime(523.25);
+                  setTimeout(() => {
+                    setShowSpiritualModal(true);
+                  }, 250);
+                }}
+                className="relative w-10 h-10 md:w-11 md:h-11 rounded-2xl overflow-hidden border-2 border-emerald-500/30 dark:border-amber-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-emerald-500/10 focus:outline-hidden z-10 transition-all duration-300 bg-slate-900"
+                title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
+              >
+                <img 
+                  src={companionIcon} 
+                  alt="رفيق المسلم" 
+                  className="w-full h-full object-cover select-none transition-transform duration-300 hover:scale-105"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="absolute inset-0 ring-1 ring-inset ring-white/20 rounded-2xl pointer-events-none" />
+                <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
+              </motion.button>
             </div>
-            
-            <button
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('trigger-gps-sync'));
-              }}
-              className="text-[9px] bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300 active:scale-95 transition-all cursor-pointer border border-slate-100 dark:border-slate-800/50 shadow-3xs"
-              title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
-            >
-              <MapPin className="w-2 h-2 text-indigo-500 dark:text-indigo-400 shrink-0" />
-              <span>{settings.cityName}</span>
-            </button>
+
+            <div className="flex flex-col text-right min-w-0">
+              <div className="flex items-center gap-1 min-w-0">
+                <h1 className="text-xs md:text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">رفيق المسلم</h1>
+                <span className="text-[8px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1 py-0.2 rounded border border-amber-500/25 shrink-0">المطور</span>
+              </div>
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('trigger-gps-sync'));
+                }}
+                className="text-[9px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-0.5 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer truncate mt-0.5"
+                title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
+              >
+                <MapPin className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                <span className="truncate">{settings.cityName || 'الإسكندرية'}</span>
+              </button>
+            </div>
           </div>
         </div>
         
         {/* Left side: Integrated Actions Panel */}
-        <div className="flex items-center gap-2">
-          {/* Download / Install App Button (disappears when installed) */}
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+          {/* Download / Install App Button */}
           {!isInstalled && (
             <button 
               onClick={handleInstallApp}
-              className="w-10 h-10 rounded-2xl bg-amber-500/[0.08] dark:bg-amber-500/[0.06] text-amber-600 dark:text-amber-400 hover:bg-amber-500/[0.15] dark:hover:bg-amber-500/[0.12] border border-amber-500/25 dark:border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative animate-gentle-wiggle shadow-sm"
+              className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
               title="تنزيل رفيق المسلم كـ App 📱"
             >
-              <Download className="w-4.5 h-4.5" />
+              <Download className="w-4 h-4" />
             </button>
           )}
-
-          {/* Notifications Bell Button */}
-          <button 
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
-            }}
-            className="w-10 h-10 rounded-2xl bg-amber-500/[0.04] dark:bg-amber-500/[0.03] text-amber-600 dark:text-amber-400 hover:bg-amber-500/[0.08] dark:hover:bg-amber-500/[0.06] border border-amber-500/15 dark:border-amber-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative"
-            title="النفحات والإشعارات الإيمانية 🔔"
-          >
-            <Bell className="w-4.5 h-4.5" />
-            {notificationsCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-[0_2px_8px_rgba(239,68,68,0.4)] border-2 border-white dark:border-[#121820] animate-pulse">
-                {(() => {
-                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
-                })()}
-              </span>
-            )}
-          </button>
 
           {/* Minaret / Athan Simulator Button */}
           <button 
             onClick={() => {
               window.dispatchEvent(new CustomEvent('trigger-athan-simulation'));
             }}
-            className="w-10 h-10 rounded-2xl bg-emerald-500/[0.04] dark:bg-emerald-500/[0.03] text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/[0.08] dark:hover:bg-emerald-500/[0.06] border border-emerald-500/15 dark:border-emerald-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
+            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="محاكاة تجربة الأذان الكاملة 🕌"
           >
-            <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v2h3v-2A1.5 1.5 0 0 0 12 2z" />
               <path d="M9 7c0-2 1.5-3 3-3s3 1 3 3v2H9V7z" />
               <path d="M8 9h8v3H8z" />
@@ -1394,21 +1580,40 @@ export default function App() {
             </svg>
           </button>
 
+          {/* Notifications Bell Button */}
+          <button 
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+            }}
+            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative shadow-2xs"
+            title="النفحات والإشعارات الإيمانية 🔔"
+          >
+            <Bell className="w-4 h-4" />
+            {notificationsCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs border-2 border-white dark:border-[#121820] animate-pulse">
+                {(() => {
+                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+                })()}
+              </span>
+            )}
+          </button>
+
           {/* Theme toggle button */}
           <button 
             onClick={() => {
               const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
               setSettings(prev => ({ ...prev, theme: nextTheme }));
             }}
-            className="w-10 h-10 rounded-2xl bg-indigo-500/[0.04] dark:bg-indigo-500/[0.03] text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/[0.08] dark:hover:bg-indigo-500/[0.06] border border-indigo-500/15 dark:border-indigo-500/10 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
+            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/50 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="تغيير المظهر"
           >
             {settings.theme === 'light' ? (
-              <Sun className="w-4.5 h-4.5 text-amber-500" />
+              <Sun className="w-4 h-4 text-amber-500" />
             ) : settings.theme === 'dark' ? (
-              <Moon className="w-4.5 h-4.5 text-indigo-400" />
+              <Moon className="w-4 h-4 text-indigo-400" />
             ) : (
-              <Monitor className="w-4.5 h-4.5 text-slate-400" />
+              <Monitor className="w-4 h-4 text-slate-400" />
             )}
           </button>
         </div>
@@ -1979,11 +2184,11 @@ export default function App() {
                   className="absolute inset-0 bg-emerald-500/10 rounded-full blur-md"
                 />
                 
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-400/40 p-1 bg-emerald-950/20 shadow-lg relative">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400/40 bg-slate-900 shadow-lg relative">
                   <img 
                     src={companionIcon} 
                     alt="رفيق المسلم" 
-                    className="w-full h-full object-cover rounded-full select-none"
+                    className="w-full h-full object-cover select-none"
                     referrerPolicy="no-referrer"
                   />
                 </div>
@@ -2174,6 +2379,8 @@ export default function App() {
         setFajrMuezzin={setFajrMuezzin}
         togglePlayAthan={togglePlayAthanGlobal}
         stopAthan={stopAthanGlobal}
+        audioError={audioError}
+        onRetryWithLocal={handleRetryAudioWithLocal}
       />
 
       {/* Global Custom Alarm Ringing Modal */}

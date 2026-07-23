@@ -54,7 +54,8 @@ import { generateActiveNudge } from '../utils/nudgeRules';
 import CompanionInsights from './CompanionInsights';
 import FridayMode from './FridayMode';
 import AthanOverlay from './AthanOverlay';
-import { defaultMuezzins, getCustomAudios, getAudioUrl, archiveMuezzins } from '../utils/audioStorage';
+import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
+import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
@@ -208,76 +209,11 @@ export default function Dashboard({
     { text: 'لا إله إلا الله', duration: 10 },
   ];
 
-  const togglePlayAthan = async (muezzinId?: string) => {
-    const targetMuezzinId = muezzinId || currentMuezzin;
-    const muezzin = muezzins.find(m => m.id === targetMuezzinId);
-    if (!muezzin) return;
-
-    if (isPlaying && currentMuezzin === targetMuezzinId) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      setIsPlaying(false);
-      setCurrentPhraseIdx(-1);
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-
-      try {
-        const resolvedUrl = await getAudioUrl(muezzin.url);
-        const audio = new Audio(resolvedUrl);
-        audioRef.current = audio;
-        audio.volume = audioVolume;
-        
-        audio.addEventListener('play', () => {
-          setIsPlaying(true);
-        });
-
-        audio.addEventListener('pause', () => {
-          setIsPlaying(false);
-          setCurrentPhraseIdx(-1);
-        });
-
-        audio.addEventListener('ended', () => {
-          setIsPlaying(false);
-          setCurrentPhraseIdx(-1);
-        });
-
-        const isFajrTrack = muezzin.isFajr;
-        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
-
-        let accumulatedTime = 0;
-        const phraseTimings = activePhrases.map(p => {
-          const start = accumulatedTime;
-          const end = accumulatedTime + p.duration;
-          accumulatedTime += p.duration;
-          return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
-        });
-
-        audio.addEventListener('timeupdate', () => {
-          const time = audio.currentTime;
-          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-          setCurrentPhraseIdx(activeIdx);
-        });
-
-        setCurrentMuezzin(targetMuezzinId);
-        audio.play().catch(err => {
-          if (err.name === 'AbortError') {
-            console.log('[Audio] Playback was aborted or interrupted safely.');
-            return;
-          }
-          if (err.name === 'NotAllowedError') {
-            console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
-            return;
-          }
-          console.error('[Audio] Playback failed', err);
-        });
-      } catch (err) {
-        console.error('[Audio] Failed to play Athan in Dashboard:', err);
-        alert('فشل تشغيل الملف الصوتي. قد يكون الملف المرفوع غير صالح أو محذوف.');
-      }
-    }
+  const togglePlayAthan = (muezzinId?: string) => {
+    const activePrayer = next || 'Dhuhr';
+    window.dispatchEvent(new CustomEvent('trigger-athan-simulation', {
+      detail: { prayerName: activePrayer, muezzinId }
+    }));
   };
 
   const stopAthan = () => {
@@ -385,23 +321,7 @@ export default function Dashboard({
   }, [now, autoPlayOnTime, times, settings.cityName, settings.adhanEnabled, fajrMuezzin, currentMuezzin]);
   */
 
-  // Handle global header simulation trigger
-  React.useEffect(() => {
-    const handleSimulationTrigger = () => {
-      const activePrayer = next || 'Fajr';
-      setAthanOverlayPrayer(activePrayer);
-      setShowAthanOverlay(true);
-      const isFajr = activePrayer === 'Fajr';
-      const targetMuezzinId = isFajr ? fajrMuezzin : currentMuezzin;
-      if (!isPlaying) {
-        togglePlayAthan(targetMuezzinId);
-      }
-    };
-    window.addEventListener('trigger-athan-simulation', handleSimulationTrigger);
-    return () => {
-      window.removeEventListener('trigger-athan-simulation', handleSimulationTrigger);
-    };
-  }, [next, fajrMuezzin, currentMuezzin, isPlaying]);
+
 
   // Handle global header notifications modal trigger
   React.useEffect(() => {
@@ -877,38 +797,30 @@ export default function Dashboard({
 
   const { gradient: currentGradient, label: timePeriodLabel } = getTimeOfDayGradientAndLabel();
 
-  // Calculate dynamic backdrop image above the card
-  const getAutoBackdrop = () => {
+  // Calculate dynamic backdrop style key above the card
+  const getAutoBackdropKey = (): BackdropType => {
     const isFriday = now.getDay() === 5;
     const hijri = getHijriDate(now, settings.hijriOffset);
 
     // Ramadan (Month 9)
-    if (hijri.month === 9) {
-      return BACKDROP_IMAGES.ramadan;
-    }
+    if (hijri.month === 9) return 'ramadan';
     // Eid al-Fitr (Month 10, days 1-3)
-    if (hijri.month === 10 && hijri.day <= 3) {
-      return BACKDROP_IMAGES.eid_fitr;
-    }
+    if (hijri.month === 10 && hijri.day <= 3) return 'eid_fitr';
     // Eid al-Adha (Month 12, days 9-13)
-    if (hijri.month === 12 && hijri.day >= 9 && hijri.day <= 13) {
-      return BACKDROP_IMAGES.eid_adha;
-    }
+    if (hijri.month === 12 && hijri.day >= 9 && hijri.day <= 13) return 'eid_adha';
     // Friday
-    if (isFriday) {
-      return BACKDROP_IMAGES.friday;
-    }
+    if (isFriday) return 'friday';
 
-    // 2. Day/Night check based on current time
+    // Day/Night check based on current time
     const nowMins = now.getHours() * 60 + now.getMinutes();
     const fajrMins = parseTimeToMinutes(times.Fajr);
     const maghribMins = parseTimeToMinutes(times.Maghrib);
 
     const isNight = nowMins < fajrMins || nowMins >= maghribMins;
     if (isNight) {
-      return BACKDROP_IMAGES.classic; // Midnight/deep blue silhouette
+      return 'classic'; // Midnight/deep blue silhouette
     } else {
-      return BACKDROP_IMAGES.gold; // Golden sunlit mosque backdrop
+      return 'gold'; // Golden sunlit mosque backdrop
     }
   };
 
@@ -990,9 +902,9 @@ export default function Dashboard({
     return Math.min(100, Math.max(0, (elapsed / totalDiff) * 100));
   };
 
-  const currentBackdrop = !settings.backdropStyle || settings.backdropStyle === 'auto'
-    ? getAutoBackdrop()
-    : (BACKDROP_IMAGES[settings.backdropStyle] || BACKDROP_IMAGES.gold);
+  const currentBackdropKey: BackdropType = !settings.backdropStyle || settings.backdropStyle === 'auto'
+    ? getAutoBackdropKey()
+    : settings.backdropStyle;
 
   const arabicDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const dayNameArabic = arabicDays[now.getDay()];
@@ -1442,14 +1354,9 @@ export default function Dashboard({
         id="main-prayer-card"
         className={`w-full bg-gradient-to-b ${currentGradient} text-white rounded-3xl p-4 sm:p-5 gap-4 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
-        {/* Transparent Elegant Mosque Backdrop Image */}
-        <div className="absolute inset-0 pointer-events-none select-none opacity-[0.25] mix-blend-screen overflow-hidden">
-          <img 
-            src={currentBackdrop} 
-            alt="Mosque Backdrop" 
-            className="w-full h-full object-cover object-bottom"
-            referrerPolicy="no-referrer"
-          />
+        {/* High-Precision Islamic Mosque Vector Backdrop (Offline, Sharp, No Checkerboard, No Broken Alt Text) */}
+        <div className="absolute inset-0 pointer-events-none select-none opacity-40 overflow-hidden">
+          <MosqueBackdrop type={currentBackdropKey} />
         </div>
 
         {/* Centered Premium Header Section with Location, Date & Controls */}
@@ -2484,6 +2391,18 @@ export default function Dashboard({
                 </p>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const sunriseMuezzin = localStorage.getItem('salah_muezzin_Sunrise') || currentMuezzin;
+                togglePlayAthan(sunriseMuezzin);
+              }}
+              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Volume2 className="w-4 h-4" />
+              <span>تجربة سماع صوت تنبيه الشروق</span>
+            </button>
             
             <button
               type="button"
@@ -2952,25 +2871,7 @@ export default function Dashboard({
         </button>
       </div>
 
-      {/* Full-Screen Immersive Athan Overlay Screen */}
-      <AthanOverlay 
-        isOpen={showAthanOverlay} 
-        onClose={() => {
-          setShowAthanOverlay(false);
-          stopAthan();
-        }} 
-        prayerName={getArabicPrayerName(athanOverlayPrayer)} 
-        prayerTime={times[athanOverlayPrayer]} 
-        audioRef={audioRef}
-        isPlaying={isPlaying}
-        currentPhraseIdx={currentPhraseIdx}
-        currentMuezzin={currentMuezzin}
-        fajrMuezzin={fajrMuezzin}
-        setCurrentMuezzin={setCurrentMuezzin}
-        setFajrMuezzin={setFajrMuezzin}
-        togglePlayAthan={togglePlayAthan}
-        stopAthan={stopAthan}
-      />
+
 
       {/* 7. High-Fidelity Spiritual Notifications & النفحات الإيمانية Modal */}
       {showNotificationsModal && (

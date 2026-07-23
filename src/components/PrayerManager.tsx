@@ -41,7 +41,9 @@ import {
   saveCustomAudio, 
   deleteCustomAudio, 
   getAudioUrl,
-  archiveMuezzins
+  getAudioUrlSync,
+  archiveMuezzins,
+  getDownloadedTrackIds
 } from '../utils/audioStorage';
 
 // Premium Custom Mosque Icon SVG
@@ -134,6 +136,7 @@ export default function PrayerManager({
     const fajr = localStorage.getItem('salah_fajr_muezzin') || 'fajr_yusuf';
     return {
       Fajr: localStorage.getItem('salah_muezzin_Fajr') || fajr,
+      Sunrise: localStorage.getItem('salah_muezzin_Sunrise') || general,
       Dhuhr: localStorage.getItem('salah_muezzin_Dhuhr') || general,
       Asr: localStorage.getItem('salah_muezzin_Asr') || general,
       Maghrib: localStorage.getItem('salah_muezzin_Maghrib') || general,
@@ -154,6 +157,7 @@ export default function PrayerManager({
 
   // Custom Muezzins State and definition
   const [customMuezzins, setCustomMuezzins] = useState<{ id: string; name: string; url: string; isFajr: boolean; isCustom?: boolean; fileName?: string }[]>([]);
+  const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getCustomAudios().then(tracks => {
@@ -161,6 +165,7 @@ export default function PrayerManager({
     }).catch(err => {
       console.error('Failed to load custom muezzins from IndexedDB:', err);
     });
+    getDownloadedTrackIds().then(setDownloadedTrackIds).catch(console.error);
   }, []);
 
   const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
@@ -341,88 +346,12 @@ export default function PrayerManager({
   ];
 
   const togglePlayAthan = async (prayerName?: PrayerName, forcedMuezzinId?: string) => {
-    const isFajr = prayerName === 'Fajr';
-    const activeMuezzinId = forcedMuezzinId || (prayerName ? prayerMuezzins[prayerName] : (isFajr ? fajrMuezzin : currentMuezzin));
-    const muezzin = muezzins.find(m => m.id === activeMuezzinId);
-    if (!muezzin) return;
-
-    if (isPlaying && currentPlayingPrayer === prayerName) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      setIsPlaying(false);
-      setCurrentPlayingPrayer(null);
-      setCurrentPhraseIdx(-1);
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-
-      try {
-        const resolvedUrl = await getAudioUrl(muezzin.url);
-        const audio = new Audio(resolvedUrl);
-        audioRef.current = audio;
-        const vol = prayerName ? (settings.prayerVolumes?.[prayerName] ?? audioVolume) : audioVolume;
-        audio.volume = vol;
-        
-        audio.addEventListener('play', () => {
-          setIsPlaying(true);
-          setCurrentPlayingPrayer(prayerName || null);
-        });
-
-        audio.addEventListener('pause', () => {
-          setIsPlaying(false);
-          setCurrentPlayingPrayer(null);
-          setCurrentPhraseIdx(-1);
-        });
-
-        audio.addEventListener('ended', () => {
-          setIsPlaying(false);
-          setCurrentPlayingPrayer(null);
-          setCurrentPhraseIdx(-1);
-        });
-
-        const isFajrTrack = muezzin.isFajr || isFajr;
-        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
-
-        let accumulatedTime = 0;
-        const phraseTimings = activePhrases.map(p => {
-          const start = accumulatedTime;
-          const end = accumulatedTime + p.duration;
-          accumulatedTime += p.duration;
-          return { text: p.text, start, end, isFajrOnly: p.isFajrOnly };
-        });
-
-        audio.addEventListener('timeupdate', () => {
-          const time = audio.currentTime;
-          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-          setCurrentPhraseIdx(activeIdx);
-        });
-
-        if (isFajr) {
-          setFajrMuezzin(activeMuezzinId);
-          localStorage.setItem('salah_fajr_muezzin', activeMuezzinId);
-        } else {
-          setCurrentMuezzin(activeMuezzinId);
-          localStorage.setItem('salah_general_muezzin', activeMuezzinId);
-        }
-
-        audio.play().catch(err => {
-          if (err.name === 'AbortError') {
-            console.log('[Audio] Playback was aborted or interrupted safely.');
-            return;
-          }
-          if (err.name === 'NotAllowedError') {
-            console.warn('[Audio] Autoplay blocked by browser policy. User gesture required.');
-            return;
-          }
-          console.error('[Audio] Playback failed', err);
-        });
-      } catch (err) {
-        console.error('[Audio] Failed to resolve audio URL:', err);
-        alert('فشل تشغيل الملف الصوتي. قد يكون الملف المرفوع غير صالح أو محذوف.');
-      }
-    }
+    const pName = prayerName || 'Dhuhr';
+    const isFajr = pName === 'Fajr';
+    const activeMuezzinId = forcedMuezzinId || (prayerName && prayerMuezzins[prayerName]) || (isFajr ? fajrMuezzin : currentMuezzin);
+    window.dispatchEvent(new CustomEvent('trigger-athan-simulation', {
+      detail: { prayerName: pName, muezzinId: activeMuezzinId }
+    }));
   };
 
   useEffect(() => {
@@ -474,7 +403,7 @@ export default function PrayerManager({
     const currentStr = formatDateToTimesStr(currentTime);
     const todayStr = currentTime.toISOString().split('T')[0];
 
-    for (const prayer of FIVE_DAILY_PRAYERS) {
+    for (const prayer of (['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as PrayerName[])) {
       // Check if this prayer has adhan enabled in settings
       const isAdhanEnabled = settings.adhanEnabled[prayer] !== false;
       if (!isAdhanEnabled) continue;
@@ -535,7 +464,7 @@ export default function PrayerManager({
 
           // 2. Play Sound based on soundType
           if (alarm.soundType !== 'silent') {
-            let soundUrl = '/audio/azan3.mp3'; // Medina adhan as default
+            let soundUrl = 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3'; // Medina adhan as default
             if (alarm.soundType === 'beep') {
               soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav'; // Standard beep sound
             } else if (alarm.soundType === 'vibrate') {
@@ -1136,14 +1065,11 @@ export default function PrayerManager({
                 };
 
                 const getShortMuezzinName = (id: string) => {
-                  if (id === 'fajr_yusuf') return 'الفجر - يوسف إسلام';
-                  if (id === 'fajr_makkah') return 'الفجر - الحرم المكي';
-                  if (id === 'fajr_medina') return 'الفجر - المسجد النبوي';
-                  if (id === 'fajr_aqsa') return 'الفجر - الأقصى';
-                  if (id === 'makkah') return 'الحرم المكي';
-                  if (id === 'medina') return 'المسجد النبوي';
-                  if (id === 'yusuf_islam') return 'يوسف إسلام';
-                  if (id === 'aqsa') return 'المسجد الأقصى';
+                  const found = muezzins.find(m => m.id === id);
+                  if (found) {
+                    const isDownloaded = downloadedTrackIds.has(id) || found.isCustom;
+                    return isDownloaded ? `⚡ ${found.name}` : found.name;
+                  }
                   return id;
                 };
 
@@ -1188,25 +1114,23 @@ export default function PrayerManager({
                           <span className="text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400">{getSoundText()}</span>
                         </button>
 
-                        {/* Play Test Button for Adhan */}
-                        {pName !== 'Sunrise' && (
-                          <button
-                            type="button"
-                            onClick={() => togglePlayAthan(pName as PrayerName)}
-                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all flex items-center justify-center cursor-pointer shrink-0 ${
-                              isPlaying && currentPlayingPrayer === pName
-                                ? 'bg-rose-500 text-white animate-pulse shadow-md'
-                                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                            }`}
-                            title={isPlaying && currentPlayingPrayer === pName ? "إيقاف سماع الأذان" : "تجربة سماع الأذان"}
-                          >
-                            {isPlaying && currentPlayingPrayer === pName ? (
-                              <Pause className="w-3 h-3" />
-                            ) : (
-                              <Play className="w-3 h-3 fill-current" />
-                            )}
-                          </button>
-                        )}
+                        {/* Play Test Button for Adhan / Sunrise Sound */}
+                        <button
+                          type="button"
+                          onClick={() => togglePlayAthan(pName as PrayerName)}
+                          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all flex items-center justify-center cursor-pointer shrink-0 ${
+                            isPlaying && currentPlayingPrayer === pName
+                              ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                              : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                          }`}
+                          title={isPlaying && currentPlayingPrayer === pName ? "إيقاف سماع الصوت" : "تجربة سماع الصوت"}
+                        >
+                          {isPlaying && currentPlayingPrayer === pName ? (
+                            <Pause className="w-3 h-3" />
+                          ) : (
+                            <Play className="w-3 h-3 fill-current" />
+                          )}
+                        </button>
                       </div>
                     </div>
 
@@ -1215,7 +1139,7 @@ export default function PrayerManager({
                        {/* First sub-row: Offset & Muezzin */}
                        <div className="flex items-center gap-2">
                          {/* Offset Adjuster (الضبط لأقرب مسجد) */}
-                         <div className={`flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-right ${pName === 'Sunrise' ? 'w-full' : 'flex-1'}`} title="الضبط لأقرب مسجد">
+                         <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-right" title="الضبط لأقرب مسجد">
                            <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold ml-1.5 shrink-0">المسجد:</span>
                            <div className="flex items-center gap-1">
                              <button
@@ -1233,7 +1157,7 @@ export default function PrayerManager({
                              <span className="text-xs font-mono font-black text-slate-700 dark:text-slate-200 min-w-[24px] text-center">
                                {toArabicNumbers(((settings.prayerOffsets || {})[pName as PrayerName] || 0) > 0 ? `+${(settings.prayerOffsets || {})[pName as PrayerName]}` : `${(settings.prayerOffsets || {})[pName as PrayerName] || 0}`)} د
                              </span>
- 
+
                              <button
                                type="button"
                                onClick={() => {
@@ -1247,64 +1171,60 @@ export default function PrayerManager({
                              </button>
                            </div>
                          </div>
- 
-                         {/* Muezzin Selector */}
-                         {pName !== 'Sunrise' && (
-                           <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 min-w-0">
-                             <div className="flex items-center gap-1.5 min-w-0 w-full">
-                               <Music className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                               <select
-                                 value={prayerMuezzins[pName] || (pName === 'Fajr' ? fajrMuezzin : currentMuezzin)}
-                                 onChange={(e) => {
-                                   const val = e.target.value;
-                                   setPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
-                                   localStorage.setItem(`salah_muezzin_${pName}`, val);
-                                   if (pName === 'Fajr') {
-                                     setFajrMuezzin(val);
-                                     localStorage.setItem('salah_fajr_muezzin', val);
-                                   } else {
-                                     setCurrentMuezzin(val);
-                                     localStorage.setItem('salah_general_muezzin', val);
-                                   }
-                                   setLogSuccessMessage(`تم تحديد المؤذن لصلاة ${getArabicPrayerName(pName as PrayerName)}`);
-                                 }}
-                                 className="bg-transparent text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pr-1 ml-0.5 min-w-0 flex-1 appearance-none"
-                               >
-                                 {muezzins.map((m) => (
-                                   <option key={m.id} value={m.id} className="dark:bg-[#161d26] text-slate-800 dark:text-slate-200">
-                                     {getShortMuezzinName(m.id)}
-                                   </option>
-                                 ))}
-                               </select>
-                             </div>
-                           </div>
-                         )}
-                       </div>
- 
-                       {/* Second sub-row: Per-Prayer Volume Slider */}
-                       {pName !== 'Sunrise' && (
-                         <div className="flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1.5 rounded-xl border border-slate-100/40 dark:border-slate-800/40">
-                           <div className="flex items-center gap-2 flex-1">
-                             <Volume2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                             <input
-                               type="range"
-                               min="0"
-                               max="1"
-                               step="0.05"
-                               value={settings.prayerVolumes?.[pName] ?? audioVolume}
+
+                         {/* Muezzin / Audio Selector */}
+                         <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 min-w-0">
+                           <div className="flex items-center gap-1.5 min-w-0 w-full">
+                             <Music className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                             <select
+                               value={prayerMuezzins[pName] || (pName === 'Fajr' ? fajrMuezzin : currentMuezzin)}
                                onChange={(e) => {
-                                 const val = parseFloat(e.target.value);
-                                 handleUpdateVolume(pName, val);
+                                 const val = e.target.value;
+                                 setPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
+                                 localStorage.setItem(`salah_muezzin_${pName}`, val);
+                                 if (pName === 'Fajr') {
+                                   setFajrMuezzin(val);
+                                   localStorage.setItem('salah_fajr_muezzin', val);
+                                 } else if (pName !== 'Sunrise') {
+                                   setCurrentMuezzin(val);
+                                   localStorage.setItem('salah_general_muezzin', val);
+                                 }
+                                 setLogSuccessMessage(`تم تحديد الصوت لـ ${getArabicPrayerName(pName as PrayerName)}`);
                                }}
-                               className="flex-1 h-1.5 accent-emerald-600 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
-                               title="حجم صوت الأذان لهذه الصلاة"
-                             />
+                               className="bg-transparent text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pr-1 ml-0.5 min-w-0 flex-1 appearance-none"
+                             >
+                               {muezzins.map((m) => (
+                                 <option key={m.id} value={m.id} className="dark:bg-[#161d26] text-slate-800 dark:text-slate-200">
+                                   {getShortMuezzinName(m.id)}
+                                 </option>
+                               ))}
+                             </select>
                            </div>
-                           <span className="text-[10px] sm:text-xs font-mono text-slate-500 dark:text-slate-400 font-bold mr-3 min-w-[32px] text-left">
-                             {toArabicNumbers(Math.round((settings.prayerVolumes?.[pName] ?? audioVolume) * 100))}%
-                           </span>
                          </div>
-                       )}
+                       </div>
+
+                       {/* Second sub-row: Per-Prayer Volume Slider */}
+                       <div className="flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1.5 rounded-xl border border-slate-100/40 dark:border-slate-800/40">
+                         <div className="flex items-center gap-2 flex-1">
+                           <Volume2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                           <input
+                             type="range"
+                             min="0"
+                             max="1"
+                             step="0.05"
+                             value={settings.prayerVolumes?.[pName] ?? audioVolume}
+                             onChange={(e) => {
+                               const val = parseFloat(e.target.value);
+                               handleUpdateVolume(pName, val);
+                             }}
+                             className="flex-1 h-1.5 accent-emerald-600 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+                             title="حجم الصوت لهذا التنبيه"
+                           />
+                         </div>
+                         <span className="text-[10px] sm:text-xs font-mono text-slate-500 dark:text-slate-400 font-bold mr-3 min-w-[32px] text-left">
+                           {toArabicNumbers(Math.round((settings.prayerVolumes?.[pName] ?? audioVolume) * 100))}%
+                         </span>
+                       </div>
                      </div>
                   </div>
                 );
