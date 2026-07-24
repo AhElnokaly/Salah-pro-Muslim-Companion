@@ -1718,7 +1718,7 @@ export default function PrayerManager({
                         {/* Sunnah After */}
                         {hasSunnahAfter && (
                           <div className="flex justify-between items-center bg-slate-50/50 dark:bg-[#111720]/40 p-2 rounded-2xl border border-slate-100 dark:border-slate-800/30">
-                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">سنة بعدية (ركعتان)</span>
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">سنة بعدية</span>
                             <div className="flex items-center gap-3">
                               <button
                                 type="button"
@@ -1729,7 +1729,7 @@ export default function PrayerManager({
                                 <Minus className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                               </button>
                               <span className="text-xs font-extrabold text-slate-800 dark:text-white font-mono min-w-10 text-center">
-                                {toArabicNumbers(currentSunnahAfter)} / ٢ ركعات
+                                {toArabicNumbers(currentSunnahAfter)} ركعات
                               </span>
                               <button
                                 type="button"

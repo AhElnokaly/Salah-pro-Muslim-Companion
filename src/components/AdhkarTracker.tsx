@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Sparkles, 
   ChevronLeft, 
@@ -22,54 +22,160 @@ import {
   Award,
   Check,
   Clock,
-  Heart
+  Heart,
+  Flame,
+  CheckCheck,
+  Star,
+  Compass,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ADHKAR_DATA, FREE_TASBEEH_PRESETS, DhikrCategory, DhikrItem } from '../utils/adhkarData';
+import { getSevenStationsProgress } from '../utils/adhkarCalc';
 import { toArabicNumbers } from '../utils/hijri';
+import SmartAdhkarSuggestions from './SmartAdhkarSuggestions';
 
 interface AdhkarTrackerProps {
   dhikrLogs: Record<string, Record<string, number>>;
   setDhikrLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, number>>>>;
+  currentPrayer?: string;
+  prayerTimes?: any;
 }
 
-/**
- * Component for rendering the segmented progress bar where each segment corresponds to a Dhikr item.
- */
-const SegmentedProgressBar: React.FC<{
-  items: DhikrItem[];
-  dayLogs: Record<string, number>;
-  onSegmentClick?: (idx: number) => void;
-  activeIdx?: number;
-}> = ({ items, dayLogs, onSegmentClick, activeIdx }) => {
-  return (
-    <div className="w-full space-y-1.5">
-      <div className="flex w-full gap-1 items-center h-2.5">
-        {items.map((item, idx) => {
-          const current = dayLogs[item.id] || 0;
-          const isDone = current >= item.count;
-          const isPartial = current > 0 && current < item.count;
-          const isActive = activeIdx === idx;
+export type PrayerKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => onSegmentClick && onSegmentClick(idx)}
-              title={`${item.title || 'ذكر'} (${toArabicNumbers(current)}/${toArabicNumbers(item.count)})`}
-              className={`flex-1 h-full rounded-full transition-all duration-300 relative cursor-pointer ${
-                isActive
-                  ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-[#161d26] scale-y-125 z-10'
-                  : ''
-              } ${
-                isDone
-                  ? 'bg-emerald-500 dark:bg-emerald-400 shadow-xs'
-                  : isPartial
-                  ? 'bg-amber-400 dark:bg-amber-500 animate-pulse'
-                  : 'bg-slate-200 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600'
-              }`}
-            />
-          );
-        })}
+export interface AdhkarStation {
+  id: 'morning' | 'fajr' | 'dhuhr' | 'asr' | 'evening' | 'maghrib' | 'isha';
+  title: string;
+  shortName: string;
+  categoryType: 'morning' | 'evening' | 'after_prayer';
+  prayerKey?: PrayerKey;
+  icon: string;
+  timeLabel: string;
+}
+
+export const SEVEN_STATIONS: AdhkarStation[] = [
+  { id: 'morning', title: 'أذكار الصباح', shortName: 'الصباح', categoryType: 'morning', icon: '🌅', timeLabel: 'من طلوع الفجر إلى صلاة الظهر' },
+  { id: 'fajr', title: 'أذكار صلاة الفجر', shortName: 'الفجر', categoryType: 'after_prayer', prayerKey: 'fajr', icon: '🕌', timeLabel: 'عقب صلاة الفجر' },
+  { id: 'dhuhr', title: 'أذكار صلاة الظهر', shortName: 'الظهر', categoryType: 'after_prayer', prayerKey: 'dhuhr', icon: '☀️', timeLabel: 'عقب صلاة الظهر' },
+  { id: 'asr', title: 'أذكار صلاة العصر', shortName: 'العصر', categoryType: 'after_prayer', prayerKey: 'asr', icon: '🌤️', timeLabel: 'عقب صلاة العصر' },
+  { id: 'evening', title: 'أذكار المساء', shortName: 'المساء', categoryType: 'evening', icon: '🌆', timeLabel: 'من العصر إلى منتصف الليل' },
+  { id: 'maghrib', title: 'أذكار صلاة المغرب', shortName: 'المغرب', categoryType: 'after_prayer', prayerKey: 'maghrib', icon: '🌅', timeLabel: 'عقب صلاة المغرب' },
+  { id: 'isha', title: 'أذكار صلاة العشاء', shortName: 'العشاء', categoryType: 'after_prayer', prayerKey: 'isha', icon: '🌌', timeLabel: 'عقب صلاة العشاء' },
+];
+
+export const PRAYER_SWITCHER: Array<{ key: PrayerKey; name: string; icon: string }> = [
+  { key: 'fajr', name: 'الفجر', icon: '🌅' },
+  { key: 'dhuhr', name: 'الظهر', icon: '☀️' },
+  { key: 'asr', name: 'العصر', icon: '🌤️' },
+  { key: 'maghrib', name: 'المغرب', icon: '🌆' },
+  { key: 'isha', name: 'العشاء', icon: '🌌' },
+];
+
+/**
+ * Component for rendering the 7-Station Segmented Progress Bar
+ */
+const SevenSegmentProgressBar: React.FC<{
+  dayLogs: Record<string, number>;
+  activePrayerKey: PrayerKey;
+  onStationSelect: (station: AdhkarStation) => void;
+}> = ({ dayLogs, activePrayerKey, onStationSelect }) => {
+  // Calculate completion for each of the 7 stations
+  const { stations: stationsData, completedStationsCount, overallPercentage } = useMemo(() => {
+    return getSevenStationsProgress(dayLogs, activePrayerKey);
+  }, [dayLogs, activePrayerKey]);
+
+  return (
+    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/90 dark:border-slate-800/80 shadow-xs space-y-4 text-right transition-all">
+      {/* Top Header & Daily Completion Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">📿</span>
+            <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+              <span>شريط محطات الأذكار السبع اليومية</span>
+              <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/40">
+                {toArabicNumbers(completedStationsCount)} من ٧ محطات ({toArabicNumbers(overallPercentage)}%)
+              </span>
+            </h3>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            أذكار الصباح والمساء بالإضافة لأذكار الصلوات الخمس. تتجدد أذكار كل صلاة مع دخول وقتها وتظل أذكار الصباح والمساء لليوم كاملاً.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {completedStationsCount === 7 && (
+            <span className="text-xs font-black text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-xl border border-amber-200 dark:border-amber-900/40 flex items-center gap-1 animate-pulse">
+              <Award className="w-4 h-4 text-amber-500" />
+              <span>تاج الورد اليومي مكتمل! 🏆</span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 7-Segment Bar Buttons */}
+      <div className="grid grid-cols-7 gap-1.5 md:gap-2 pt-1">
+        {stationsData.map((st) => (
+          <button
+            key={st.id}
+            onClick={() => onStationSelect(st)}
+            title={`${st.title}: ${toArabicNumbers(st.completedItems)}/${toArabicNumbers(st.totalItems)} ذكر (${toArabicNumbers(st.percent)}%)`}
+            className={`group relative flex flex-col items-center justify-between p-2 md:p-2.5 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden ${
+              st.isDone
+                ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm'
+                : st.isPartial
+                ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+                : st.isCurrentTimeStation
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-400/50'
+                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            {/* Top Indicator */}
+            <div className="flex items-center justify-between w-full text-[10px] font-bold opacity-90">
+              <span>{st.icon}</span>
+              {st.isDone ? (
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              ) : st.isCurrentTimeStation ? (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              ) : null}
+            </div>
+
+            {/* Label */}
+            <span className="text-[11px] font-black my-1 truncate w-full text-center">
+              {st.shortName}
+            </span>
+
+            {/* Progress Percentage or Bar Fill */}
+            <div className="w-full h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden mt-0.5">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  st.isDone ? 'bg-white' : 'bg-emerald-500 dark:bg-emerald-400'
+                }`}
+                style={{ width: `${st.percent}%` }}
+              />
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Segment Legend Notes */}
+      <div className="flex flex-wrap items-center justify-between text-[11px] font-bold text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60 pt-2.5">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+            <span>مكتمل بالكامل</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+            <span>قيد القراءة</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
+            <span>الوقت الحالي</span>
+          </span>
+        </div>
+        <span>انقر على أي محطة للانتقال المباشر إليها ⚡</span>
       </div>
     </div>
   );
@@ -78,12 +184,31 @@ const SegmentedProgressBar: React.FC<{
 export default function AdhkarTracker({
   dhikrLogs,
   setDhikrLogs,
+  currentPrayer = 'Fajr',
 }: AdhkarTrackerProps) {
-  const [activeTab, setActiveTab] = useState<'categories' | 'tasbeeh'>('categories');
+  const [activeTab, setActiveTab] = useState<'categories' | 'smart_suggestions' | 'tasbeeh'>('categories');
   const [selectedCategory, setSelectedCategory] = useState<DhikrCategory | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
   const [isFocusMode, setIsFocusMode] = useState(false);
-  
+
+  // Map string currentPrayer ('Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha') to PrayerKey
+  const activePrayerKey: PrayerKey = useMemo(() => {
+    const p = (currentPrayer || '').toLowerCase();
+    if (p.includes('dhuhr') || p.includes('zuhr')) return 'dhuhr';
+    if (p.includes('asr')) return 'asr';
+    if (p.includes('maghrib')) return 'maghrib';
+    if (p.includes('isha')) return 'isha';
+    return 'fajr';
+  }, [currentPrayer]);
+
+  // Selected Prayer for Post-Prayer Adhkar (أذكار بعد الصلاة)
+  const [selectedPrayerForPostAdhkar, setSelectedPrayerForPostAdhkar] = useState<PrayerKey>(activePrayerKey);
+
+  // Keep post-prayer selection aligned when current active prayer changes
+  useEffect(() => {
+    setSelectedPrayerForPostAdhkar(activePrayerKey);
+  }, [activePrayerKey]);
+
   // States for Category Sequence Reader
   const [currentDhikrIdx, setCurrentDhikrIdx] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -91,10 +216,9 @@ export default function AdhkarTracker({
 
   // States for interactive particles
   const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; text: string }>>([]);
-  const [focusParticles, setFocusParticles] = useState<Array<{ id: number; x: number; y: number; text: string }>>([]);
   const [tasbeehSuccessModal, setTasbeehSuccessModal] = useState(false);
 
-  // States for Electronic Tasbeeh (المسبحة الإلكترونية)
+  // States for Electronic Tasbeeh
   const [tasbeehPresetIdx, setTasbeehPresetIdx] = useState(0);
   const [customTasbeehText, setCustomTasbeehText] = useState('');
   const [isCustomTasbeeh, setIsCustomTasbeeh] = useState(false);
@@ -115,36 +239,17 @@ export default function AdhkarTracker({
     localStorage.setItem('mc_custom_tasbeehs', JSON.stringify(customTasbeehs));
   }, [customTasbeehs]);
 
-  const handleAddCustomTasbeeh = () => {
-    const text = customTasbeehText.trim();
-    if (!text) return;
-    if (!customTasbeehs.includes(text)) {
-      setCustomTasbeehs(prev => [...prev, text]);
-    }
-  };
-
-  const handleDeleteCustomTasbeeh = (text: string) => {
-    setCustomTasbeehs(prev => prev.filter(t => t !== text));
-    if (customTasbeehText === text) {
-      setCustomTasbeehText('');
-    }
-  };
-
   const todayStr = new Date().toISOString().split('T')[0];
   const dayLogs = dhikrLogs[todayStr] || {};
 
-  // Sound/haptic feedback trigger
+  // Feedback Trigger
   const triggerFeedback = (type: 'tap' | 'completed_dhikr' | 'completed_category' = 'tap') => {
     if (navigator.vibrate) {
-      if (type === 'tap') {
-        navigator.vibrate(15);
-      } else if (type === 'completed_dhikr') {
-        navigator.vibrate([45, 65, 45]);
-      } else if (type === 'completed_category') {
-        navigator.vibrate([90, 55, 90, 55, 130]);
-      }
+      if (type === 'tap') navigator.vibrate(15);
+      else if (type === 'completed_dhikr') navigator.vibrate([45, 65, 45]);
+      else if (type === 'completed_category') navigator.vibrate([90, 55, 90, 55, 130]);
     }
-    
+
     if (soundEnabled && (window.AudioContext || (window as any).webkitAudioContext)) {
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -153,33 +258,29 @@ export default function AdhkarTracker({
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
-        
+
         osc.type = 'sine';
         if (type === 'completed_category') {
           const osc2 = ctx.createOscillator();
           const osc3 = ctx.createOscillator();
           osc2.connect(gain);
           osc3.connect(gain);
-          osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-          osc2.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-          osc3.frequency.setValueAtTime(783.99, ctx.currentTime); // G5
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+          osc2.frequency.setValueAtTime(659.25, ctx.currentTime);
+          osc3.frequency.setValueAtTime(783.99, ctx.currentTime);
           gain.gain.setValueAtTime(0.04, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-          osc.start();
-          osc2.start();
-          osc3.start();
-          osc.stop(ctx.currentTime + 0.6);
-          osc2.stop(ctx.currentTime + 0.6);
-          osc3.stop(ctx.currentTime + 0.6);
+          osc.start(); osc2.start(); osc3.start();
+          osc.stop(ctx.currentTime + 0.6); osc2.stop(ctx.currentTime + 0.6); osc3.stop(ctx.currentTime + 0.6);
         } else if (type === 'completed_dhikr') {
-          osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
-          osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.08); // A5
+          osc.frequency.setValueAtTime(659.25, ctx.currentTime);
+          osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.08);
           gain.gain.setValueAtTime(0.04, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
           osc.start();
           osc.stop(ctx.currentTime + 0.25);
         } else {
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
           gain.gain.setValueAtTime(0.03, ctx.currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
           osc.start();
@@ -208,39 +309,61 @@ export default function AdhkarTracker({
     spawnParticle(randomSpark);
   };
 
-  const spawnFocusParticle = (text: string, x: number, y: number) => {
-    const id = Date.now() + Math.random();
-    const newParticle = { id, x, y, text };
-    setFocusParticles(prev => [...prev, newParticle]);
-    setTimeout(() => {
-      setFocusParticles(prev => prev.filter(p => p.id !== id));
-    }, 1000);
+  /**
+   * Helper to resolve item key depending on category
+   */
+  const getItemStorageKey = (catId: string, itemId: string, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
+    if (catId === 'after_prayer') {
+      return `${prayerKey}_${itemId}`;
+    }
+    return itemId;
+  };
+
+  /**
+   * Read current count of item
+   */
+  const getItemCurrentCount = (catId: string, itemId: string, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
+    const storageKey = getItemStorageKey(catId, itemId, prayerKey);
+    if (dayLogs[storageKey] !== undefined) {
+      return dayLogs[storageKey];
+    }
+    // Fallback if user logged before without prayer prefix
+    if (catId === 'after_prayer' && dayLogs[itemId] !== undefined) {
+      return dayLogs[itemId];
+    }
+    return 0;
   };
 
   /**
    * Helper to update single item count in dhikrLogs state
    */
   const updateItemCount = (cat: DhikrCategory, item: DhikrItem, delta: number = 1, setExact?: number) => {
+    const storageKey = getItemStorageKey(cat.id, item.id, selectedPrayerForPostAdhkar);
+
     setDhikrLogs(prev => {
       const currentDay = prev[todayStr] || {};
-      const currentItemCount = currentDay[item.id] || 0;
+      const currentItemCount = currentDay[storageKey] !== undefined ? currentDay[storageKey] : (currentDay[item.id] || 0);
       
       let updatedCount = setExact !== undefined ? setExact : currentItemCount + delta;
       if (updatedCount < 0) updatedCount = 0;
 
       const updatedDay = {
         ...currentDay,
-        [item.id]: updatedCount
+        [storageKey]: updatedCount
       };
 
       // Recalculate completed count for category
       let completedCount = 0;
       cat.items.forEach(it => {
-        if ((updatedDay[it.id] || 0) >= it.count) {
+        const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
+        const countVal = updatedDay[k] !== undefined ? updatedDay[k] : (updatedDay[it.id] || 0);
+        if (countVal >= it.count) {
           completedCount++;
         }
       });
-      updatedDay[cat.id] = completedCount;
+
+      const catSummaryKey = cat.id === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : cat.id;
+      updatedDay[catSummaryKey] = completedCount;
 
       return {
         ...prev,
@@ -249,10 +372,10 @@ export default function AdhkarTracker({
     });
   };
 
-  // Increment current Category item count in card mode
+  // Increment current Category item count
   const handleIncrementCategoryItem = (item: DhikrItem) => {
     if (!selectedCategory) return;
-    const currentCount = dayLogs[item.id] || 0;
+    const currentCount = getItemCurrentCount(selectedCategory.id, item.id);
     
     handleSpawnTapParticles();
 
@@ -264,11 +387,11 @@ export default function AdhkarTracker({
       triggerFeedback('completed_dhikr');
       updateItemCount(selectedCategory, item, 1);
 
-      // Check if all items in category are now done
+      // Check if all items in category for this prayer are now done
       let allDone = true;
       selectedCategory.items.forEach(it => {
-        const c = it.id === item.id ? item.count : (dayLogs[it.id] || 0);
-        if (c < it.count) allDone = false;
+        const countVal = it.id === item.id ? item.count : getItemCurrentCount(selectedCategory.id, it.id);
+        if (countVal < it.count) allDone = false;
       });
 
       if (allDone) {
@@ -279,7 +402,7 @@ export default function AdhkarTracker({
         let nextIdx = currentDhikrIdx + 1;
         while (nextIdx < selectedCategory.items.length) {
           const nextItem = selectedCategory.items[nextIdx];
-          const c = dayLogs[nextItem.id] || 0;
+          const c = getItemCurrentCount(selectedCategory.id, nextItem.id);
           if (c < nextItem.count) {
             break;
           }
@@ -299,7 +422,7 @@ export default function AdhkarTracker({
 
     let allDone = true;
     cat.items.forEach(it => {
-      const c = it.id === item.id ? item.count : (dayLogs[it.id] || 0);
+      const c = it.id === item.id ? item.count : getItemCurrentCount(cat.id, it.id);
       if (c < it.count) allDone = false;
     });
 
@@ -309,13 +432,16 @@ export default function AdhkarTracker({
     }
   };
 
+  // Reset category items for current selection/prayer
   const handleResetCategory = (cat: DhikrCategory) => {
     setDhikrLogs(prev => {
       const currentDay = { ...(prev[todayStr] || {}) };
       cat.items.forEach(it => {
-        delete currentDay[it.id];
+        const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
+        delete currentDay[k];
       });
-      delete currentDay[cat.id];
+      const catSummaryKey = cat.id === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : cat.id;
+      delete currentDay[catSummaryKey];
       return {
         ...prev,
         [todayStr]: currentDay
@@ -325,6 +451,21 @@ export default function AdhkarTracker({
     setShowCelebration(false);
   };
 
+  // Select station from 7-Segment Bar
+  const handleStationSelect = (station: AdhkarStation) => {
+    const cat = ADHKAR_DATA.find(c => c.id === station.categoryType);
+    if (cat) {
+      if (station.prayerKey) {
+        setSelectedPrayerForPostAdhkar(station.prayerKey);
+      }
+      setSelectedCategory(cat);
+      setCurrentDhikrIdx(0);
+      setShowCelebration(false);
+      setViewMode('cards');
+    }
+  };
+
+  // Electronic Tasbeeh Handler
   const handleIncrementTasbeeh = () => {
     handleSpawnTapParticles();
     
@@ -339,54 +480,96 @@ export default function AdhkarTracker({
     }
   };
 
-  const activeTasbeehText = isCustomTasbeeh 
-    ? (customTasbeehText || 'سُبْحَانَ اللهِ وبِحَمْدِهِ') 
-    : FREE_TASBEEH_PRESETS[tasbeehPresetIdx].text;
-
-  const activeTasbeehDesc = isCustomTasbeeh 
-    ? 'تسبيح مخصص' 
-    : FREE_TASBEEH_PRESETS[tasbeehPresetIdx].description;
-
   return (
     <div id="adhkar-tracker-root" className="space-y-6 text-right" dir="rtl">
       
-      {/* Header Tabs Navigation */}
+      {/* Header Navigation Tabs */}
       {!selectedCategory && (
         <div className="flex border-b border-slate-200 dark:border-slate-800">
           <button
             onClick={() => setActiveTab('categories')}
-            className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex-1 py-3 text-center text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'categories'
-                ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400'
+                ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
-            الأوراد المأثورة والتحصين اليومي
+            محطات الأذكار السبع
+          </button>
+          <button
+            onClick={() => setActiveTab('smart_suggestions')}
+            className={`flex-1 py-3 text-center text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'smart_suggestions'
+                ? 'border-amber-500 text-amber-600 dark:text-amber-400 font-black'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>اقتراحات ذكية واستشارات</span>
           </button>
           <button
             onClick={() => setActiveTab('tasbeeh')}
-            className={`flex-1 py-3 text-center text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex-1 py-3 text-center text-xs md:text-sm font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'tasbeeh'
-                ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400'
+                ? 'border-indigo-600 text-indigo-700 dark:text-indigo-400 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
-            المسبحة الإلكترونية التفاعلية
+            المسبحة الإلكترونية
           </button>
         </div>
       )}
 
-      {/* VIEW: List of Adhkar Categories */}
+      {/* VIEW: Main Categories List with 7-Segment Progress Bar */}
       {activeTab === 'categories' && !selectedCategory && (
-        <div className="space-y-5">
+        <div className="space-y-6">
+          
+          {/* THE 7-SEGMENT DAILY PROGRESS BAR */}
+          <SevenSegmentProgressBar 
+            dayLogs={dayLogs}
+            activePrayerKey={activePrayerKey}
+            onStationSelect={handleStationSelect}
+          />
+
+          {/* Contextual Smart Suggestion Banner */}
+          <div className="p-4 bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-3xl shadow-md border border-indigo-700/50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-400/20 text-amber-300 border border-amber-300/30 text-xl">
+                ✨
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-amber-300 block mb-0.5">المرشد الإيماني للوقت الحالي:</span>
+                <h4 className="text-sm font-black">
+                  {activePrayerKey === 'fajr' && 'قد حان وقت أذكار صلاة الفجر المكتوبة وأذكار الصباح 🌅'}
+                  {activePrayerKey === 'dhuhr' && 'قد حان وقت أذكار صلاة الظهر المكتوبة ☀️'}
+                  {activePrayerKey === 'asr' && 'قد حان وقت أذكار صلاة العصر وأذكار المساء 🌆'}
+                  {activePrayerKey === 'maghrib' && 'قد حان وقت أذكار صلاة المغرب المكتوبة <ctrl42>'}
+                  {activePrayerKey === 'isha' && 'قد حان وقت أذكار صلاة العشاء المكتوبة 🌌'}
+                </h4>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                const targetStation = SEVEN_STATIONS.find(s => s.prayerKey === activePrayerKey) || SEVEN_STATIONS[0];
+                handleStationSelect(targetStation);
+              }}
+              className="py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-2xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <span>ابدأ ورد الصلاة الحالي الآن</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Header Bar */}
           <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 flex items-center justify-between transition-colors duration-300 shadow-xs">
             <div className="space-y-1 text-right">
               <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-500" />
-                <span>أذكار اليوم والليلة المكتوبة</span>
+                <span>أقسام الأوراد والأذكار المكتوبة</span>
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                أذكار الصباح والمساء والأذكار المفروضة بعد الصلاة مع بيان عدد التكرار والفضل.
+                اختر الفئة المطلوبة أو تصفح بطاقات الأذكار مع توضيح الفضل والتكرار.
               </p>
             </div>
             <button
@@ -402,13 +585,14 @@ export default function AdhkarTracker({
             </button>
           </div>
 
+          {/* Categories Grid */}
           <div className="grid grid-cols-1 gap-4">
             {ADHKAR_DATA.map((cat) => {
-              // Calculate completed count and total items
+              // Calculate completed count
               let completedItems = 0;
               cat.items.forEach(it => {
-                const c = dayLogs[it.id] || 0;
-                if (c >= it.count) completedItems++;
+                const countVal = getItemCurrentCount(cat.id, it.id, activePrayerKey);
+                if (countVal >= it.count) completedItems++;
               });
 
               const percent = Math.round((completedItems / cat.items.length) * 100);
@@ -454,23 +638,6 @@ export default function AdhkarTracker({
                     </div>
                   </div>
 
-                  {/* Divided / Segmented Progress Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                      <span>شريط التقدم التفاعلي لكل ذكر:</span>
-                      <span>{percent === 100 ? 'تمت القراءة بنجاح ✓' : 'انقر على أي ذكر لبدء التسجيل'}</span>
-                    </div>
-                    <SegmentedProgressBar
-                      items={cat.items}
-                      dayLogs={dayLogs}
-                      onSegmentClick={(idx) => {
-                        setSelectedCategory(cat);
-                        setCurrentDhikrIdx(idx);
-                        setShowCelebration(false);
-                      }}
-                    />
-                  </div>
-
                   {/* Actions Bar */}
                   <div className="flex gap-2 w-full pt-3 border-t border-slate-100 dark:border-slate-800/40">
                     <button
@@ -483,7 +650,7 @@ export default function AdhkarTracker({
                       className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-black rounded-2xl text-xs transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                     >
                       <Layers className="w-4 h-4" />
-                      <span>بدء التلاوة بالتتابع (بطاقات)</span>
+                      <span>فتح وقراءة الأذكار</span>
                       <ChevronLeft className="w-4 h-4" />
                     </button>
 
@@ -496,7 +663,7 @@ export default function AdhkarTracker({
                       className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <ListFilter className="w-4 h-4" />
-                      <span>عرض القائمة الكاملة</span>
+                      <span>عرض القائمة</span>
                     </button>
                   </div>
                 </div>
@@ -506,7 +673,7 @@ export default function AdhkarTracker({
         </div>
       )}
 
-      {/* VIEW: Selected Category Experience */}
+      {/* VIEW: Selected Category Details */}
       {selectedCategory && (
         <div className="space-y-5">
           {/* Top Bar navigation */}
@@ -516,7 +683,7 @@ export default function AdhkarTracker({
               className="py-2 px-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
-              <span>رجوع للقائمة</span>
+              <span>رجوع للمحطات</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -533,7 +700,6 @@ export default function AdhkarTracker({
                       ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
-                  title="وضع البطاقات المتتابعة"
                 >
                   بطاقات
                 </button>
@@ -544,7 +710,6 @@ export default function AdhkarTracker({
                       ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
-                  title="وضع القائمة الكاملة المكتوبة"
                 >
                   قائمة
                 </button>
@@ -553,7 +718,7 @@ export default function AdhkarTracker({
               <button
                 onClick={() => setIsFocusMode(true)}
                 className="py-2 px-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-xl transition-colors cursor-pointer text-xs font-black flex items-center gap-1"
-                title="تفعيل وضع التركيز بملء الشاشة"
+                title="وضع التركيز بملء الشاشة"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">تركيز</span>
@@ -569,30 +734,52 @@ export default function AdhkarTracker({
             </div>
           </div>
 
-          {/* Divided / Segmented Progress Bar (Always Visible inside category) */}
-          <div className="bg-white dark:bg-[#161d26] p-4 rounded-3xl border border-slate-100 dark:border-slate-800/80 space-y-2">
-            <div className="flex justify-between items-center text-xs font-bold text-slate-700 dark:text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <span>تقدم قراءة الأذكار:</span>
-                <span className="text-indigo-600 dark:text-indigo-400">
-                  {toArabicNumbers(
-                    selectedCategory.items.filter(it => (dayLogs[it.id] || 0) >= it.count).length
-                  )} / {toArabicNumbers(selectedCategory.items.length)} ذكر
-                </span>
+          {/* POST-PRAYER SWITCHER PILLS (In Post-Prayer Category) */}
+          {selectedCategory.id === 'after_prayer' && (
+            <div className="bg-white dark:bg-[#161d26] p-3.5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
+              <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <span>اختر الصلاة التي تتلو أذكارها الآن:</span>
               </span>
-              <span className="text-slate-400 text-[11px]">انقر أي جزء للانتقال المباشر</span>
-            </div>
+              <div className="grid grid-cols-5 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl">
+                {PRAYER_SWITCHER.map(p => {
+                  const isSelected = selectedPrayerForPostAdhkar === p.key;
+                  const isCurrentActive = activePrayerKey === p.key;
+                  
+                  // Calculate prayer completion
+                  let prayerDone = true;
+                  selectedCategory.items.forEach(it => {
+                    const c = getItemCurrentCount('after_prayer', it.id, p.key);
+                    if (c < it.count) prayerDone = false;
+                  });
 
-            <SegmentedProgressBar
-              items={selectedCategory.items}
-              dayLogs={dayLogs}
-              activeIdx={viewMode === 'cards' ? currentDhikrIdx : undefined}
-              onSegmentClick={(idx) => {
-                setCurrentDhikrIdx(idx);
-                setViewMode('cards');
-              }}
-            />
-          </div>
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => {
+                        setSelectedPrayerForPostAdhkar(p.key);
+                        setCurrentDhikrIdx(0);
+                        setShowCelebration(false);
+                      }}
+                      className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
+                        isSelected 
+                          ? 'bg-emerald-600 text-white shadow-md' 
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <span className="text-sm">{p.icon}</span>
+                      <span>{p.name}</span>
+                      {prayerDone && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                      )}
+                      {isCurrentActive && !prayerDone && (
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {!showCelebration ? (
             <>
@@ -654,7 +841,7 @@ export default function AdhkarTracker({
                   {/* Interactive Counter Tap Button */}
                   {(() => {
                     const currentItem = selectedCategory.items[currentDhikrIdx];
-                    const currentCount = dayLogs[currentItem.id] || 0;
+                    const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
                     const isCompleted = currentCount >= currentItem.count;
 
                     return (
@@ -737,7 +924,7 @@ export default function AdhkarTracker({
               {viewMode === 'list' && (
                 <div className="space-y-4">
                   {selectedCategory.items.map((item, idx) => {
-                    const currentCount = dayLogs[item.id] || 0;
+                    const currentCount = getItemCurrentCount(selectedCategory.id, item.id);
                     const isCompleted = currentCount >= item.count;
 
                     return (
@@ -828,7 +1015,7 @@ export default function AdhkarTracker({
               <div className="space-y-3">
                 <h3 className="text-2xl font-black text-slate-800 dark:text-white">تقبل الله طاعاتكم وغفر ذنوبكم!</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed font-semibold">
-                  لقد أتممت قراءة {selectedCategory.arabicName} لليوم بنجاح، جعلها الله حصناً حصيناً وحفظاً مباركاً في يومك وليلتك 🤍
+                  لقد أتممت قراءة {selectedCategory.arabicName} {selectedCategory.id === 'after_prayer' ? `لصلاة (${PRAYER_SWITCHER.find(p => p.key === selectedPrayerForPostAdhkar)?.name})` : ''} بنجاح، جعلها الله حصناً حصيناً وحفظاً مباركاً 🤍
                 </p>
                 <p className="text-xs text-indigo-600 dark:text-indigo-400 italic font-bold bg-indigo-50/50 dark:bg-indigo-950/20 py-2 px-4 rounded-xl inline-block mt-2">
                   "ألا بذكرِ الله تطمئنُّ القلوب"
@@ -838,11 +1025,30 @@ export default function AdhkarTracker({
                 onClick={() => setSelectedCategory(null)}
                 className="py-3 px-8 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-extrabold rounded-2xl text-xs shadow-md transition-all active:scale-[0.98] cursor-pointer"
               >
-                العودة لقائمة الأذكار الأخرى
+                العودة لمحطات الأذكار الأخرى
               </button>
             </motion.div>
           )}
         </div>
+      )}
+
+      {/* VIEW: Smart Suggestions & AI Assistant */}
+      {activeTab === 'smart_suggestions' && (
+        <SmartAdhkarSuggestions
+          onAddToCustomTasbeeh={(text) => {
+            setCustomTasbeehs(prev => [...prev, text]);
+            setActiveTab('tasbeeh');
+            setIsCustomTasbeeh(true);
+          }}
+          completedStationsCount={
+            SEVEN_STATIONS.filter(st => {
+              const catKey = st.categoryType === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : st.id;
+              return (dayLogs[catKey] || 0) > 0;
+            }).length
+          }
+          activePrayerName={activePrayerKey}
+          isPushGranted={'Notification' in window && Notification.permission === 'granted'}
+        />
       )}
 
       {/* VIEW: Electronic Tasbeeh (المسبحة الإلكترونية) */}
@@ -900,326 +1106,183 @@ export default function AdhkarTracker({
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="اكتب تسبيحاً مخصصاً هنا..."
                     value={customTasbeehText}
-                    onChange={(e) => {
-                      setCustomTasbeehText(e.target.value);
-                      setTasbeehCount(0);
-                    }}
-                    className="flex-grow p-3 bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white rounded-xl text-sm focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950 focus:outline-none text-right font-semibold"
+                    onChange={(e) => setCustomTasbeehText(e.target.value)}
+                    placeholder="اكتب صيغة الذكر الخاص بك..."
+                    className="flex-1 py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                   <button
-                    onClick={handleAddCustomTasbeeh}
-                    disabled={!customTasbeehText.trim()}
-                    className="px-4 py-3 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl flex items-center gap-1 transition-colors cursor-pointer text-xs font-bold"
+                    onClick={() => {
+                      if (customTasbeehText.trim()) {
+                        setCustomTasbeehs(prev => [...prev, customTasbeehText.trim()]);
+                      }
+                    }}
+                    className="py-2 px-3 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
                     حفظ
                   </button>
                 </div>
 
                 {customTasbeehs.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 block">تسبيحاتك المحفوظة:</span>
-                    <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto no-scrollbar pr-1">
-                      {customTasbeehs.map((text) => (
-                        <div 
-                          key={text} 
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-all ${
-                            customTasbeehText === text 
-                              ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 font-extrabold' 
-                              : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          <button
-                            onClick={() => {
-                              setCustomTasbeehText(text);
-                              setTasbeehCount(0);
-                            }}
-                            className="font-semibold text-right text-xs cursor-pointer"
-                          >
-                            {text}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCustomTasbeeh(text)}
-                            className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 p-0.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {customTasbeehs.map((txt) => (
+                      <span
+                        key={txt}
+                        onClick={() => {
+                          setCustomTasbeehText(txt);
+                          setTasbeehCount(0);
+                        }}
+                        className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-1 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1 cursor-pointer hover:bg-slate-200"
+                      >
+                        <span>{txt}</span>
+                        <Trash2 
+                          className="w-3 h-3 text-red-500 hover:text-red-700" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCustomTasbeehs(prev => prev.filter(t => t !== txt));
+                          }}
+                        />
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
             )}
-
-            {/* Target Select */}
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">العدد المستهدف:</span>
-              <div className="flex gap-1.5">
-                {[33, 100, 1000].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => {
-                      setTasbeehTarget(t);
-                      setTasbeehCount(0);
-                    }}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                      tasbeehTarget === t 
-                        ? 'bg-indigo-600 border-indigo-600 dark:bg-indigo-700 dark:border-indigo-700 text-white' 
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {toArabicNumbers(t)}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* Interactive Large Tap Area */}
-          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 flex flex-col items-center justify-center space-y-6 transition-colors duration-300">
+          {/* Interactive Counter Ring */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-8 border border-slate-200/80 dark:border-slate-800/80 flex flex-col items-center justify-center space-y-6 shadow-xs relative overflow-hidden">
             
-            <div className="text-center space-y-1">
-              <h2 className="text-2xl font-black text-indigo-700 dark:text-indigo-400">{activeTasbeehText}</h2>
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold">{activeTasbeehDesc}</p>
+            {/* Target Selectors */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الهدف:</span>
+              {[33, 100, 1000].map(tgt => (
+                <button
+                  key={tgt}
+                  onClick={() => {
+                    setTasbeehTarget(tgt);
+                    setTasbeehCount(0);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-black transition-all cursor-pointer ${
+                    tasbeehTarget === tgt 
+                      ? 'bg-indigo-600 text-white shadow-xs' 
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {toArabicNumbers(tgt)}
+                </button>
+              ))}
             </div>
 
-            {/* Circular counter button with particles */}
-            <div className="relative flex items-center justify-center">
-              {/* Sparkle particle overlays */}
-              <div className="absolute pointer-events-none inset-0 flex items-center justify-center overflow-visible z-30">
-                <AnimatePresence>
-                  {particles.map(p => (
-                    <motion.span
-                      key={p.id}
-                      initial={{ opacity: 0, scale: 0.5, y: 0, x: p.x }}
-                      animate={{ opacity: 1, scale: 1.25, y: p.y }}
-                      exit={{ opacity: 0, scale: 0.8, y: p.y - 15 }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="absolute text-xs font-black px-2.5 py-1 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-md select-none pointer-events-none whitespace-nowrap"
-                    >
-                      {p.text}
-                    </motion.span>
-                  ))}
-                </AnimatePresence>
-              </div>
+            {/* Main Tasbeeh Button */}
+            <button
+              onClick={handleIncrementTasbeeh}
+              className="w-52 h-52 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white flex flex-col items-center justify-center shadow-xl shadow-indigo-200/50 dark:shadow-none border-4 border-white dark:border-slate-800 cursor-pointer active:scale-95 transition-all relative select-none"
+            >
+              <span className="text-5xl font-black">{toArabicNumbers(tasbeehCount)}</span>
+              <span className="text-xs font-extrabold text-indigo-100 mt-1 border-t border-white/20 pt-1 px-4">
+                من {toArabicNumbers(tasbeehTarget)}
+              </span>
+              <span className="text-[11px] font-extrabold mt-2 bg-black/20 px-3 py-0.5 rounded-full">
+                اضغط للتسبيح 📿
+              </span>
+            </button>
 
-              {/* Outer Breathing rings */}
-              <div className="absolute w-56 h-56 rounded-full border border-indigo-500/25 dark:border-indigo-500/10 animate-ping pointer-events-none" />
+            {/* Current Text Display */}
+            <p className="text-base font-black text-slate-800 dark:text-white text-center max-w-sm">
+              {isCustomTasbeeh ? (customTasbeehText || 'سُبْحَانَ اللهِ') : FREE_TASBEEH_PRESETS[tasbeehPresetIdx].text}
+            </p>
 
-              <button
-                onClick={handleIncrementTasbeeh}
-                className="w-56 h-56 rounded-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0] dark:border-slate-800 hover:scale-105 active:scale-95 flex flex-col items-center justify-center transition-all cursor-pointer relative shadow-inner group overflow-hidden"
-              >
-                {/* Ring Progress border */}
-                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="46"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    fill="transparent"
-                    className="text-slate-100 dark:text-slate-800"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="46"
-                    stroke="currentColor"
-                    strokeWidth="3.5"
-                    fill="transparent"
-                    strokeDasharray="289"
-                    strokeDashoffset={289 - (289 * tasbeehCount) / tasbeehTarget}
-                    strokeLinecap="round"
-                    className="text-indigo-600 dark:text-indigo-500 transition-all duration-300"
-                  />
-                </svg>
-
-                <div className="text-center space-y-1 z-10 select-none">
-                  <span className="text-5xl font-black text-slate-800 dark:text-white tracking-tight">
-                    {toArabicNumbers(tasbeehCount)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">
-                    الهدف: {toArabicNumbers(tasbeehTarget)}
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            {/* Reset & Focus Buttons */}
-            <div className="flex gap-2.5">
-              <button
-                onClick={() => setTasbeehCount(0)}
-                className="py-2 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold rounded-xl text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>تصفير العداد</span>
-              </button>
-
-              <button
-                onClick={() => setIsFocusMode(true)}
-                className="py-2 px-4 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 font-black rounded-xl text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span>وضع التركيز 🧘‍♂️</span>
-              </button>
-            </div>
-
+            <button
+              onClick={() => setTasbeehCount(0)}
+              className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer text-xs font-bold flex items-center gap-1"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>إعادة العداد</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* Focus Mode absolute overlays */}
-      {isFocusMode && (
-        <div 
-          onClick={(e) => {
-            const x = e.clientX;
-            const y = e.clientY;
-            const sparks = ['+١', '✨', 'سُبْحَانَ اللهِ', 'الْحَمْدُ للهِ', 'اللهُ أَكْبَرُ', 'أَسْتَغْفِرُ اللهَ', '🤍', 'أجر'];
-            const randomSpark = sparks[Math.floor(Math.random() * sparks.length)];
-            spawnFocusParticle(randomSpark, x, y);
-
-            if (selectedCategory) {
-              if (!showCelebration) {
-                const currentItem = selectedCategory.items[currentDhikrIdx];
-                handleIncrementCategoryItem(currentItem);
-              }
-            } else if (activeTab === 'tasbeeh') {
-              handleIncrementTasbeeh();
-            }
-          }}
-          className="fixed inset-0 z-50 flex flex-col justify-between p-6 cursor-pointer select-none text-right transition-all duration-500 bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 overflow-hidden"
-          dir="rtl"
-        >
-          {/* Floating focus particles */}
-          <AnimatePresence>
-            {focusParticles.map(p => (
-              <motion.span
-                key={p.id}
-                initial={{ opacity: 0, scale: 0.5, x: p.x, y: p.y }}
-                animate={{ opacity: 1, scale: 1.3, y: p.y - 100 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.9, ease: "easeOut" }}
-                className="fixed z-50 text-sm font-extrabold px-3 py-1.5 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-lg pointer-events-none whitespace-nowrap"
-                style={{ left: p.x - 40, top: p.y }}
-              >
-                {p.text}
-              </motion.span>
-            ))}
-          </AnimatePresence>
-
-          {/* Header Controls */}
-          <div className="flex justify-between items-center w-full pb-4 border-b border-slate-200/50 dark:border-slate-800/40" onClick={(e) => e.stopPropagation()}>
+      {/* Fullscreen Focus Mode Modal */}
+      {isFocusMode && selectedCategory && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-6 text-white text-right" dir="rtl">
+          {/* Header */}
+          <div className="flex justify-between items-center border-b border-white/10 pb-4">
             <button
               onClick={() => setIsFocusMode(false)}
-              className="py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-black text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+              className="p-2 bg-white/10 hover:bg-white/20 rounded-2xl cursor-pointer text-white transition-colors"
             >
-              خروج من وضع التركيز ✕
+              <X className="w-6 h-6" />
             </button>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSoundEnabled(prev => !prev)}
-                className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
-                  soundEnabled 
-                    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/40 text-indigo-600 dark:text-indigo-400' 
-                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
-                }`}
-              >
-                <Volume2 className="w-4 h-4" />
-              </button>
-              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-full">
-                وضع التركيز 🧘‍♂️
-              </span>
+            <div className="text-center">
+              <h3 className="font-black text-lg text-amber-300">{selectedCategory.arabicName}</h3>
+              <p className="text-xs text-slate-300">وضع التركيز بملء الشاشة</p>
             </div>
+            <span className="text-xs font-bold text-slate-300 bg-white/10 px-3 py-1 rounded-full">
+              {toArabicNumbers(currentDhikrIdx + 1)} / {toArabicNumbers(selectedCategory.items.length)}
+            </span>
           </div>
 
-          {/* Center content */}
-          <div className="flex-1 flex flex-col items-center justify-center space-y-8 max-w-2xl mx-auto px-4 text-center">
-            {selectedCategory ? (
-              <div className="space-y-6">
-                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block">
-                  {selectedCategory.arabicName} • الذكر {toArabicNumbers(currentDhikrIdx + 1)} من {toArabicNumbers(selectedCategory.items.length)}
-                </span>
-                <h1 className="text-xl md:text-2xl font-black leading-relaxed text-slate-800 dark:text-slate-100">
-                  {selectedCategory.items[currentDhikrIdx].text}
-                </h1>
-                {selectedCategory.items[currentDhikrIdx].reward && (
-                  <p className="text-xs md:text-sm text-slate-400 dark:text-slate-500 leading-relaxed font-semibold max-w-lg mx-auto">
-                    {selectedCategory.items[currentDhikrIdx].reward}
-                  </p>
-                )}
-                
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="text-6xl font-black text-indigo-700 dark:text-indigo-400 font-mono tracking-tight animate-pulse">
-                    {toArabicNumbers(dayLogs[selectedCategory.items[currentDhikrIdx].id] || 0)} / {toArabicNumbers(selectedCategory.items[currentDhikrIdx].count)}
-                  </div>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">انقر في أي مكان على الشاشة للتكرار</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block">
-                  المسبحة الإلكترونية التفاعلية
-                </span>
-                <h1 className="text-2xl md:text-3xl font-black leading-relaxed text-slate-800 dark:text-slate-100">
-                  {activeTasbeehText}
-                </h1>
-                <p className="text-sm text-slate-400 dark:text-slate-500 font-bold">
-                  {activeTasbeehDesc}
-                </p>
+          {/* Body content */}
+          <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-2xl mx-auto space-y-6">
+            <p className="text-2xl md:text-3xl font-black text-center leading-relaxed select-text">
+              {selectedCategory.items[currentDhikrIdx].text}
+            </p>
 
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="text-7xl font-black text-indigo-700 dark:text-indigo-400 font-mono tracking-tight animate-pulse">
-                    {toArabicNumbers(tasbeehCount)} / {toArabicNumbers(tasbeehTarget)}
-                  </div>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 font-bold">انقر في أي مكان على الشاشة للتسبيح</span>
-                </div>
-              </div>
+            {selectedCategory.items[currentDhikrIdx].reward && (
+              <p className="text-xs text-emerald-300 bg-emerald-950/40 p-3 rounded-2xl border border-emerald-800/40 text-center max-w-md">
+                ✨ {selectedCategory.items[currentDhikrIdx].reward}
+              </p>
             )}
+
+            {/* Huge Tap Button */}
+            {(() => {
+              const currentItem = selectedCategory.items[currentDhikrIdx];
+              const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
+              const isCompleted = currentCount >= currentItem.count;
+
+              return (
+                <button
+                  onClick={() => handleIncrementCategoryItem(currentItem)}
+                  className={`w-48 h-48 rounded-full text-white flex flex-col items-center justify-center shadow-2xl transition-all cursor-pointer border-4 border-white/20 active:scale-95 ${
+                    isCompleted ? 'bg-emerald-600' : 'bg-indigo-600'
+                  }`}
+                >
+                  <span className="text-5xl font-black">{toArabicNumbers(currentCount)}</span>
+                  <span className="text-xs font-extrabold mt-1 text-indigo-100">
+                    من {toArabicNumbers(currentItem.count)}
+                  </span>
+                  <span className="text-[11px] font-extrabold mt-2 bg-black/30 px-3 py-0.5 rounded-full">
+                    {isCompleted ? 'مكتمل ✓' : 'انقر للتسجيل'}
+                  </span>
+                </button>
+              );
+            })()}
           </div>
 
-          {/* Footer Instructions */}
-          <div className="text-center pb-4 text-[10px] text-slate-400 dark:text-slate-500 font-bold border-t border-slate-200/30 dark:border-slate-800/30 pt-4" onClick={(e) => e.stopPropagation()}>
-            شاشة كاملة خالية من المشتتات تماماً لمساعدتك على التركيز في الذكر والتدبر 🤍
+          {/* Footer Controls */}
+          <div className="flex justify-between items-center border-t border-white/10 pt-4 max-w-2xl mx-auto w-full">
+            <button
+              onClick={() => setCurrentDhikrIdx(prev => Math.max(0, prev - 1))}
+              disabled={currentDhikrIdx === 0}
+              className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span>السابق</span>
+            </button>
+
+            <button
+              onClick={() => setCurrentDhikrIdx(prev => Math.min(selectedCategory.items.length - 1, prev + 1))}
+              disabled={currentDhikrIdx === selectedCategory.items.length - 1}
+              className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
+            >
+              <span>التالي</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
-
-      {/* Celebration Modal for Tasbeeh */}
-      <AnimatePresence>
-        {tasbeehSuccessModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ type: "spring", stiffness: 350, damping: 26 }}
-              className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-slate-100 dark:border-slate-800/80 text-center max-w-sm w-full space-y-5 shadow-2xl relative overflow-hidden"
-              dir="rtl"
-            >
-              <div className="inline-flex p-4 bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-100 dark:shadow-none animate-bounce">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-xl font-black text-slate-800 dark:text-white">ما شاء الله، إنجاز رائع!</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
-                  لقد أتممت تسبيح ({activeTasbeehText}) للعدد المستهدف ({toArabicNumbers(tasbeehTarget)}) بنجاح 🤍
-                </p>
-              </div>
-              <button
-                onClick={() => setTasbeehSuccessModal(false)}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-2xl text-xs shadow-md transition-all cursor-pointer"
-              >
-                متابعة الذكر والتسبيح
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
     </div>
   );

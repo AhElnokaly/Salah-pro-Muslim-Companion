@@ -23,6 +23,7 @@ import {
 import { AppSettings, PrayerName } from '../types';
 import { getArabicPrayerName } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
+import PushNotificationManager from './PushNotificationManager';
 
 interface CustomAlarm {
   id: string;
@@ -62,6 +63,7 @@ export default function WorshipAlarms({
   setAudioVolume
 }: WorshipAlarmsProps) {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [showPushModal, setShowPushModal] = useState<boolean>(false);
   const [showAddAlarm, setShowAddAlarm] = useState(false);
   const [alertModal, setAlertModal] = useState<{
     show: boolean;
@@ -285,10 +287,13 @@ export default function WorshipAlarms({
               </button>
             )}
 
-            <span className="inline-flex items-center gap-1 bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-xl text-[10px] font-black border border-indigo-500/20">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>البروتوكول الذكي ومساعد الخلفية نشط ⚡</span>
-            </span>
+            <button
+              onClick={() => setShowPushModal(true)}
+              className="inline-flex items-center gap-1.5 bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 px-3 py-1.5 rounded-xl text-[10px] font-black transition-all active:scale-95 cursor-pointer border border-indigo-400/30 shadow-xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>إعدادات الإشعارات الفورية (Push) ⚙️</span>
+            </button>
           </div>
         </div>
       </div>
@@ -802,6 +807,12 @@ export default function WorshipAlarms({
           </div>
         </div>
       )}
+
+      {/* Push Notification Manager Control Center Modal */}
+      <PushNotificationManager
+        isOpen={showPushModal}
+        onClose={() => setShowPushModal(false)}
+      />
     </div>
   );
 }

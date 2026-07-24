@@ -51,9 +51,11 @@ import {
   toArabicNumbers 
 } from '../utils/hijri';
 import { generateActiveNudge } from '../utils/nudgeRules';
+import { getSevenStationsProgress, PrayerKey } from '../utils/adhkarCalc';
 import CompanionInsights from './CompanionInsights';
 import FridayMode from './FridayMode';
 import AthanOverlay from './AthanOverlay';
+import PushNotificationManager from './PushNotificationManager';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
@@ -99,7 +101,7 @@ interface DashboardProps {
   setFastingLogs: React.Dispatch<React.SetStateAction<Record<string, { date: string; fasted: boolean; fastType: string }>>>;
   ramadanQada?: RamadanQadaTracker;
   setRamadanQada?: React.Dispatch<React.SetStateAction<RamadanQadaTracker>>;
-  setActiveTab?: React.Dispatch<React.SetStateAction<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar'>>;
+  setActiveTab?: React.Dispatch<React.SetStateAction<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu'>>;
   customDuas: CustomDua[];
   setCustomDuas: React.Dispatch<React.SetStateAction<CustomDua[]>>;
   quranSessions?: QuranSession[];
@@ -156,6 +158,7 @@ export default function Dashboard({
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
+  const [showPushControlCenter, setShowPushControlCenter] = useState<boolean>(false);
 
   // Athan Audio Player States
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -264,16 +267,15 @@ export default function Dashboard({
     if (day !== 4 && day !== 5) return false;
     if (!times || !times.Maghrib) return false;
 
-    const [maghribH, maghribM] = times.Maghrib.split(':').map(Number);
-    const maghribDate = new Date(now);
-    maghribDate.setHours(maghribH, maghribM, 0, 0);
+    const maghribMins = parseTimeToMinutes(times.Maghrib);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
 
     if (day === 4) {
       // Thursday: from Maghrib onwards
-      return now >= maghribDate;
+      return nowMins >= maghribMins;
     } else {
       // Friday: until Maghrib
-      return now < maghribDate;
+      return nowMins < maghribMins;
     }
   })();
 
@@ -1016,13 +1018,12 @@ export default function Dashboard({
   }, 0);
   const quranReviewPercent = Math.min(100, Math.round((quranReviewToday / 5) * 100)); // Default goal: 5 pages
 
-  // 4. Adhkar progress
+  // 4. Adhkar progress (7 Stations: Morning, Fajr, Dhuhr, Asr, Evening, Maghrib, Isha)
   const todayDhikrLogs = dhikrLogs?.[todayStr] || {};
-  const totalDhikrsCompletedToday = Object.values(todayDhikrLogs).reduce((sum, val) => sum + (val as number), 0);
-  const dhikrDailyGoal = 3;
-  const dhikrPercent = isNaN(totalDhikrsCompletedToday) || isNaN(dhikrDailyGoal) || dhikrDailyGoal <= 0
-    ? 0
-    : Math.min(100, Math.round((totalDhikrsCompletedToday / dhikrDailyGoal) * 100));
+  const activePrayerKey: PrayerKey = (current || 'Fajr').toLowerCase() as PrayerKey;
+  const adhkarProgress = getSevenStationsProgress(todayDhikrLogs, activePrayerKey);
+  const dhikrPercent = adhkarProgress.overallPercentage;
+  const completedDhikrSessions = adhkarProgress.completedStationsCount;
 
   // Celestial sun/moon track position
   const getCelestialPositionAndType = () => {
@@ -2081,38 +2082,55 @@ export default function Dashboard({
           </span>
         </button>
 
-        {/* Widget 4: Al-Adhkar with double progress rings */}
+        {/* Widget 4: Al-Adhkar with 7-Segmented Station Ring */}
         <button 
           onClick={() => setActiveTab && setActiveTab('adhkar')}
           className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
+          title={`أذكار اليوم: ${toArabicNumbers(completedDhikrSessions)} من ٧ محطات مكتملة`}
         >
           <div className="relative w-14 h-14 flex items-center justify-center">
-            {/* SVG Progress Ring */}
+            {/* SVG 7-Segment Arc Rings for the 7 Adhkar Stations */}
             <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="16" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(168, 85, 247, 0.12)'} strokeWidth="2.2" fill="transparent" />
-              <circle 
-                cx="18" 
-                cy="18" 
-                r="16" 
-                stroke="#a855f7" 
-                strokeWidth="2.2" 
-                fill="transparent" 
-                strokeDasharray="100.53" 
-                strokeDashoffset={100.53 - (100.53 * dhikrPercent) / 100} 
-                strokeLinecap="round" 
-                className="transition-all duration-1000 ease-out" 
-              />
-              {/* Inner ring for sub-target */}
-              <circle cx="18" cy="18" r="11.5" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(168, 85, 247, 0.06)'} strokeWidth="1.2" fill="transparent" />
+              {adhkarProgress.stations.map((st, idx) => {
+                let strokeColor = currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(168, 85, 247, 0.18)';
+                if (st.isDone) strokeColor = '#10b981'; // Emerald
+                else if (st.isPartial) strokeColor = '#f59e0b'; // Amber
+                else if (st.isCurrentTimeStation) strokeColor = '#c084fc'; // Active time purple
+
+                const r = 16;
+                const c = 100.53;
+                const segmentLength = (c / 7) - 1.4;
+                const gapLength = c - segmentLength;
+                const offset = (c / 4) - (idx * (c / 7));
+
+                return (
+                  <circle
+                    key={st.id}
+                    cx="18"
+                    cy="18"
+                    r={r}
+                    stroke={strokeColor}
+                    strokeWidth={st.isCurrentTimeStation ? "2.6" : "2.0"}
+                    fill="transparent"
+                    strokeDasharray={`${segmentLength} ${gapLength}`}
+                    strokeDashoffset={offset}
+                    strokeLinecap="round"
+                    className="transition-all duration-500"
+                  />
+                );
+              })}
+
+              {/* Inner Ring for overall percentage */}
+              <circle cx="18" cy="18" r="11.5" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(168, 85, 247, 0.08)'} strokeWidth="1.2" fill="transparent" />
               <circle 
                 cx="18" 
                 cy="18" 
                 r="11.5" 
-                stroke="#ec4899" 
+                stroke="#a855f7" 
                 strokeWidth="1.2" 
                 fill="transparent" 
                 strokeDasharray="72.25" 
-                strokeDashoffset={72.25 - (72.25 * Math.min(100, (totalDhikrsCompletedToday / 3) * 100)) / 100} 
+                strokeDashoffset={72.25 - (72.25 * dhikrPercent) / 100} 
                 strokeLinecap="round" 
                 className="transition-all duration-1000 ease-out" 
               />
@@ -2121,7 +2139,12 @@ export default function Dashboard({
               <span className="text-sm leading-none">📿</span>
             </div>
           </div>
-          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none">الأذكار</span>
+          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none flex items-center gap-0.5">
+            <span>الأذكار</span>
+            <span className="text-[8.5px] px-1 py-0.2 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-extrabold">
+              {toArabicNumbers(completedDhikrSessions)}/٧
+            </span>
+          </span>
           <span className="text-[9px] font-extrabold text-purple-600 dark:text-purple-400 font-mono leading-none">
             {toArabicNumbers(dhikrPercent)}%
           </span>
@@ -2137,9 +2160,16 @@ export default function Dashboard({
         quranSessions={quranSessions}
         khatmat={khatmat}
         settings={settings}
+        isFridayWindow={isFridayWindow}
+        onNavigateTab={(tab) => setActiveTab(tab as any)}
       />
 
-      {isFridayWindow && <FridayMode settings={settings} />}
+      {isFridayWindow && (
+        <FridayMode 
+          settings={settings} 
+          onNavigateTab={(tab) => setActiveTab(tab as any)} 
+        />
+      )}
 
       {/* Nafilah & Optional Prayers Card (Home Quick Access) */}
       <div className={`rounded-3xl p-5 border transition-all duration-300 space-y-4 ${
@@ -2156,6 +2186,21 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+
+        {/* Dedicated Khushu & Qiyam Al-Layl Quick Entry Banner */}
+        <button
+          type="button"
+          onClick={() => setActiveTab && setActiveTab('khushu')}
+          className="w-full p-3 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-amber-500/15 border border-indigo-500/20 dark:border-indigo-500/30 rounded-2xl flex items-center justify-between text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 transition-all cursor-pointer shadow-2xs"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🌙</span>
+            <span>صفحة الخشوع وقيام الليل والتهجد</span>
+          </div>
+          <span className="text-[10px] bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-1 rounded-xl font-black flex items-center gap-1">
+            <span>افتح الصفحة ➔</span>
+          </span>
+        </button>
 
         <div className="space-y-3">
           {/* 1. Duha Prayer */}
@@ -2940,8 +2985,20 @@ export default function Dashboard({
               ))}
             </div>
 
-            {/* Footer wisdom */}
-            <div className="border-t border-slate-100 dark:border-slate-800/60 pt-3 text-center">
+            {/* Footer wisdom & Push Notifications link */}
+            <div className="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNotificationsModal(false);
+                  setShowPushControlCenter(true);
+                }}
+                className="w-full py-2 px-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <span>إعداد خيارات الإشعارات الفورية (Push)</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
               <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold leading-normal">
                 "إنَّ الصَّلَاةَ كَانَتْ عَلَى الْمُؤْمِنِينَ كِتَابًا مَّوْقُوتًا" 🤍
               </p>
@@ -2949,6 +3006,12 @@ export default function Dashboard({
           </div>
         </div>
       )}
+
+      {/* Push Notification Control Center Modal */}
+      <PushNotificationManager
+        isOpen={showPushControlCenter}
+        onClose={() => setShowPushControlCenter(false)}
+      />
 
     </div>
   );

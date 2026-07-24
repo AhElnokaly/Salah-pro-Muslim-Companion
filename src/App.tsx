@@ -50,6 +50,7 @@ import FastingTracker from './components/FastingTracker';
 import IslamicCalendar from './components/IslamicCalendar';
 import WidgetSimulator from './components/WidgetSimulator';
 import WorshipAlarms from './components/WorshipAlarms';
+import KhushuQiyamTracker from './components/KhushuQiyamTracker';
 import AthanOverlay from './components/AthanOverlay';
 import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
 
@@ -307,7 +308,7 @@ const parseTimeToMinutes = (timeStr: string): number => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas'>('prayer');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -321,6 +322,16 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
+
+  useEffect(() => {
+    const handleKhushuTrigger = () => {
+      setActiveTab('khushu');
+    };
+    window.addEventListener('open-khushu-page', handleKhushuTrigger);
+    return () => {
+      window.removeEventListener('open-khushu-page', handleKhushuTrigger);
+    };
+  }, []);
 
   // App states
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -1695,6 +1706,8 @@ export default function App() {
           <AdhkarTracker 
             dhikrLogs={dhikrLogs}
             setDhikrLogs={setDhikrLogs}
+            currentPrayer={current}
+            prayerTimes={times}
           />
         )}
 
@@ -1765,6 +1778,15 @@ export default function App() {
             setAlerts={setAlerts}
             audioVolume={audioVolume}
             setAudioVolume={setAudioVolume}
+          />
+        )}
+
+        {activeTab === 'khushu' && (
+          <KhushuQiyamTracker
+            settings={settings}
+            prayerLogs={prayerLogs}
+            setPrayerLogs={setPrayerLogs}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
           />
         )}
       </main>
@@ -1871,6 +1893,7 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-1">
                     {[
                       { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
+                      { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
                       { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
                       { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
                       { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
