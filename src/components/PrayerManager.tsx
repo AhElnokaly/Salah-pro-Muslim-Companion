@@ -35,6 +35,7 @@ import {
 import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
+import { trackFeatureCompletion } from '../utils/analyticsStorage';
 import { 
   defaultMuezzins, 
   getCustomAudios, 
@@ -149,7 +150,7 @@ export default function PrayerManager({
   });
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
   const [autoPlayOnTime, setAutoPlayOnTime] = useState<boolean>(() => {
-    return localStorage.getItem('salah_auto_play_athan') === 'true';
+    return localStorage.getItem('salah_auto_play_athan') !== 'false';
   });
   const [currentPlayingPrayer, setCurrentPlayingPrayer] = useState<PrayerName | null>(null);
 
@@ -574,6 +575,11 @@ export default function PrayerManager({
       }
     };
     setPrayerLogs(updatedLogs);
+
+    if (status === 'A') {
+      trackFeatureCompletion('salah');
+      trackFeatureCompletion('home');
+    }
 
     // Sync with Qada List if missed status is added or removed
     if (isMissed && !wasMissed) {

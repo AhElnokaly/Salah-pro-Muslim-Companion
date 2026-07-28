@@ -45,11 +45,13 @@ import {
   getArabicPrayerName,
   parseTimeToMinutes
 } from '../utils/prayerCalc';
+import { detectUserLocation } from '../utils/locationService';
 import { 
   getHijriDate, 
   formatGregorianFullDateArabic, 
   toArabicNumbers 
 } from '../utils/hijri';
+import { getMoonPhaseInfo } from '../utils/moonPhases';
 import { generateActiveNudge } from '../utils/nudgeRules';
 import { getSevenStationsProgress, PrayerKey } from '../utils/adhkarCalc';
 import CompanionInsights from './CompanionInsights';
@@ -57,6 +59,8 @@ import FridayMode from './FridayMode';
 import AthanOverlay from './AthanOverlay';
 import PushNotificationManager from './PushNotificationManager';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
+import FeatureDiscoveryWidget from './FeatureDiscoveryWidget';
+import { PinnedFavoriteWidget } from './PinnedFavoriteWidget';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
@@ -84,10 +88,10 @@ export const BACKDROP_IMAGES = {
   gold: goldBackdrop,
   classic: classicBackdrop,
   banner: bannerBackdrop,
-  ramadan: 'https://images.unsplash.com/photo-1542856391-010fb87dcfed?q=80&w=1200&auto=format&fit=crop',
-  eid_fitr: 'https://images.unsplash.com/photo-1581078426770-6d336e5de7bf?q=80&w=1200&auto=format&fit=crop',
-  eid_adha: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?q=80&w=1200&auto=format&fit=crop',
-  friday: 'https://images.unsplash.com/photo-1590075865003-e48277faa558?q=80&w=1200&auto=format&fit=crop'
+  ramadan: classicBackdrop,
+  eid_fitr: goldBackdrop,
+  eid_adha: bannerBackdrop,
+  friday: classicBackdrop
 };
 
 interface DashboardProps {
@@ -101,7 +105,7 @@ interface DashboardProps {
   setFastingLogs: React.Dispatch<React.SetStateAction<Record<string, { date: string; fasted: boolean; fastType: string }>>>;
   ramadanQada?: RamadanQadaTracker;
   setRamadanQada?: React.Dispatch<React.SetStateAction<RamadanQadaTracker>>;
-  setActiveTab?: React.Dispatch<React.SetStateAction<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu'>>;
+  setActiveTab?: React.Dispatch<React.SetStateAction<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'moon'>>;
   customDuas: CustomDua[];
   setCustomDuas: React.Dispatch<React.SetStateAction<CustomDua[]>>;
   quranSessions?: QuranSession[];
@@ -719,28 +723,35 @@ export default function Dashboard({
     }));
   };
 
-  const handleGPSLocationSync = () => {
-    if (!navigator.geolocation) {
-      alert('جهازك لا يدعم تحديد الموقع التلقائي.');
-      return;
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationToast, setLocationToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const handleGPSLocationSync = async () => {
+    setIsLocating(true);
+    setLocationToast(null);
+    try {
+      const res = await detectUserLocation();
+      setSettings(prev => ({
+        ...prev,
+        latitude: res.latitude,
+        longitude: res.longitude,
+        cityName: res.cityName
+      }));
+      setLocationToast({
+        msg: `${res.message} — 📍 المدينة المحددة: ${res.cityName} (${res.latitude.toFixed(2)}°, ${res.longitude.toFixed(2)}°)`,
+        type: 'success'
+      });
+      setTimeout(() => setLocationToast(null), 5000);
+    } catch (e) {
+      console.error(e);
+      setLocationToast({
+        msg: 'حدث خطأ أثناء تحديد الموقع. يرجى اختيار مدينتك يدوياً من قائمة المدن.',
+        type: 'error'
+      });
+      setTimeout(() => setLocationToast(null), 5000);
+    } finally {
+      setIsLocating(false);
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setSettings(prev => ({
-          ...prev,
-          latitude: lat,
-          longitude: lng,
-          cityName: 'موقعي الحالي'
-        }));
-        alert('تم مزامنة الموقع وتحديث مواقيت الصلاة بنجاح طبقاً لموقع هاتفك الفعلي! 📍');
-      },
-      (err) => {
-        console.error(err);
-        alert('فشل تحديد الموقع تلقائياً. يرجى تفعيل الـ GPS وصلاحية الموقع في المتصفح.');
-      }
-    );
   };
 
   const getTimeOfDayGradientAndLabel = (): { gradient: string; label: string } => {
@@ -907,6 +918,34 @@ export default function Dashboard({
   const currentBackdropKey: BackdropType = !settings.backdropStyle || settings.backdropStyle === 'auto'
     ? getAutoBackdropKey()
     : settings.backdropStyle;
+
+  const getGradientForBackdrop = (bKey: BackdropType, defaultGrad: string) => {
+    switch (bKey) {
+      case 'kaaba':
+        return 'from-[#0b0f19] via-[#111827] to-[#1e293b]';
+      case 'emerald':
+        return 'from-[#022c22] via-[#064e3b] to-[#0f766e]';
+      case 'andulas':
+        return 'from-[#1e1b4b] via-[#312e81] to-[#4338ca]';
+      case 'night_sky':
+        return 'from-[#020617] via-[#0f172a] to-[#1e1b4b]';
+      case 'gold':
+        return 'from-[#451a03] via-[#78350f] to-[#b45309]';
+      case 'banner':
+        return 'from-[#4c0519] via-[#881337] to-[#be185d]';
+      case 'ramadan':
+        return 'from-[#091e3a] via-[#1d2671] to-[#283c86]';
+      case 'eid_fitr':
+      case 'eid_adha':
+        return 'from-[#3b0764] via-[#581c87] to-[#7e22ce]';
+      case 'friday':
+        return 'from-[#064e3b] via-[#047857] to-[#0f766e]';
+      default:
+        return defaultGrad;
+    }
+  };
+
+  const activeCardGradient = getGradientForBackdrop(currentBackdropKey, currentGradient);
 
   const arabicDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const dayNameArabic = arabicDays[now.getDay()];
@@ -1349,11 +1388,30 @@ export default function Dashboard({
 
   return (
     <div id="dashboard-root" className="space-y-6" dir="rtl">
+      {/* Location GPS Sync Toast Notification Banner */}
+      {locationToast && (
+        <div className={`p-3.5 rounded-2xl text-xs font-black shadow-lg flex items-center justify-between gap-3 border transition-all animate-in fade-in slide-in-from-top-2 duration-300 ${
+          locationToast.type === 'success'
+            ? 'bg-emerald-500/15 dark:bg-emerald-950/40 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+            : 'bg-rose-500/15 dark:bg-rose-950/40 border-rose-500/30 text-rose-800 dark:text-rose-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 shrink-0" />
+            <span>{locationToast.msg}</span>
+          </div>
+          <button
+            onClick={() => setLocationToast(null)}
+            className="text-xs font-bold hover:opacity-80 p-1 cursor-pointer shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 1. High-Fidelity Main Prayer Card with Custom Gradient & Elegant Image Backdrop */}
       <div 
         id="main-prayer-card"
-        className={`w-full bg-gradient-to-b ${currentGradient} text-white rounded-3xl p-4 sm:p-5 gap-4 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
+        className={`w-full bg-gradient-to-b ${activeCardGradient} text-white rounded-3xl p-4 sm:p-5 gap-4 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
         {/* High-Precision Islamic Mosque Vector Backdrop (Offline, Sharp, No Checkerboard, No Broken Alt Text) */}
         <div className="absolute inset-0 pointer-events-none select-none opacity-40 overflow-hidden">
@@ -1361,15 +1419,36 @@ export default function Dashboard({
         </div>
 
         {/* Centered Premium Header Section with Location, Date & Controls */}
-        <div className="flex flex-col items-center justify-center text-center gap-2.5 z-10 w-full border-b border-white/10 pb-3">
-          {/* Centered Date Widget (Hijri | Day | Gregorian without day name) */}
-          <div className="flex items-center justify-center gap-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/10 text-white shadow-xs max-w-full flex-wrap">
-            <Calendar className="w-3 h-3 text-amber-300 shrink-0" />
-            <span className="text-[11px] font-black leading-none" title="التاريخ الهجري">{hijri.fullString}</span>
-            <span className="text-white/20 text-[11px] font-light">|</span>
-            <span className="text-[11px] font-black text-amber-200 leading-none">{dayNameArabic}</span>
-            <span className="text-white/20 text-[11px] font-light">|</span>
-            <span className="text-[11px] font-extrabold text-white/95 leading-none" title="التاريخ الميلادي">{gregorianClean}</span>
+        <div className="flex flex-col items-center justify-center text-center gap-2 z-10 w-full border-b border-white/10 pb-2.5">
+          {/* Compact Single-Row Date & Moon Phase Widget */}
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 bg-black/30 backdrop-blur-md px-2.5 sm:px-3.5 py-1 rounded-full border border-white/15 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none text-[10px] sm:text-xs">
+            <div className="flex items-center gap-1 shrink-0">
+              <Calendar className="w-3 h-3 text-amber-300 shrink-0" />
+              <span className="font-extrabold leading-none text-white drop-shadow-xs" title="التاريخ الهجري">{hijri.fullString}</span>
+            </div>
+
+            <span className="text-white/25 font-light shrink-0">•</span>
+
+            {/* Compact Moon Phase Pill */}
+            {(() => {
+              const moonInfo = getMoonPhaseInfo(hijri.day);
+              return (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab && setActiveTab('moon' as any)}
+                  className="inline-flex items-center gap-1 bg-amber-400/20 hover:bg-amber-400/35 text-amber-200 hover:text-white font-black px-2 py-0.5 rounded-full border border-amber-300/30 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 text-[10px] sm:text-[11px] group"
+                  title={`طور القمر اليوم: ${moonInfo.name} (${toArabicNumbers(moonInfo.illumination)}% إضاءة) - اضغط لعرض منازل وأطوار القمر`}
+                >
+                  <span className="text-xs leading-none group-hover:scale-110 transition-transform">{moonInfo.icon}</span>
+                  <span className="leading-none">{moonInfo.name}</span>
+                </button>
+              );
+            })()}
+
+            <span className="text-white/25 font-light shrink-0">•</span>
+            <span className="font-black text-amber-200 leading-none shrink-0">{dayNameArabic}</span>
+            <span className="text-white/25 font-light shrink-0">•</span>
+            <span className="font-bold text-white/90 leading-none shrink-0" title="التاريخ الميلادي">{gregorianClean}</span>
           </div>
         </div>
 
@@ -1524,15 +1603,33 @@ export default function Dashboard({
             const isCurrentLogged = currentLog && (currentLog.status === 'A' || currentLog.status === 'B' || currentLog.status === 'D' || currentLog.status === 'E');
             const needsAttention = current && current !== 'Sunrise' && !isCurrentLogged;
             
-            return needsAttention ? (
-              <p className="text-[9.5px] text-center text-amber-300 font-extrabold leading-none animate-pulse flex items-center justify-center gap-1">
-                <span className="inline-block animate-bounce text-[10px]">👇</span>
-                <span>حان وقت صلاة {getArabicPrayerName(current, now)}! اضغط لتسجيل صلاتك وسننك</span>
-              </p>
-            ) : (
-              <p className="text-[8px] text-center text-white/40 font-bold leading-none animate-fade-in">
-                انقر على صلاة لتسجيل الفريضة والسنن
-              </p>
+            return (
+              <div className="flex items-center justify-between gap-2 px-1">
+                {needsAttention ? (
+                  <p className="text-[9.5px] text-amber-300 font-extrabold leading-tight animate-pulse flex items-center gap-1">
+                    <span className="inline-block animate-bounce text-[10px]">👇</span>
+                    <span>حان وقت صلاة {getArabicPrayerName(current, now)}! اضغط لتسجيل صلاتك</span>
+                  </p>
+                ) : (
+                  <p className="text-[8px] text-white/50 font-bold leading-none animate-fade-in">
+                    انقر على صلاة لتسجيل الفريضة والسنن
+                  </p>
+                )}
+                {current && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.dispatchEvent(new CustomEvent('trigger-athan-simulation', { detail: { prayerName: current } }));
+                    }}
+                    className="py-1 px-2.5 bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black rounded-lg text-[10px] shadow-sm flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                    title="استماع لأذان الصلاة الحالية"
+                  >
+                    <Volume2 className="w-3 h-3 text-slate-950 shrink-0" />
+                    <span>الأذان 🔊</span>
+                  </button>
+                )}
+              </div>
             );
           })()}
           
@@ -1667,228 +1764,6 @@ export default function Dashboard({
           </div>
         </div>
       </div>
-
-      {/* 1.5. Pinned Favorite Widget Section */}
-      {settings.pinnedWidget && (
-        <div className={`rounded-3xl p-4 sm:p-5 border transition-all duration-300 relative overflow-hidden flex flex-col gap-3 ${
-          currentStyle === 'glass-dark'
-            ? 'bg-[#111723]/95 backdrop-blur-md border-white/5 shadow-2xl text-slate-200'
-            : 'bg-white border-[#e2e8f0] shadow-md text-slate-800'
-        }`}>
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs">📌</span>
-              <span className="text-[10px] font-black tracking-wider uppercase opacity-80">أداتك المفضلة المثبتة (شاشة الهاتف)</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab && setActiveTab('widgets')}
-              className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5"
-            >
-              تعديل المكون ←
-            </button>
-          </div>
-
-          {/* Widget frame on wallpaper backdrop */}
-          <div className="w-full flex justify-center items-center">
-            <div className={`relative w-full max-w-sm rounded-2xl p-1.5 overflow-hidden shadow-md flex items-center justify-center border border-white/5 ${
-              settings.pinnedWidget.wallpaper === 'slate' ? 'bg-slate-900' :
-              settings.pinnedWidget.wallpaper === 'desert' ? 'bg-gradient-to-tr from-[#1f1235] via-[#481d3d] to-[#99413b]' :
-              settings.pinnedWidget.wallpaper === 'forest' ? 'bg-gradient-to-b from-[#061f18] via-[#0c2e26] to-[#143d34]' :
-              'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-950 via-slate-950 to-black'
-            }`}>
-              {/* Dynamic Theme calculations */}
-              {(() => {
-                const wType = settings.pinnedWidget.type || 'timeline';
-                const wTheme = settings.pinnedWidget.theme || 'dark-blue';
-                
-                const themeClass = (() => {
-                  if (wType === 'teal') {
-                    return 'bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white border border-teal-400/30';
-                  }
-                  switch (wTheme) {
-                    case 'green':
-                      return 'bg-gradient-to-b from-emerald-950/95 to-teal-900/95 border border-emerald-500/30 text-white';
-                    case 'gold':
-                      return 'bg-gradient-to-b from-[#1c1b18]/95 via-[#23201a]/95 to-[#2b2720]/95 border border-amber-500/20 text-amber-100';
-                    case 'glass':
-                      return 'bg-white/10 backdrop-blur-xl border border-white/20 text-white';
-                    case 'dark-blue':
-                    default:
-                      return 'bg-gradient-to-b from-[#0c1826]/95 to-[#112236]/95 border border-blue-900/40 text-white';
-                  }
-                })();
-
-                const getArabicNameLocal = (p: string) => {
-                  const names: Record<string, string> = {
-                    Fajr: 'الفجر',
-                    Sunrise: 'الشروق',
-                    Dhuhr: 'الظهر',
-                    Asr: 'العصر',
-                    Maghrib: 'المغرب',
-                    Isha: 'العشاء'
-                  };
-                  if (p === 'Dhuhr' && now.getDay() === 5) return 'الجمعة';
-                  return names[p] || p;
-                };
-
-                const currentDayDigit = hijri?.day || now.getDate();
-                const currentMonthName = hijri?.monthName || 'شوال';
-
-                return (
-                  <div className="w-full">
-                    {/* STYLE 1: Timeline */}
-                    {wType === 'timeline' && (
-                      <div className={`w-full rounded-xl p-3 flex flex-col justify-between border select-none ${themeClass}`}>
-                        <div className="flex justify-between items-start border-b border-white/10 pb-1.5">
-                          <div className="flex items-center gap-1">
-                            <div className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 flex flex-col items-center justify-center font-sans scale-90">
-                              <span className="text-[10px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
-                              <span className="text-[6px] font-bold leading-none">{currentMonthName}</span>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[8px] font-black block text-white/90 leading-none">{dayNameArabic}</span>
-                              <span className="text-[6px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianClean.split(' ').slice(0, 2).join(' '))}</span>
-                            </div>
-                          </div>
-                          <div className="text-left">
-                            <span className="text-[6px] font-bold block text-white/40">متبقي للأذان</span>
-                            <span className="text-[10px] font-extrabold block text-amber-400 font-mono leading-none mt-0.5" dir="ltr">
-                              -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="relative py-2.5 my-0.5 flex items-center justify-between">
-                          <div className="absolute inset-x-1.5 h-[1.5px] bg-white/20 top-1/2 -translate-y-1/2 z-0 rounded-full" />
-                          {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
-                            const isActive = current === pName;
-                            const prayerTime = times[pName] || '٠٠:٠٠';
-                            return (
-                              <div key={pName} className="flex flex-col items-center relative z-10 scale-90">
-                                <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center transition-all ${
-                                  isActive ? 'bg-amber-400 text-slate-900 ring-2 ring-white scale-110' : 'bg-[#1b2b3c] border border-white/10'
-                                }`} />
-                                <span className={`text-[6.5px] font-bold mt-1 block ${isActive ? 'text-amber-400' : 'text-white/60'}`}>{getArabicNameLocal(pName)}</span>
-                                <span className={`text-[7px] font-black font-mono mt-0.2 block ${isActive ? 'text-white' : 'text-white/30'}`}>{toArabicNumbers(prayerTime)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="flex justify-between items-center border-t border-white/5 pt-1.5 text-[7px] text-white/40 font-bold leading-none">
-                          <span>📍 {settings.cityName || 'الإسكندرية'}</span>
-                          <span>الشروق {toArabicNumbers(times.Sunrise || '٠٦:٠٨')} ص</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* STYLE 2: Grid */}
-                    {wType === 'grid' && (
-                      <div className={`w-full rounded-xl p-2.5 flex flex-col justify-between border select-none ${themeClass}`}>
-                        <div className="flex justify-between items-center border-b border-white/10 pb-1.5 text-[7.5px] font-black">
-                          <span className="text-white">{dayNameArabic} • {toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
-                          <span className="text-amber-400 flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 py-1.5">
-                          {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
-                            const isActive = current === pName;
-                            const prayerTime = times[pName] || '٠٠:٠٠';
-                            return (
-                              <div 
-                                key={pName}
-                                className={`p-1 rounded-lg border flex flex-col items-center justify-center text-center transition-all scale-95 ${
-                                  isActive ? 'bg-[#15273b]/95 border-amber-400' : 'bg-white/[0.03] border-white/5'
-                                }`}
-                              >
-                                <span className={`text-[7px] font-black ${isActive ? 'text-amber-400' : 'text-white/70'}`}>{getArabicNameLocal(pName)}</span>
-                                <span className={`text-[7px] font-black font-mono mt-0.5 ${isActive ? 'text-white' : 'text-white/35'}`}>{toArabicNumbers(prayerTime)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="text-center text-[6px] text-white/30 border-t border-white/5 pt-1 leading-none font-bold">
-                          مواقيت الصلاة • رفيق المسلم المطور
-                        </div>
-                      </div>
-                    )}
-
-                    {/* STYLE 3: Teal */}
-                    {wType === 'teal' && (
-                      <div className="w-full rounded-xl p-3 flex flex-col justify-between bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white shadow-lg relative overflow-hidden select-none border border-teal-400/30 scale-100">
-                        <div className="flex justify-between items-center border-b border-white/15 pb-1 text-[7.5px] font-black">
-                          <span className="flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
-                          <span className="text-teal-100">{toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
-                        </div>
-                        <div className="py-1.5 text-right space-y-0.5">
-                          <span className="text-[6px] font-bold text-teal-100/70 block leading-none">الصلاة القادمة</span>
-                          <h3 className="text-[10px] font-black text-white flex justify-between items-center leading-none">
-                            <span>صلاة {getArabicNameLocal(next)}</span>
-                            <span className="text-[11px] font-black font-mono text-amber-300" dir="ltr">{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}</span>
-                          </h3>
-                        </div>
-                        <div className="grid grid-cols-5 gap-0.5 text-center bg-black/15 rounded-lg p-0.5 border border-white/5 scale-90">
-                          {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
-                            const isActive = current === pName;
-                            const prayerTime = times[pName] || '٠٠:٠٠';
-                            return (
-                              <div key={pName} className={`p-0.5 rounded transition-all ${isActive ? 'bg-white/20 text-white font-extrabold' : ''}`}>
-                                <span className="text-[5.5px] block font-bold opacity-80 leading-none">{getArabicNameLocal(pName)}</span>
-                                <span className="text-[6.5px] block font-extrabold font-mono mt-0.5 leading-none">{toArabicNumbers(prayerTime)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* STYLE 4: Analog */}
-                    {wType === 'analog' && (
-                      <div className={`w-full rounded-xl p-3 flex items-center justify-center gap-3 border select-none ${themeClass}`}>
-                        <div className="w-[54px] h-[54px] rounded-full bg-[#0a1520] border border-[#192f44] relative flex items-center justify-center shrink-0">
-                          <div className="absolute inset-0.5 rounded-full border border-dashed border-white/5 pointer-events-none" />
-                          <span className="absolute top-0.5 text-[5px] font-black text-white/30">١٢</span>
-                          <span className="absolute right-0.5 text-[5px] font-black text-white/30">٣</span>
-                          <span className="absolute bottom-0.5 text-[5px] font-black text-white/30">٦</span>
-                          <span className="absolute left-0.5 text-[5px] font-black text-white/30">٩</span>
-                          
-                          {/* Hands */}
-                          <div className="absolute w-[1.5px] h-3.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${(now.getHours() % 12) * 30 + now.getMinutes() * 0.5}deg)`, top: 'calc(50% - 3.5px)' }} />
-                          <div className="absolute w-[1px] h-5.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${now.getMinutes() * 6}deg)`, top: 'calc(50% - 5.5px)' }} />
-                          <div className="w-1 h-1 rounded-full bg-red-500 border border-white z-10" />
-                        </div>
-                        <div className="flex-1 space-y-0.5 text-right">
-                          <span className="text-[6px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicNameLocal(next)}</span>
-                          <h4 className="text-[8px] font-black text-white leading-none">متبقي للأذان</h4>
-                          <span className="text-[9px] font-black text-white block font-mono leading-none mt-0.5" dir="ltr">
-                            {toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* STYLE 5: Compact */}
-                    {wType === 'compact' && (
-                      <div className="w-full bg-[#eeeeee] dark:bg-[#1a242d] text-slate-800 dark:text-white rounded-full py-2 px-4 flex items-center justify-between shadow-sm border border-slate-200 dark:border-white/5 select-none">
-                        <div className="flex items-center gap-1 leading-none">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span className="text-[9px] font-extrabold font-sans">
-                            {getArabicNameLocal(current)} -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
-                          </span>
-                        </div>
-                        <span className="text-[7px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-0.5 leading-none">
-                          📍 {settings.cityName || 'الإسكندرية'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 4 Elegant Dynamic Bento Circular Widgets as Quick worship center portal */}
       <div className={`rounded-3xl p-4 border transition-all duration-300 grid grid-cols-4 gap-2 sm:gap-4 text-center ${
@@ -2915,6 +2790,39 @@ export default function Dashboard({
           {todayFast.fasted ? 'صائم بفضل الله ✓' : 'تسجيل صيام اليوم'}
         </button>
       </div>
+
+      {/* Pinned Favorite Widget Section */}
+      {settings.pinnedWidget && (
+        <PinnedFavoriteWidget
+          pinnedWidget={settings.pinnedWidget}
+          cityName={settings.cityName}
+          now={now}
+          hijri={hijri}
+          times={times}
+          current={current}
+          next={next}
+          timeRemainingStr={timeRemainingStr}
+          dayNameArabic={dayNameArabic}
+          gregorianClean={gregorianClean}
+          toArabicNumbers={toArabicNumbers}
+          onNavigateWidgets={() => setActiveTab && setActiveTab('widgets')}
+        />
+      )}
+
+      {/* Interactive App Feature Discovery Guide & Tour Launcher */}
+      <FeatureDiscoveryWidget
+        onSelectTab={(tab, subTab) => {
+          if (setActiveTab) {
+            setActiveTab(tab as any);
+            if (tab === 'settings' && subTab) {
+              window.dispatchEvent(new CustomEvent('change-settings-subtab', { detail: { subTab } }));
+            }
+          }
+        }}
+        onOpenTour={() => {
+          window.dispatchEvent(new CustomEvent('open-feature-tour'));
+        }}
+      />
 
 
 

@@ -24,7 +24,12 @@ import {
   Smartphone,
   MapPin,
   Download,
-  Share2
+  Share2,
+  Lightbulb,
+  HelpCircle,
+  Zap,
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { 
@@ -52,6 +57,25 @@ import WidgetSimulator from './components/WidgetSimulator';
 import WorshipAlarms from './components/WorshipAlarms';
 import KhushuQiyamTracker from './components/KhushuQiyamTracker';
 import AthanOverlay from './components/AthanOverlay';
+import FeatureTourModal from './components/FeatureTourModal';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import MoonPhases from './components/MoonPhases';
+import { WeatherWidget } from './components/WeatherWidget';
+
+// Custom Hooks
+import { usePrayerClock } from './hooks/usePrayerClock';
+import { useSpiritualState } from './hooks/useSpiritualState';
+import { usePwaInstall } from './hooks/usePwaInstall';
+import { useAthanPlayer } from './hooks/useAthanPlayer';
+import { usePrayerScheduler, getLocalDateStr } from './hooks/usePrayerScheduler';
+
+// Extracted Subcomponents
+import SpiritualPortalModal from './components/SpiritualPortalModal';
+import PwaInstallModal from './components/PwaInstallModal';
+import CustomAlarmOverlay from './components/CustomAlarmOverlay';
+
+import { syncUpcomingPrayerSchedule } from './utils/prayerScheduleSync';
+import { trackFeatureUsage } from './utils/analyticsStorage';
 import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
 
 // Import companion icon
@@ -110,7 +134,7 @@ const SPIRITUAL_CAPSULES = [
     category: "يقين بالإجابة والفرج"
   },
   {
-    text: "فَاذْكُرُونِي أَسْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
+    text: "فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ",
     source: "سورة البقرة - الآية ١٥٢",
     category: "ذكر رباني وشكر النعمة"
   },
@@ -152,8 +176,6 @@ const SPIRITUAL_CAPSULES = [
 ];
 
 let spiritualAudioCtx: AudioContext | null = null;
-let spiritualOscs: OscillatorNode[] = [];
-let spiritualGain: GainNode | null = null;
 
 const playSpiritualChime = (pitch: number = 523.25) => {
   try {
@@ -210,109 +232,156 @@ const playSpiritualChime = (pitch: number = 523.25) => {
   }
 };
 
-const toggleAmbientHealingFrequency = (isOn: boolean) => {
-  try {
-    if (!spiritualAudioCtx) {
-      spiritualAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
-    if (!isOn) {
-      if (spiritualGain) {
-        const fadeTime = spiritualAudioCtx.currentTime;
-        spiritualGain.gain.linearRampToValueAtTime(0, fadeTime + 1.5);
-        setTimeout(() => {
-          try {
-            spiritualOscs.forEach(o => { o.stop(); o.disconnect(); });
-            spiritualOscs = [];
-            if (spiritualGain) {
-              spiritualGain.disconnect();
-              spiritualGain = null;
-            }
-          } catch (e) {}
-        }, 1600);
-      }
-      return;
-    }
-
-    if (spiritualAudioCtx.state === 'suspended') {
-      spiritualAudioCtx.resume();
-    }
-
-    spiritualOscs.forEach(o => { try { o.stop(); o.disconnect(); } catch (e) {} });
-    spiritualOscs = [];
-
-    const now = spiritualAudioCtx.currentTime;
-    spiritualGain = spiritualAudioCtx.createGain();
-    spiritualGain.gain.setValueAtTime(0, now);
-    spiritualGain.gain.linearRampToValueAtTime(0.08, now + 2.5);
-
-    const osc1 = spiritualAudioCtx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(432, now);
-
-    const osc2 = spiritualAudioCtx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(216, now);
-
-    const osc3 = spiritualAudioCtx.createOscillator();
-    osc3.type = 'sine';
-    osc3.frequency.setValueAtTime(433.5, now);
-
-    const warmFilter = spiritualAudioCtx.createBiquadFilter();
-    warmFilter.type = 'lowpass';
-    warmFilter.frequency.setValueAtTime(250, now);
-
-    osc1.connect(warmFilter);
-    osc2.connect(warmFilter);
-    osc3.connect(warmFilter);
-    warmFilter.connect(spiritualGain);
-    spiritualGain.connect(spiritualAudioCtx.destination);
-
-    osc1.start(now);
-    osc2.start(now);
-    osc3.start(now);
-
-    spiritualOscs = [osc1, osc2, osc3];
-  } catch (err) {
-    console.warn("Ambient Healing Frequency failed:", err);
-  }
-};
-
-const speakSpiritualText = (text: string) => {
-  try {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ar-SA';
-      utterance.rate = 0.85;
-      utterance.pitch = 1.05;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const arabicVoice = voices.find(v => v.lang.startsWith('ar'));
-      if (arabicVoice) {
-        utterance.voice = arabicVoice;
-      }
-      
-      window.speechSynthesis.speak(utterance);
-    }
-  } catch (e) {
-    console.warn("Speech synthesis failed:", e);
-  }
-};
-
-// Simple helper to parse "HH:MM" string to minutes of the day
-const parseTimeToMinutes = (timeStr: string): number => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours * 60 + minutes;
-};
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas'>('prayer');
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas'>('prayer');
+  const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [notificationsCount, setNotificationsCount] = useState<number>(0);
+
+  // Custom Hooks Extraction
+  const {
+    settings,
+    setSettings,
+    prayerLogs,
+    setPrayerLogs,
+    pendingQadaPrayers,
+    setPendingQadaPrayers,
+    fastingLogs,
+    setFastingLogs,
+    ramadanQada,
+    setRamadanQada,
+    quranSessions,
+    setQuranSessions,
+    khatmat,
+    setKhatmat,
+    dhikrLogs,
+    setDhikrLogs,
+    customDuas,
+    setCustomDuas,
+    isLoaded
+  } = useSpiritualState();
+
+  const {
+    isInstalled,
+    showPwaInstallGuide,
+    setShowPwaInstallGuide,
+    showManualSteps,
+    setShowManualSteps,
+    handleInstallApp,
+    handleDirectInstallInsideModal
+  } = usePwaInstall();
+
+  const {
+    globalAudioRef,
+    isAthanPlaying,
+    showAthanOverlay,
+    setShowAthanOverlay,
+    athanOverlayPrayer,
+    setAthanOverlayPrayer,
+    currentPhraseIdx,
+    audioError,
+    audioVolume,
+    setAudioVolume,
+    currentMuezzin,
+    setCurrentMuezzin,
+    fajrMuezzin,
+    setFajrMuezzin,
+    customMuezzins,
+    triggerAthan,
+    stopAthanGlobal,
+    togglePlayAthanGlobal,
+    handleRetryAudioWithLocal
+  } = useAthanPlayer();
+
+  const {
+    customAlarms,
+    setCustomAlarms,
+    alerts,
+    setAlerts,
+    activeRingingAlarm,
+    setActiveRingingAlarm,
+    checkTimesAndAlarms
+  } = usePrayerScheduler({
+    settings,
+    isLoaded,
+    triggerAthan,
+    globalAudioRef,
+    audioVolume,
+    setToastMessage
+  });
+
+  // Portal of Serenity & Spiritual Breath States
+  const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
+  const [headerRippleActive, setHeaderRippleActive] = useState<boolean>(false);
+  const [fiqhWarning, setFiqhWarning] = useState<{ title: string; removedReasons: string[] } | null>(null);
+
+  // Smart Network & Sync Status Indicator State (Online = Green 🟢, Syncing/Loading = Yellow 🟡, Offline = Red 🔴)
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const handleGpsSync = () => {
+      setIsSyncing(true);
+      setTimeout(() => setIsSyncing(false), 2200);
+    };
+    window.addEventListener('trigger-gps-sync', handleGpsSync);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('trigger-gps-sync', handleGpsSync);
+    };
+  }, []);
+
+  // Floating particles state
+  interface HeaderParticle {
+    id: string;
+    x: number;
+    y: number;
+    rotate: number;
+    emoji: string;
+    scale: number;
+  }
+  const [headerParticles, setHeaderParticles] = useState<HeaderParticle[]>([]);
+
+  const triggerHeaderParticles = () => {
+    const emojis = ['✨', '⭐', '🌸', '🤍', '💚', '🕌'];
+    const newParticles: HeaderParticle[] = Array.from({ length: 10 }).map((_, idx) => {
+      const angle = (Math.random() * 120 + 30) * (Math.PI / 180);
+      const distance = Math.random() * 60 + 50;
+      const x = Math.cos(angle) * distance;
+      const y = -Math.sin(angle) * distance - 15;
+      
+      return {
+        id: `${Date.now()}-${idx}-${Math.random()}`,
+        x,
+        y,
+        rotate: Math.random() * 360 - 180,
+        emoji: emojis[Math.floor(Math.random() * emojis.length)],
+        scale: Math.random() * 0.5 + 0.7
+      };
+    });
+    
+    setHeaderParticles(newParticles);
+    setTimeout(() => {
+      setHeaderParticles([]);
+    }, 1500);
+  };
+
+  // Auto track feature usage whenever activeTab changes
+  useEffect(() => {
+    if (activeTab) {
+      trackFeatureUsage(activeTab);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (toastMessage) {
@@ -327,181 +396,33 @@ export default function App() {
     const handleKhushuTrigger = () => {
       setActiveTab('khushu');
     };
+    const handleTourTrigger = () => {
+      setIsTourModalOpen(true);
+    };
+    const handleSettingsSubtabTrigger = (e: any) => {
+      if (e.detail?.subTab) {
+        setActiveSettingsSubTab(e.detail.subTab);
+        setActiveTab('settings');
+      }
+    };
+    const handleMainTabTrigger = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+
     window.addEventListener('open-khushu-page', handleKhushuTrigger);
+    window.addEventListener('open-feature-tour', handleTourTrigger);
+    window.addEventListener('change-settings-subtab', handleSettingsSubtabTrigger);
+    window.addEventListener('change-main-tab', handleMainTabTrigger);
+
     return () => {
       window.removeEventListener('open-khushu-page', handleKhushuTrigger);
+      window.removeEventListener('open-feature-tour', handleTourTrigger);
+      window.removeEventListener('change-settings-subtab', handleSettingsSubtabTrigger);
+      window.removeEventListener('change-main-tab', handleMainTabTrigger);
     };
   }, []);
-
-  // App states
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [prayerLogs, setPrayerLogs] = useState<Record<string, Record<string, PrayerLog>>>({});
-  const [pendingQadaPrayers, setPendingQadaPrayers] = useState<PendingQadaPrayer[]>([]);
-  const [fastingLogs, setFastingLogs] = useState<Record<string, any>>({});
-  const [ramadanQada, setRamadanQada] = useState<RamadanQadaTracker>({
-    daysOwed: 0,
-    daysCompleted: 0,
-    trackMode: 'fasting',
-    fidyaTarget: 30,
-    fidyaCompleted: 0
-  });
-  const [quranSessions, setQuranSessions] = useState<QuranSession[]>([]);
-  const [khatmat, setKhatmat] = useState<QuranKhatma[]>([]);
-  const [dhikrLogs, setDhikrLogs] = useState<Record<string, Record<string, number>>>({});
-  const [customDuas, setCustomDuas] = useState<CustomDua[]>([]);
-  const [notificationsCount, setNotificationsCount] = useState<number>(0);
-
-  // Alarms & Alerts Global State
-  const [customAlarms, setCustomAlarms] = useState<any[]>(() => {
-    const saved = localStorage.getItem('salah_custom_alarms');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [alerts, setAlerts] = useState<any>(() => {
-    const saved = localStorage.getItem('salah_alerts');
-    return saved ? JSON.parse(saved) : {
-      before: { enabled: true, minutes: 10, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
-      after: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
-      duha: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6] }
-    };
-  });
-
-  const [audioVolume, setAudioVolume] = useState<number>(() => {
-    const saved = localStorage.getItem('salah_audio_volume');
-    return saved ? parseFloat(saved) : 0.8;
-  });
-
-  // Global Audio/Overlay States in App.tsx
-  const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
-  const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
-  const [isAthanPlaying, setIsAthanPlaying] = useState<boolean>(false);
-  const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
-
-  const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => {
-    return localStorage.getItem('salah_general_muezzin') || 'makkah';
-  });
-  const [fajrMuezzin, setFajrMuezzin] = useState<string>(() => {
-    return localStorage.getItem('salah_fajr_muezzin') || 'fajr_yusuf';
-  });
-
-  // Custom Alarm ringing overlay state
-  const [activeRingingAlarm, setActiveRingingAlarm] = useState<any | null>(null);
-
-  const globalAudioRef = React.useRef<HTMLAudioElement | null>(null);
-
-  // Portal of Serenity & Spiritual Breath States
-  const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
-  const [headerRippleActive, setHeaderRippleActive] = useState<boolean>(false);
-
-  // Premium spiritual floating particles state
-  interface HeaderParticle {
-    id: string;
-    x: number;
-    y: number;
-    rotate: number;
-    emoji: string;
-    scale: number;
-  }
-  const [headerParticles, setHeaderParticles] = useState<HeaderParticle[]>([]);
-
-  const triggerHeaderParticles = () => {
-    const emojis = ['✨', '⭐', '🌸', '🤍', '💚', '🕌'];
-    const newParticles: HeaderParticle[] = Array.from({ length: 10 }).map((_, idx) => {
-      // Create a beautiful upward arc layout
-      const angle = (Math.random() * 120 + 30) * (Math.PI / 180); // 30 to 150 degrees
-      const distance = Math.random() * 60 + 50; // 50px to 110px distance
-      const x = Math.cos(angle) * distance;
-      const y = -Math.sin(angle) * distance - 15; // Float upwards
-      
-      return {
-        id: `${Date.now()}-${idx}-${Math.random()}`,
-        x,
-        y,
-        rotate: Math.random() * 360 - 180,
-        emoji: emojis[Math.floor(Math.random() * emojis.length)],
-        scale: Math.random() * 0.5 + 0.7 // 0.7 to 1.2
-      };
-    });
-    
-    setHeaderParticles(newParticles);
-    // Auto clear after 1.5s
-    setTimeout(() => {
-      setHeaderParticles([]);
-    }, 1500);
-  };
-
-  const [sessionTasbihCount, setSessionTasbihCount] = useState<number>(0);
-  const [activeDhikrPhrase, setActiveDhikrPhrase] = useState<string>("سُبْحَانَ اللَّهِ");
-  const [isAmbientSoundOn, setIsAmbientSoundOn] = useState<boolean>(false);
-  const [currentCapsuleIndex, setCurrentCapsuleIndex] = useState<number>(0);
-
-  // PWA states and event listeners
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
-  const [showPwaInstallGuide, setShowPwaInstallGuide] = useState<boolean>(false);
-  const [showManualSteps, setShowManualSteps] = useState<boolean>(false);
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    // Check if running in standalone mode (already installed PWA)
-    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone) {
-      setIsInstalled(true);
-    }
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User response to install prompt: ${outcome}`);
-        setDeferredPrompt(null);
-      } catch (err) {
-        console.error("Installation prompt failed:", err);
-        setShowManualSteps(false);
-        setShowPwaInstallGuide(true);
-      }
-    } else {
-      setShowManualSteps(false);
-      setShowPwaInstallGuide(true);
-    }
-  };
-
-  const handleDirectInstallInsideModal = async () => {
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User response inside modal: ${outcome}`);
-        setDeferredPrompt(null);
-        setShowPwaInstallGuide(false);
-      } catch (err) {
-        console.error("Direct install inside modal failed:", err);
-      }
-    } else {
-      setToastMessage("عذراً، متصفحك يمنع التثبيت التلقائي حالياً (أو أنك تتصفح من داخل إطار المعاينة). تم تفعيل وعرض خطوات التثبيت اليدوي بالأسفل 📲");
-      setShowManualSteps(true);
-    }
-  };
 
   const handleShareApp = async () => {
     const shareData = {
@@ -528,131 +449,43 @@ export default function App() {
     }
   };
 
-  // Clock State & Real-time Prayer/Date Synchronizations
-  const [now, setNow] = useState<Date>(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Listen to spiritual notifications count dispatched from Dashboard
   useEffect(() => {
     const handleUpdateCount = (e: Event) => {
       const customEvent = e as CustomEvent<number>;
       setNotificationsCount(customEvent.detail || 0);
     };
+    const handlePrayerSettings = () => {
+      setActiveTab('settings');
+      setActiveSettingsSubTab('prayer');
+    };
     window.addEventListener('update-spiritual-notifications-count', handleUpdateCount);
+    window.addEventListener('open-prayer-settings', handlePrayerSettings);
     return () => {
       window.removeEventListener('update-spiritual-notifications-count', handleUpdateCount);
+      window.removeEventListener('open-prayer-settings', handlePrayerSettings);
     };
   }, []);
 
-  const hijri = getHijriDate(now, settings.hijriOffset);
-  const gregorianStr = formatGregorianFullDateArabic(now);
-  const times = calculatePrayerTimes(
-    now,
-    settings.latitude,
-    settings.longitude,
-    -now.getTimezoneOffset() / 60,
-    settings.calcMethod,
-    settings.madhab,
-    settings.prayerOffsets || {}
-  );
-  const { current, next, timeRemainingStr } = getCurrentAndNextPrayer(times, now);
-  const dayNamesArabic = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-  const dayNameArabic = dayNamesArabic[now.getDay()];
+  const { now, hijri, gregorianStr, times, current, next, timeRemainingStr, dayNameArabic } = usePrayerClock(settings);
 
-  // 1. Load data from LocalStorage on mount
+  // Request notification permission after app finishes loading
   useEffect(() => {
-    try {
-      const storedSettings = localStorage.getItem('mc_settings');
-      const storedPrayerLogs = localStorage.getItem('mc_prayer_logs');
-      const storedPendingQada = localStorage.getItem('mc_pending_qada');
-      const storedFasting = localStorage.getItem('mc_fasting_logs');
-      const storedRamadanQada = localStorage.getItem('mc_ramadan_qada');
-      const storedQuranSessions = localStorage.getItem('mc_quran_sessions');
-      const storedKhatmat = localStorage.getItem('mc_khatmat');
-      const storedDhikrLogs = localStorage.getItem('mc_dhikr_logs');
-      const storedCustomDuas = localStorage.getItem('mc_custom_duas');
-
-      if (storedSettings) {
-        try {
-          const parsed = JSON.parse(storedSettings);
-          setSettings(prev => ({ ...prev, ...parsed }));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedPrayerLogs) {
-        try {
-          setPrayerLogs(JSON.parse(storedPrayerLogs));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedPendingQada) {
-        try {
-          setPendingQadaPrayers(JSON.parse(storedPendingQada));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedFasting) {
-        try {
-          setFastingLogs(JSON.parse(storedFasting));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedRamadanQada) {
-        try {
-          const parsed = JSON.parse(storedRamadanQada);
-          setRamadanQada(prev => ({
-            daysOwed: typeof parsed.daysOwed === 'number' ? parsed.daysOwed : prev.daysOwed,
-            daysCompleted: typeof parsed.daysCompleted === 'number' ? parsed.daysCompleted : prev.daysCompleted,
-            trackMode: parsed.trackMode || prev.trackMode,
-            fidyaTarget: typeof parsed.fidyaTarget === 'number' ? parsed.fidyaTarget : prev.fidyaTarget,
-            fidyaCompleted: typeof parsed.fidyaCompleted === 'number' ? parsed.fidyaCompleted : prev.fidyaCompleted,
-          }));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedQuranSessions) {
-        try {
-          setQuranSessions(JSON.parse(storedQuranSessions));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedKhatmat) {
-        try {
-          setKhatmat(JSON.parse(storedKhatmat));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedDhikrLogs) {
-        try {
-          setDhikrLogs(JSON.parse(storedDhikrLogs));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (storedCustomDuas) {
-        try {
-          setCustomDuas(JSON.parse(storedCustomDuas));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    } catch (e) {
-      console.error('Error loading states from localStorage', e);
+    if (isLoaded && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
-    setIsLoaded(true);
-  }, []);
+  }, [isLoaded]);
+
+  // Sync 30-day prayer schedule in local background storage
+  useEffect(() => {
+    if (isLoaded) {
+      try {
+        syncUpcomingPrayerSchedule(settings);
+      } catch (e) {
+        console.error('Failed to sync 30-day prayer schedule:', e);
+      }
+    }
+  }, [isLoaded, settings.latitude, settings.longitude, settings.calcMethod, settings.madhab]);
 
   // Sync theme setting with document element classes
   useEffect(() => {
@@ -687,578 +520,17 @@ export default function App() {
     };
   }, [settings.theme]);
 
-  // 2. Persist state changes to LocalStorage
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_settings', JSON.stringify(settings));
-  }, [settings, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_prayer_logs', JSON.stringify(prayerLogs));
-  }, [prayerLogs, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_pending_qada', JSON.stringify(pendingQadaPrayers));
-  }, [pendingQadaPrayers, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_fasting_logs', JSON.stringify(fastingLogs));
-  }, [fastingLogs, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_ramadan_qada', JSON.stringify(ramadanQada));
-  }, [ramadanQada, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_quran_sessions', JSON.stringify(quranSessions));
-  }, [quranSessions, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_khatmat', JSON.stringify(khatmat));
-  }, [khatmat, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_dhikr_logs', JSON.stringify(dhikrLogs));
-  }, [dhikrLogs, isLoaded]);
- 
-  useEffect(() => {
-    if (!isLoaded) return;
-    localStorage.setItem('mc_custom_duas', JSON.stringify(customDuas));
-  }, [customDuas, isLoaded]);
-
-  useEffect(() => {
-    localStorage.setItem('salah_custom_alarms', JSON.stringify(customAlarms));
-  }, [customAlarms]);
-
-  useEffect(() => {
-    localStorage.setItem('salah_alerts', JSON.stringify(alerts));
-  }, [alerts]);
-
-  useEffect(() => {
-    localStorage.setItem('salah_audio_volume', audioVolume.toString());
-  }, [audioVolume]);
-
-  // Fetch custom muezzins on load
-  useEffect(() => {
-    getCustomAudios().then(tracks => {
-      setCustomMuezzins(tracks);
-    }).catch(err => {
-      console.error('Failed to load custom muezzins in App:', err);
-    });
-  }, []);
-
-  // Global Background Worker, Time-checking and Catch-up Engine
-  const checkTimesAndAlarms = React.useCallback((checkDate: Date, isCatchup = false) => {
-    const currentHour = checkDate.getHours();
-    const currentMin = checkDate.getMinutes();
-    const currentDay = checkDate.getDay();
-    const timeKey = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
-    const todayStr = checkDate.toISOString().split('T')[0];
-
-    // Calculate prayer times for checkDate
-    const currentTimes = calculatePrayerTimes(
-      checkDate,
-      settings.latitude,
-      settings.longitude,
-      -checkDate.getTimezoneOffset() / 60,
-      settings.calcMethod,
-      settings.madhab,
-      settings.prayerOffsets || {}
-    );
-
-    // 1. Check Adhans
-    const prayers: PrayerName[] = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-    for (const prayer of prayers) {
-      if (settings.adhanEnabled[prayer] === false) continue;
-      const prayerTimeStr = currentTimes[prayer];
-      if (prayerTimeStr) {
-        let isMatch = false;
-        if (isCatchup) {
-          const prayerMins = parseTimeToMinutes(prayerTimeStr);
-          const currentMins = currentHour * 60 + currentMin;
-          isMatch = currentMins >= prayerMins && currentMins <= prayerMins + 15;
-        } else {
-          isMatch = prayerTimeStr === timeKey;
-        }
-
-        if (isMatch) {
-          const playedKey = `salah_played_${todayStr}_${prayer}`;
-          if (!localStorage.getItem(playedKey)) {
-            localStorage.setItem(playedKey, 'true');
-            triggerAthan(prayer, currentTimes[prayer]);
-            break;
-          }
-        }
-      }
-    }
-
-    // 2. Check Custom Alarms
-    customAlarms.forEach(alarm => {
-      if (!alarm.enabled) return;
-      if (alarm.days.includes(currentDay)) {
-        let isMatch = false;
-        if (isCatchup) {
-          const alarmMins = parseTimeToMinutes(alarm.time);
-          const currentMins = currentHour * 60 + currentMin;
-          isMatch = currentMins >= alarmMins && currentMins <= alarmMins + 15;
-        } else {
-          isMatch = alarm.time === timeKey;
-        }
-
-        if (isMatch) {
-          const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
-          if (!localStorage.getItem(triggeredKey)) {
-            localStorage.setItem(triggeredKey, 'true');
-            triggerCustomAlarm(alarm);
-          }
-        }
-      }
-    });
-
-    // 3. Check Spiritual Alerts (Before/After/Duha)
-    // Before Prayer Alert
-    if (alerts.before?.enabled && alerts.before.days.includes(currentDay)) {
-      alerts.before.prayers.forEach((prayer: PrayerName) => {
-        const prayerTimeStr = currentTimes[prayer];
-        if (prayerTimeStr) {
-          const prayerMins = parseTimeToMinutes(prayerTimeStr);
-          const alertMins = prayerMins - alerts.before.minutes;
-          const currentMins = currentHour * 60 + currentMin;
-          
-          let isMatch = false;
-          if (isCatchup) {
-            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-          } else {
-            isMatch = currentMins === alertMins;
-          }
-
-          if (isMatch) {
-            const triggeredKey = `alert_before_${prayer}_${todayStr}`;
-            if (!localStorage.getItem(triggeredKey)) {
-              localStorage.setItem(triggeredKey, 'true');
-              triggerSpiritualAlert(`الاستعداد لصلاة ${getArabicPrayerName(prayer)}`, `حان موعد الاستعداد لصلاة ${getArabicPrayerName(prayer)} خلال ${alerts.before.minutes} دقائق.`);
-            }
-          }
-        }
-      });
-    }
-
-    // After Prayer Alert
-    if (alerts.after?.enabled && alerts.after.days.includes(currentDay)) {
-      alerts.after.prayers.forEach((prayer: PrayerName) => {
-        const prayerTimeStr = currentTimes[prayer];
-        if (prayerTimeStr) {
-          const prayerMins = parseTimeToMinutes(prayerTimeStr);
-          const alertMins = prayerMins + alerts.after.minutes;
-          const currentMins = currentHour * 60 + currentMin;
-
-          let isMatch = false;
-          if (isCatchup) {
-            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-          } else {
-            isMatch = currentMins === alertMins;
-          }
-
-          if (isMatch) {
-            const triggeredKey = `alert_after_${prayer}_${todayStr}`;
-            if (!localStorage.getItem(triggeredKey)) {
-              localStorage.setItem(triggeredKey, 'true');
-              triggerSpiritualAlert(`أذكار صلاة ${getArabicPrayerName(prayer)}`, `تذكير مبارك بقراءة الأذكار والسنن البعدية لصلاة ${getArabicPrayerName(prayer)}.`);
-            }
-          }
-        }
-      });
-    }
-
-    // Duha Prayer Alert
-    if (alerts.duha?.enabled && alerts.duha.days.includes(currentDay)) {
-      const sunriseStr = currentTimes['Sunrise'];
-      if (sunriseStr) {
-        const sunriseMins = parseTimeToMinutes(sunriseStr);
-        const alertMins = sunriseMins + alerts.duha.minutes;
-        const currentMins = currentHour * 60 + currentMin;
-
-        let isMatch = false;
-        if (isCatchup) {
-          isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-        } else {
-          isMatch = currentMins === alertMins;
-        }
-
-        if (isMatch) {
-          const triggeredKey = `alert_duha_${todayStr}`;
-          if (!localStorage.getItem(triggeredKey)) {
-            localStorage.setItem(triggeredKey, 'true');
-            triggerSpiritualAlert("صلاة الضحى (صلاة الأوابين) ☀️", `صلاة الضحى تجزئ عن صدقة كل سلامى من جسدك. حان الآن موعدها المبارك.`);
-          }
-        }
-      }
-    }
-  }, [customAlarms, alerts, settings, fajrMuezzin, currentMuezzin, audioVolume, customMuezzins]);
-
-  const handleRetryAudioWithLocal = () => {
-    setAudioError(null);
-    const isFajr = athanOverlayPrayer === 'Fajr';
-    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
-    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
-    const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
-    const fallbackUrl = isFajr 
-      ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-      : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-
-    if (globalAudioRef.current) {
-      try {
-        globalAudioRef.current.pause();
-      } catch (e) {
-        console.warn('Error pausing previous audio element:', e);
-      }
-    }
-
-    getAudioUrl(muezzinObj.url, muezzinObj.id).then((srcUrl) => {
-      const audioUrlToPlay = srcUrl || fallbackUrl;
-      console.log(`[Audio Retry]: Loading audio track: ${audioUrlToPlay}`);
-      const audio = new Audio(audioUrlToPlay);
-      globalAudioRef.current = audio;
-      audio.volume = audioVolume > 0 ? audioVolume : 1.0;
-
-      audio.addEventListener('play', () => {
-        setIsAthanPlaying(true);
-        setAudioError(null);
-      });
-
-      audio.addEventListener('pause', () => {
-        setIsAthanPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
-
-      audio.addEventListener('ended', () => {
-        setIsAthanPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
-
-      audio.onerror = (err) => {
-        console.error('[Audio Error Details]:', { error: err, src: audioUrlToPlay, prayer: athanOverlayPrayer });
-        setAudioError('تعذر تحميل صوت الأذان. يرجى التأكد من اتصال الإنترنت أو تحميل الأذان أوفلاين.');
-      };
-
-      audio.play().then(() => {
-        setIsAthanPlaying(true);
-        setAudioError(null);
-      }).catch((err: Error) => {
-        setAudioError(`فشل بدء التشغيل: ${err.message || 'حظر المتصفح الصوت'}`);
-      });
-    }).catch(() => {
-      setAudioError('تعذر الحصول على رابط الصوت.');
-    });
-  };
-
-  const triggerAthan = async (prayer: PrayerName, timeStr: string) => {
-    setAudioError(null);
-    // 1. Try Native Browser Notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)} 🕌`, {
-          body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
-          icon: '/favicon.ico',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error('Native notification error:', e);
-      }
-    }
-
-    // 2. Always show interactive In-App Toast Alert
-    setToastMessage(`🕌 حان الآن موعد صلاة ${getArabicPrayerName(prayer)} حسب توقيت ${settings.cityName || 'القاهرة'}!`);
-
-    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${prayer}`) || (prayer === 'Fajr' ? fajrMuezzin : currentMuezzin);
-    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
-    const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
-    
-    if (globalAudioRef.current) {
-      try {
-        globalAudioRef.current.pause();
-      } catch (e) {
-        console.warn('Error pausing previous global audio:', e);
-      }
-    }
-
-    const startAudioPlay = (srcUrl: string) => {
-      const audio = new Audio(srcUrl);
-      globalAudioRef.current = audio;
-      audio.volume = audioVolume;
-
-      const phraseTimings = [
-        { start: 0, end: 12 },
-        { start: 12, end: 24 },
-        { start: 24, end: 34 },
-        { start: 34, end: 44 },
-        { start: 44, end: 54 },
-        { start: 54, end: 64 },
-        { start: 64, end: 72 },
-        { start: 72, end: 80 },
-        { start: 80, end: 90 },
-        { start: 90, end: 100 },
-        { start: 100, end: 110 },
-        { start: 110, end: 120 }
-      ];
-
-      audio.addEventListener('play', () => {
-        setIsAthanPlaying(true);
-        setAudioError(null);
-      });
-
-      audio.addEventListener('pause', () => {
-        setIsAthanPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
-
-      audio.addEventListener('ended', () => {
-        setIsAthanPlaying(false);
-        setCurrentPhraseIdx(-1);
-      });
-
-      audio.addEventListener('timeupdate', () => {
-        const time = audio.currentTime;
-        const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-        setCurrentPhraseIdx(activeIdx);
-      });
-
-      audio.onerror = () => {
-        const onlineFallback = prayer === 'Fajr' 
-          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3' 
-          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-        if (srcUrl !== onlineFallback) {
-          console.warn(`[Audio Fallback]: Attempting fallback to online stream: ${onlineFallback}`);
-          startAudioPlay(onlineFallback);
-        } else {
-          setAudioError('تعذر تحميل صوت الأذان. يرجى التحقق من اتصال الإنترنت.');
-        }
-      };
-
-      setAthanOverlayPrayer(prayer);
-      setShowAthanOverlay(true);
-
-      audio.play().catch((e: Error) => {
-        if (e.name === 'NotAllowedError') {
-          setAudioError('حظر المتصفح التشغيل التلقائي للصوت (Autoplay Policy). انقر على زر "إعادة المحاولة" لفتح الصوت فوراً.');
-        } else {
-          setAudioError(`تعذر بدء الصوت تلقائياً: ${e.message || 'خطأ غير معروف'}. اضغط على "إعادة المحاولة" لتشغيل الصوت.`);
-        }
-      });
-    };
-
-    try {
-      const resolvedUrl = await getAudioUrl(muezzinObj.url, muezzinObj.id);
-      startAudioPlay(resolvedUrl);
-    } catch (err) {
-      console.error("Error resolving audio URL:", err);
-      const onlineFallback = prayer === 'Fajr' 
-        ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3' 
-        : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-      startAudioPlay(onlineFallback);
-    }
-  };
-
-  const triggerCustomAlarm = (alarm: any) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`تنبيه مخصص: ${alarm.title}`, {
-          body: `حان الآن موعد: ${alarm.title} (${toArabicNumbers(alarm.time)})`,
-          icon: '/favicon.ico',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    if (alarm.soundType !== 'silent') {
-      let soundUrl = 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-      if (alarm.soundType === 'beep') {
-        soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
-      } else if (alarm.soundType === 'vibrate') {
-        if ('vibrate' in navigator) {
-          navigator.vibrate([200, 100, 200]);
-        }
-      }
-
-      if (alarm.soundType !== 'vibrate') {
-        if (globalAudioRef.current) {
-          globalAudioRef.current.pause();
-        }
-
-        const audio = new Audio(soundUrl);
-        globalAudioRef.current = audio;
-        audio.volume = audioVolume;
-
-        audio.play().catch(e => console.error(e));
-      }
-    }
-
-    setActiveRingingAlarm(alarm);
-  };
-
-  const triggerSpiritualAlert = (title: string, body: string) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body: body,
-          icon: '/favicon.ico',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    const chimeUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
-    const audio = new Audio(chimeUrl);
-    audio.volume = audioVolume * 0.5;
-    audio.play().catch(e => console.error(e));
-
-    setToastMessage(`⏰ ${title}: ${body}`);
-  };
-
-  const athanPhrases = [
-    { text: 'الله أكبر، الله أكبر', duration: 10 },
-    { text: 'الله أكبر، الله أكبر', duration: 10 },
-    { text: 'أشهد أن لا إله إلا الله', duration: 12 },
-    { text: 'أشهد أن لا إله إلا الله', duration: 12 },
-    { text: 'أشهد أن محمداً رسول الله', duration: 12 },
-    { text: 'أشهد أن محمداً رسول الله', duration: 12 },
-    { text: 'حي على الصلاة', duration: 10 },
-    { text: 'حي على الصلاة', duration: 10 },
-    { text: 'حي على الفلاح', duration: 10 },
-    { text: 'حي على الفلاح', duration: 10 },
-    { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
-    { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
-    { text: 'الله أكبر، الله أكبر', duration: 10 },
-    { text: 'لا إله إلا الله', duration: 10 },
-  ];
-
-  const togglePlayAthanGlobal = async (muezzinId?: string, overridePrayer?: PrayerName) => {
-    setAudioError(null);
-    const prayerToUse = overridePrayer || athanOverlayPrayer;
-    const isFajr = prayerToUse === 'Fajr';
-    const isSunrise = prayerToUse === 'Sunrise';
-    const savedPrayerMuezzin = localStorage.getItem(`salah_muezzin_${prayerToUse}`);
-    const activeMuezzinId = muezzinId || savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
-    
-    if (isAthanPlaying) {
-      if (globalAudioRef.current) {
-        try {
-          globalAudioRef.current.pause();
-        } catch (e) {
-          console.warn('Error pausing audio:', e);
-        }
-      }
-      setIsAthanPlaying(false);
-      setCurrentPhraseIdx(-1);
-    } else {
-      const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
-      const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || (isFajr ? defaultMuezzins[0] : defaultMuezzins[4]);
-      
-      const playWithFallback = (srcUrl: string) => {
-        const audio = new Audio(srcUrl);
-        globalAudioRef.current = audio;
-        audio.volume = audioVolume > 0 ? audioVolume : 1.0;
-
-        audio.addEventListener('play', () => {
-          setIsAthanPlaying(true);
-          setAudioError(null);
-        });
-
-        audio.addEventListener('pause', () => {
-          setIsAthanPlaying(false);
-          setCurrentPhraseIdx(-1);
-        });
-
-        audio.addEventListener('ended', () => {
-          setIsAthanPlaying(false);
-          setCurrentPhraseIdx(-1);
-        });
-
-        // Track active phrase during adhan playback
-        const isFajrTrack = muezzinObj.isFajr || isFajr;
-        const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajrTrack);
-        let accumulatedTime = 0;
-        const phraseTimings = activePhrases.map(p => {
-          const start = accumulatedTime;
-          const end = accumulatedTime + p.duration;
-          accumulatedTime += p.duration;
-          return { text: p.text, start, end };
-        });
-
-        audio.addEventListener('timeupdate', () => {
-          const time = audio.currentTime;
-          const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
-          setCurrentPhraseIdx(activeIdx);
-        });
-
-        audio.onerror = () => {
-          const fallbackUrl = isFajr 
-            ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-            : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-          if (srcUrl !== fallbackUrl) {
-            playWithFallback(fallbackUrl);
-          } else {
-            setIsAthanPlaying(false);
-            setAudioError('تعذر تحميل أذان المؤذن. يرجى التحقق من الاتصال بالإنترنت.');
-          }
-        };
-
-        audio.play().catch((e: Error) => {
-          if (e.name === 'NotAllowedError') {
-            setAudioError('حظر المتصفح التشغيل التلقائي للصوت (Autoplay Policy). انقر على زر "إعادة المحاولة" لفتح الصوت.');
-            setIsAthanPlaying(false);
-          } else {
-            console.warn('Audio play failed, trying fallback track:', e);
-            const fallbackUrl = isFajr 
-              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-            if (srcUrl !== fallbackUrl) {
-              playWithFallback(fallbackUrl);
-            } else {
-              setIsAthanPlaying(false);
-              setAudioError('تعذر تشغيل الصوت.');
-            }
-          }
-        });
-      };
-
-      getAudioUrl(muezzinObj.url, muezzinObj.id).then(resolvedUrl => {
-        playWithFallback(resolvedUrl);
-      }).catch(err => {
-        console.error("Error resolving audio URL:", err);
-        const fallbackUrl = isFajr 
-          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-        playWithFallback(fallbackUrl);
-      });
-    }
-  };
-
   // Listen to simulation trigger globally
   useEffect(() => {
     const handleSimulationTrigger = (e: Event) => {
       const customEv = e as CustomEvent;
       const detail = customEv?.detail || {};
       const activePrayer = (detail.prayerName as PrayerName) || (current && current !== 'Sunrise' ? current : (next === 'Sunrise' ? 'Dhuhr' : next)) || 'Dhuhr';
-      const savedPrayerMuezzin = localStorage.getItem(`salah_muezzin_${activePrayer}`);
-      const isFajr = activePrayer === 'Fajr';
-      const targetMuezzinId = detail.muezzinId || savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
+      const muezzinId = detail.muezzinId as string | undefined;
 
       setAthanOverlayPrayer(activePrayer);
       setShowAthanOverlay(true);
 
-      // Stop any existing audio first to prevent overlapping or duplication
       if (globalAudioRef.current) {
         try {
           globalAudioRef.current.pause();
@@ -1267,88 +539,15 @@ export default function App() {
           console.warn('Error pausing audio:', err);
         }
       }
-      setIsAthanPlaying(false);
 
-      togglePlayAthanGlobal(targetMuezzinId, activePrayer);
+      togglePlayAthanGlobal(muezzinId, activePrayer);
     };
 
     window.addEventListener('trigger-athan-simulation', handleSimulationTrigger);
     return () => {
       window.removeEventListener('trigger-athan-simulation', handleSimulationTrigger);
     };
-  }, [current, next, fajrMuezzin, currentMuezzin, customMuezzins, audioVolume]);
-
-  const stopAthanGlobal = () => {
-    if (globalAudioRef.current) {
-      globalAudioRef.current.pause();
-    }
-    setIsAthanPlaying(false);
-    setCurrentPhraseIdx(-1);
-  };
-
-  // Background Web Worker and 1-second Interval Init
-  useEffect(() => {
-    let worker: Worker | null = null;
-    try {
-      const workerCode = `
-        let intervalId = null;
-        self.onmessage = function(e) {
-          if (e.data === 'start') {
-            if (intervalId) clearInterval(intervalId);
-            intervalId = setInterval(() => {
-              self.postMessage('tick');
-            }, 1000);
-          } else if (e.data === 'stop') {
-            if (intervalId) clearInterval(intervalId);
-            intervalId = null;
-          }
-        };
-      `;
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      worker = new Worker(URL.createObjectURL(blob));
-      
-      worker.onmessage = () => {
-        window.dispatchEvent(new CustomEvent('background-tick'));
-      };
-      
-      worker.postMessage('start');
-    } catch (err) {
-      console.warn("Background web worker failed to initialize:", err);
-    }
-    
-    const handleTick = () => {
-      const d = new Date();
-      setNow(d);
-      checkTimesAndAlarms(d, false);
-    };
-
-    window.addEventListener('background-tick', handleTick);
-
-    const mainInterval = setInterval(handleTick, 1000);
-
-    return () => {
-      if (worker) {
-        worker.postMessage('stop');
-        worker.terminate();
-      }
-      window.removeEventListener('background-tick', handleTick);
-      clearInterval(mainInterval);
-    };
-  }, [checkTimesAndAlarms]);
-
-  // Page visibility & wake up Catch-up check
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const d = new Date();
-        setNow(d);
-        checkTimesAndAlarms(d, true);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [checkTimesAndAlarms]);
+  }, [current, next, togglePlayAthanGlobal, setAthanOverlayPrayer, setShowAthanOverlay, globalAudioRef]);
 
   // Prohibited Fasting Days check and automatic cancellation
   useEffect(() => {
@@ -1392,10 +591,10 @@ export default function App() {
 
     if (logsModified) {
       setFastingLogs(newFastingLogs);
-      // Show warning to the user
-      alert(
-        `⚠️ تنبيه فقهي هام:\n\nيَحْرُم صيام أيام العيدين وأيام التشريق شرعاً.\nتم إلغاء صيام الأيام التالية تلقائياً من جدولك:\n\n${removedReasons.join('\n')}\n\nنسأل الله أن يتقبل طاعتكم وفرحكم بالعيد! 🤲🌸`
-      );
+      setFiqhWarning({
+        title: 'تنبيه فقهي هام',
+        removedReasons
+      });
     }
   }, [fastingLogs, isLoaded, settings.hijriOffset]);
 
@@ -1407,7 +606,7 @@ export default function App() {
     setSettings(finalSettings);
     
     // Log the starting prayer so they don't start with empty logs
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateStr(new Date());
     const initialLog: PrayerLog = {
       status: lastPrayerDone.wasOnTime ? 'A' : 'B',
       sunnahBefore: 0,
@@ -1433,7 +632,15 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] flex flex-col items-center justify-center text-center space-y-4" dir="rtl">
         <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse bg-[#16202c]">
-          <img src={companionIcon} alt="Muslim Companion Logo" className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
+          <img 
+            src={companionIcon} 
+            alt="Muslim Companion Logo" 
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = '/muslim_companion_icon.jpg';
+            }}
+            className="w-full h-full object-contain p-1" 
+            referrerPolicy="no-referrer" 
+          />
         </div>
         <div className="space-y-1">
           <h2 className="text-lg font-black text-slate-800 dark:text-white">رفيق المسلم</h2>
@@ -1527,17 +734,37 @@ export default function App() {
                     setShowSpiritualModal(true);
                   }, 250);
                 }}
-                className="relative w-10 h-10 md:w-11 md:h-11 rounded-2xl overflow-hidden border-2 border-emerald-500/30 dark:border-amber-400/40 flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-emerald-500/10 focus:outline-hidden z-10 transition-all duration-300 bg-slate-900"
-                title="اضغط لتفتح بوابة النفحات والسكينة الإيمانية 🌸"
+                className="relative w-10 h-10 md:w-11 md:h-11 rounded-2xl overflow-hidden border-2 border-emerald-500/40 dark:border-amber-400/50 flex items-center justify-center shrink-0 cursor-pointer shadow-md shadow-emerald-500/20 focus:outline-hidden z-10 transition-all duration-300 bg-[#121d2a]"
+                title="اضغط لتفتح بوابة النفحات الإيمانية 🌸"
               >
                 <img 
                   src={companionIcon} 
                   alt="رفيق المسلم" 
-                  className="w-full h-full object-cover select-none transition-transform duration-300 hover:scale-105"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/muslim_companion_icon.jpg';
+                  }}
+                  className="w-full h-full object-contain p-0.5 select-none transition-transform duration-300 hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
                 <span className="absolute inset-0 ring-1 ring-inset ring-white/20 rounded-2xl pointer-events-none" />
-                <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]" />
+                
+                {/* Dynamic Smart Network & Sync Status Indicator Dot */}
+                {isSyncing ? (
+                  <span 
+                    className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-amber-400 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_10px_#f59e0b] animate-ping"
+                    title="جاري التحديث ومزامنة المواقيت أونلاين... 🟡"
+                  />
+                ) : isOnline ? (
+                  <span 
+                    className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]"
+                    title="متصل بالشبكة - الخدمة أونلاين 🟢"
+                  />
+                ) : (
+                  <span 
+                    className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#f43f5e] animate-pulse"
+                    title="غير متصل بالشبكة - يعمل أوفلاين بالكامل 🔴"
+                  />
+                )}
               </motion.button>
             </div>
 
@@ -1546,33 +773,25 @@ export default function App() {
                 <h1 className="text-xs md:text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">رفيق المسلم</h1>
                 <span className="text-[8px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1 py-0.2 rounded border border-amber-500/25 shrink-0">المطور</span>
               </div>
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('trigger-gps-sync'));
-                }}
-                className="text-[9px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-0.5 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer truncate mt-0.5"
-                title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
-              >
-                <MapPin className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
-                <span className="truncate">{settings.cityName || 'الإسكندرية'}</span>
-              </button>
+              <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('trigger-gps-sync'));
+                  }}
+                  className="text-[9px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-0.5 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer truncate"
+                  title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
+                >
+                  <MapPin className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                  <span className="truncate max-w-[80px] sm:max-w-[120px]">{settings.cityName || 'الإسكندرية'}</span>
+                </button>
+                <WeatherWidget lat={settings.latitude} lng={settings.longitude} />
+              </div>
             </div>
           </div>
         </div>
         
-        {/* Left side: Integrated Actions Panel */}
-        <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-          {/* Download / Install App Button */}
-          {!isInstalled && (
-            <button 
-              onClick={handleInstallApp}
-              className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
-              title="تنزيل رفيق المسلم كـ App 📱"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          )}
-
+        {/* Left side: Streamlined High-Priority Action Panel */}
+        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
           {/* Minaret / Athan Simulator Button */}
           <button 
             onClick={() => {
@@ -1591,23 +810,15 @@ export default function App() {
             </svg>
           </button>
 
-          {/* Notifications Bell Button */}
+          {/* Interactive Feature Guide Tour Button */}
           <button 
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
-            }}
-            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative shadow-2xs"
-            title="النفحات والإشعارات الإيمانية 🔔"
+            onClick={() => setIsTourModalOpen(true)}
+            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-gradient-to-br from-indigo-500/15 to-purple-500/15 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative shadow-2xs group"
+            title="جولة تفاعلية في مزايا التطبيق 💡"
           >
-            <Bell className="w-4 h-4" />
-            {notificationsCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs border-2 border-white dark:border-[#121820] animate-pulse">
-                {(() => {
-                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
-                })()}
-              </span>
-            )}
+            <Lightbulb className="w-4 h-4 text-indigo-600 dark:text-indigo-300 group-hover:scale-110 transition-transform" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
           </button>
 
           {/* Theme toggle button */}
@@ -1678,6 +889,7 @@ export default function App() {
               dhikrLogs={dhikrLogs}
               quranSessions={quranSessions}
               khatmat={khatmat}
+              onNavigateTab={(tab) => setActiveTab(tab as any)}
             />
           </div>
         )}
@@ -1708,6 +920,19 @@ export default function App() {
             setDhikrLogs={setDhikrLogs}
             currentPrayer={current}
             prayerTimes={times}
+            onNavigateTab={(tab) => {
+              if (tab === 'settings' || tab === 'prayer' || tab === 'adhan') {
+                setActiveTab('settings');
+                if (tab === 'prayer' || tab === 'adhan') {
+                  setActiveSettingsSubTab(tab as any);
+                }
+              } else {
+                setActiveTab(tab as any);
+              }
+            }}
+            onOpenNotificationsModal={() => {
+              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+            }}
           />
         )}
 
@@ -1726,6 +951,7 @@ export default function App() {
             setFastingLogs={setFastingLogs}
             ramadanQada={ramadanQada}
             setRamadanQada={setRamadanQada}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
           />
         )}
 
@@ -1786,6 +1012,24 @@ export default function App() {
             settings={settings}
             prayerLogs={prayerLogs}
             setPrayerLogs={setPrayerLogs}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
+          />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnalyticsDashboard
+            onSelectTab={(tab) => setActiveTab(tab as any)}
+          />
+        )}
+
+        {activeTab === 'moon' && (
+          <MoonPhases
+            now={now}
+            hijriDay={hijri.day}
+            hijriMonthName={hijri.monthName}
+            hijriYear={hijri.year}
+            cityName={settings.cityName}
+            toArabicNumbers={toArabicNumbers}
             onNavigateTab={(tab) => setActiveTab(tab as any)}
           />
         )}
@@ -1893,6 +1137,8 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-1">
                     {[
                       { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
+                      { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
+                      { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
                       { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
                       { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
                       { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
@@ -1932,9 +1178,10 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-1">
                     {[
                       { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
+                      { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
                       { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
                       { id: 'calendar', label: 'تعديل التقويم الهجري', icon: Calendar },
-                      { id: 'theme', label: 'مظهر التطبيق والموقع الجغرافي', icon: Settings },
+                      { id: 'theme', label: 'مظهر التطبيق وشكل الساعة', icon: Settings },
                       { id: 'qada', label: 'سجل القضاء وتتبع الفوائت', icon: Clock },
                       { id: 'duas', label: 'الأدعية المخصصة المحفوظة', icon: Heart },
                       { id: 'backup', label: 'نسخ احتياطي واسترداد البيانات', icon: RotateCcw },
@@ -1961,6 +1208,27 @@ export default function App() {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Feature Discovery Tour Launch Card inside Sidebar */}
+                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-right">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+                    <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">دليل وجولة مزايا التطبيق 💡</span>
+                  </div>
+                  <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                    تعرف على كافة الخدمات المميزة خطوة بخطوة عبر جولة تفاعلية سريعة وشاملة.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsSidebarOpen(false);
+                      setIsTourModalOpen(true);
+                    }}
+                    className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-[10.5px] rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Lightbulb className="w-3.5 h-3.5" />
+                    <span>بدء الجولة التفاعلية ✨</span>
+                  </button>
                 </div>
 
                 {/* Share App Action inside Sidebar */}
@@ -2019,37 +1287,72 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 3. Standard Fixed Bottom Navigation (Exactly 3 focused tabs: Home, Calendar, and Qibla) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#161d26] border-t border-[#e2e8f0] dark:border-slate-800/80 py-2.5 px-2 shadow-lg z-40 flex justify-around items-center w-full max-w-md mx-auto rounded-t-3xl transition-colors duration-300">
+      {/* 3. Rebalanced Fixed Bottom Navigation (5 Primary High-Priority Tabs) */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-[#161d26]/95 backdrop-blur-md border-t border-[#e2e8f0] dark:border-slate-800/80 py-2 px-1 shadow-xl z-40 flex justify-around items-center w-full max-w-md mx-auto rounded-t-3xl transition-colors duration-300">
         
+        {/* 1. Home / Dashboard */}
         <button
           onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${
-            activeTab === 'home' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
+            activeTab === 'home' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
           <Home className="w-5 h-5" />
-          <span className="text-[10px] leading-none font-bold">الرئيسية</span>
+          <span className="text-[9.5px] leading-none font-bold">الرئيسية</span>
         </button>
 
+        {/* 2. Adhkar & Remembrance */}
         <button
-          onClick={() => setActiveTab('calendar')}
-          className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${
-            activeTab === 'calendar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+          onClick={() => setActiveTab('adhkar')}
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
+            activeTab === 'adhkar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
-          <Calendar className="w-5 h-5" />
-          <span className="text-[10px] leading-none font-bold">التقويم</span>
+          <BookOpen className="w-5 h-5" />
+          <span className="text-[9.5px] leading-none font-bold">الأذكار</span>
         </button>
 
+        {/* 3. Qibla Compass */}
         <button
           onClick={() => setActiveTab('qibla')}
-          className={`flex flex-col items-center gap-1 cursor-pointer transition-colors ${
-            activeTab === 'qibla' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
+            activeTab === 'qibla' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
           <Compass className="w-5 h-5" />
-          <span className="text-[10px] leading-none font-bold">القبلة</span>
+          <span className="text-[9.5px] leading-none font-bold">القبلة</span>
+        </button>
+
+        {/* 4. Hijri Calendar */}
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
+            activeTab === 'calendar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+        >
+          <Calendar className="w-5 h-5" />
+          <span className="text-[9.5px] leading-none font-bold">التقويم</span>
+        </button>
+
+        {/* 5. Spiritual Notifications & Blessings */}
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+          }}
+          className="flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 relative"
+        >
+          <div className="relative">
+            <Bell className="w-5 h-5" />
+            {notificationsCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[7.5px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white dark:border-[#161d26] animate-pulse">
+                {(() => {
+                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+                })()}
+              </span>
+            )}
+          </div>
+          <span className="text-[9.5px] leading-none font-bold">النفحات</span>
         </button>
 
       </nav>
@@ -2077,312 +1380,20 @@ export default function App() {
       </AnimatePresence>
 
       {/* PWA Installation Guide Modal */}
-      <AnimatePresence>
-        {showPwaInstallGuide && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" dir="rtl">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-[#161d26] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-right"
-            >
-              <button
-                onClick={() => setShowPwaInstallGuide(false)}
-                className="absolute top-4 left-4 w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer text-xs font-bold"
-              >
-                ✕
-              </button>
+      <PwaInstallModal
+        isOpen={showPwaInstallGuide}
+        onClose={() => setShowPwaInstallGuide(false)}
+        showManualSteps={showManualSteps}
+        setShowManualSteps={setShowManualSteps}
+        onDirectInstall={() => handleDirectInstallInsideModal(setToastMessage)}
+      />
 
-              <div className="text-center space-y-2 mb-5">
-                <span className="text-4xl block animate-bounce">⚡</span>
-                <h3 className="text-sm font-black text-slate-800 dark:text-white">تثبيت تطبيق رفيق المسلم</h3>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">استمتع بتجربة تطبيق كامل ومنفصل بمميزات رائعة وبأسرع وقت</p>
-              </div>
-
-              {/* Main Direct Install Action */}
-              <div className="space-y-3 mb-4">
-                <button
-                  onClick={handleDirectInstallInsideModal}
-                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-black text-xs rounded-2xl transition-all shadow-md active:scale-[0.98] cursor-pointer text-center flex items-center justify-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>تثبيت التطبيق تلقائياً الآن 📥</span>
-                </button>
-
-                <button
-                  onClick={() => setShowManualSteps(!showManualSteps)}
-                  className="w-full py-2 px-3 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-extrabold text-[10px] bg-slate-50 dark:bg-slate-800/50 rounded-xl transition-all cursor-pointer text-center"
-                >
-                  {showManualSteps ? "إخفاء خطوات التثبيت اليدوي ✕" : "مشاهدة خطوات التثبيت اليدوي البديلة 📋"}
-                </button>
-              </div>
-
-              {/* Collapsible Manual Steps */}
-              {showManualSteps && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800/60 overflow-hidden"
-                >
-                  {/* Option 1: iOS Safari */}
-                  <div className="border-b border-slate-100 dark:border-slate-800/60 pb-3">
-                    <h4 className="text-xs font-black text-indigo-600 dark:text-indigo-400 mb-1.5 flex items-center gap-1">
-                      <span>🍎 أجهزة آيفون وآيباد (iOS Safari):</span>
-                    </h4>
-                    <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
-                      <li>اضغط على زر المشاركة 📤 في أسفل أو أعلى المتصفح.</li>
-                      <li>اختر "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) ➕.</li>
-                      <li>اضغط على "إضافة" (Add) في الزاوية لتثبيته.</li>
-                    </ul>
-                  </div>
-
-                  {/* Option 2: Android / Chrome */}
-                  <div className="pb-1">
-                    <h4 className="text-xs font-black text-emerald-600 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
-                      <span>🤖 أجهزة أندرويد والكمبيوتر:</span>
-                    </h4>
-                    <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
-                      <li>انقر على قائمة المتصفح (الثلاث نقاط ⋮) في الزاوية.</li>
-                      <li>اختر "تثبيت التطبيق" (Install App).</li>
-                      <li>قم بتأكيد التثبيت ليظهر على الشاشة الرئيسية!</li>
-                    </ul>
-                  </div>
-                </motion.div>
-              )}
-
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-2">
-                <button
-                  onClick={() => setShowPwaInstallGuide(false)}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl transition-all shadow-sm cursor-pointer text-center"
-                >
-                  فهمت، شكراً لك 🤍
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* بوابة السكينة والنفحات الإيمانية */}
-      <AnimatePresence>
-        {showSpiritualModal && (
-          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-right flex flex-col items-center gap-5 text-white overflow-hidden"
-            >
-              {/* Background Glow */}
-              <div className="absolute top-0 inset-x-0 h-40 bg-radial-[at_top] from-emerald-500/20 via-transparent to-transparent pointer-events-none" />
-
-              {/* Header inside Modal */}
-              <div className="w-full flex items-center justify-between z-10">
-                <button
-                  onClick={() => {
-                    setShowSpiritualModal(false);
-                    setIsAmbientSoundOn(false);
-                    toggleAmbientHealingFrequency(false);
-                    if ('speechSynthesis' in window) {
-                      window.speechSynthesis.cancel();
-                    }
-                  }}
-                  className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-slate-300 transition-all cursor-pointer active:scale-95 text-sm font-black"
-                >
-                  ✕
-                </button>
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse" />
-                  <span className="text-xs font-black text-emerald-300 tracking-wide">بوابة السكينة والنفحات 🌸</span>
-                </div>
-              </div>
-
-              {/* Glowing Interactive Brand Avatar */}
-              <div className="relative mt-2 z-10 flex flex-col items-center">
-                <motion.div
-                  animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.7, 0.3] }}
-                  transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
-                  className="absolute inset-0 bg-emerald-500/10 rounded-full blur-md"
-                />
-                
-                <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400/40 bg-slate-900 shadow-lg relative">
-                  <img 
-                    src={companionIcon} 
-                    alt="رفيق المسلم" 
-                    className="w-full h-full object-cover select-none"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                
-                <h3 className="text-sm font-black text-white mt-3 text-center">سكينة الروح والوجدان</h3>
-                <p className="text-[10px] text-slate-400 font-extrabold text-center mt-1">«أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ»</p>
-              </div>
-
-              {/* 1. Interactive Tasbih Rosary Bead */}
-              <div className="w-full bg-slate-900/60 border border-slate-800/80 rounded-3xl p-4 flex flex-col items-center gap-3.5 z-10">
-                <span className="text-[10px] font-black text-emerald-400">مسبحة السكينة التفاعلية 📿</span>
-                
-                {/* Circular Bead Button */}
-                <div className="relative flex items-center justify-center w-28 h-28">
-                  <motion.div
-                    animate={{ scale: [1, 1.4, 1], opacity: [0.15, 0, 0.15] }}
-                    transition={{ repeat: Infinity, duration: 2.2, ease: "linear" }}
-                    className="absolute inset-0 rounded-full bg-emerald-500 border border-emerald-500/30"
-                  />
-                  <motion.div
-                    animate={{ scale: [1, 1.25, 1] }}
-                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                    className="absolute inset-2 rounded-full bg-indigo-500/10 border border-indigo-500/20"
-                  />
-                  
-                  <motion.button
-                    whileTap={{ scale: 0.90 }}
-                    onClick={() => {
-                      const nextCount = sessionTasbihCount + 1;
-                      setSessionTasbihCount(nextCount);
-                      if (navigator.vibrate) {
-                        navigator.vibrate(45);
-                      }
-                      const pitch = 392.00 * Math.pow(1.059463, (nextCount - 1) % 33);
-                      playSpiritualChime(pitch);
-                    }}
-                    className="relative w-22 h-22 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 hover:from-emerald-500 hover:to-teal-300 border-3 border-emerald-300/35 flex flex-col items-center justify-center cursor-pointer shadow-[0_10px_25px_rgba(16,185,129,0.3)] select-none focus:outline-hidden group"
-                  >
-                    <span className="text-[9px] font-black text-emerald-100 uppercase tracking-widest group-hover:scale-105 transition-all">اضغط وسبّح</span>
-                    <span className="text-xl font-black text-white mt-1 tracking-tight">
-                      {(() => {
-                        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-                        return sessionTasbihCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
-                      })()}
-                    </span>
-                  </motion.button>
-                </div>
-
-                {/* Phrase pill switcher */}
-                <div className="w-full flex flex-wrap items-center justify-center gap-1.5 pt-2">
-                  {["سُبْحَانَ اللَّهِ", "الْحَمْدُ لِلَّهِ", "لَا إِلَٰهَ إِلَّا اللَّهُ", "اللَّهُ أَكْبَرُ", "أَسْتَغْفِرُ اللَّهَ"].map((phrase) => (
-                    <button
-                      key={phrase}
-                      onClick={() => {
-                        setActiveDhikrPhrase(phrase);
-                        setSessionTasbihCount(0);
-                        playSpiritualChime(523.25);
-                      }}
-                      className={`px-3 py-1 rounded-full text-[9px] font-black transition-all cursor-pointer ${
-                        activeDhikrPhrase === phrase 
-                          ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20' 
-                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 border border-slate-700/50'
-                      }`}
-                    >
-                      {phrase}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Reset button */}
-                {sessionTasbihCount > 0 && (
-                  <button
-                    onClick={() => {
-                      setSessionTasbihCount(0);
-                      playSpiritualChime(329.63);
-                    }}
-                    className="text-[9px] font-black text-slate-400 hover:text-rose-400 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
-                  >
-                    <RotateCcw className="w-2.5 h-2.5" />
-                    <span>تصفير العداد</span>
-                  </button>
-                )}
-              </div>
-
-              {/* 2. Daily Spiritual Capsule (النفحة الإيمانية) */}
-              <div className="w-full bg-emerald-500/[0.03] border border-emerald-500/15 rounded-3xl p-4 relative text-center z-10">
-                <span className="text-emerald-500/20 text-4xl font-serif absolute top-1 right-3 leading-none">“</span>
-                <span className="text-[10px] font-black text-emerald-400/80 block mb-2">{SPIRITUAL_CAPSULES[currentCapsuleIndex].category}</span>
-                <p className="text-xs font-black text-emerald-100/90 leading-relaxed px-2 py-1 select-text">
-                  {SPIRITUAL_CAPSULES[currentCapsuleIndex].text}
-                </p>
-                <span className="text-[9px] text-emerald-400/75 font-extrabold block mt-2">
-                  — {SPIRITUAL_CAPSULES[currentCapsuleIndex].source}
-                </span>
-                
-                <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-emerald-500/10">
-                  <button 
-                    onClick={() => speakSpiritualText(SPIRITUAL_CAPSULES[currentCapsuleIndex].text)}
-                    className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer"
-                    title="استمع للنفحة بصوت عذب 🔊"
-                  >
-                    <Volume2 className="w-3.5 h-3.5" />
-                  </button>
-                  
-                  <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${SPIRITUAL_CAPSULES[currentCapsuleIndex].text} - ${SPIRITUAL_CAPSULES[currentCapsuleIndex].source}`);
-                      setToastMessage("تم نسخ النفحة الإيمانية بنجاح 📋");
-                    }}
-                    className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer"
-                    title="نسخ النفحة الإيمانية 📋"
-                  >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                  
-                  <button 
-                    onClick={() => {
-                      const nextIndex = (currentCapsuleIndex + 1) % SPIRITUAL_CAPSULES.length;
-                      setCurrentCapsuleIndex(nextIndex);
-                      playSpiritualChime(587.33);
-                    }}
-                    className="p-2 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[9px] font-black px-3"
-                  >
-                    <Sparkles className="w-3 h-3 text-emerald-400" />
-                    <span>نفحة أخرى ✨</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. Ambient Healing Frequency Toggle */}
-              <div className="w-full bg-slate-900/60 border border-slate-800 rounded-3xl p-4 flex items-center justify-between z-10">
-                <div className="flex flex-col items-start text-right">
-                  <span className="text-[11px] font-black text-indigo-300">تردد السكينة الكوني (432Hz) 🧘‍♂️</span>
-                  <span className="text-[9px] text-slate-400 font-extrabold leading-normal mt-0.5">موجات إيمانية عميقة لطرد القلق ومساعدة الروح على التركيز</span>
-                </div>
-                <button
-                  onClick={() => {
-                    const nextState = !isAmbientSoundOn;
-                    setIsAmbientSoundOn(nextState);
-                    toggleAmbientHealingFrequency(nextState);
-                  }}
-                  className={`px-3.5 py-1.5 rounded-xl text-[10px] font-black cursor-pointer transition-all active:scale-95 flex items-center gap-1 ${
-                    isAmbientSoundOn 
-                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-500/25 border border-indigo-400/30' 
-                      : 'bg-slate-800 text-slate-300 border border-slate-700/60 hover:bg-slate-700'
-                  }`}
-                >
-                  <span>{isAmbientSoundOn ? "شغال 🟢" : "تشغيل ⏸️"}</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowSpiritualModal(false);
-                  setIsAmbientSoundOn(false);
-                  toggleAmbientHealingFrequency(false);
-                  if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
-                  }
-                }}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-slate-950 font-black text-xs rounded-2xl transition-all shadow-md active:scale-[0.98] cursor-pointer text-center z-10"
-              >
-                العودة للتطبيق ومواصلة الذكر 🤲
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* بوابة النفحات الإيمانية */}
+      <SpiritualPortalModal
+        isOpen={showSpiritualModal}
+        onClose={() => setShowSpiritualModal(false)}
+        setToastMessage={setToastMessage}
+      />
 
       {/* Global Immersive Athan Overlay Screen */}
       <AthanOverlay 
@@ -2407,66 +1418,80 @@ export default function App() {
       />
 
       {/* Global Custom Alarm Ringing Modal */}
-      {activeRingingAlarm && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" dir="rtl">
-          <div className="bg-white dark:bg-[#161d26] border border-indigo-500/30 w-full max-w-sm rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
-            
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 animate-bounce">
-              <Bell className="w-8 h-8" />
-            </div>
+      <CustomAlarmOverlay
+        activeRingingAlarm={activeRingingAlarm}
+        onSnooze={() => {
+          if (globalAudioRef.current) {
+            globalAudioRef.current.pause();
+          }
+          const snoozedAlarm = {
+            ...activeRingingAlarm,
+            id: `snooze_${Date.now()}`,
+            title: `${activeRingingAlarm.title} (غفوة)`,
+            time: (() => {
+              const d = new Date();
+              d.setMinutes(d.getMinutes() + 5);
+              return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            })(),
+            days: [new Date().getDay()],
+            enabled: true,
+            soundType: activeRingingAlarm.soundType
+          };
+          setCustomAlarms((prev: any[]) => [...prev, snoozedAlarm]);
+          setActiveRingingAlarm(null);
+          setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
+        }}
+        onStop={() => {
+          if (globalAudioRef.current) {
+            globalAudioRef.current.pause();
+          }
+          setActiveRingingAlarm(null);
+        }}
+      />
 
-            <div className="space-y-1.5">
-              <h3 className="text-base font-black text-slate-800 dark:text-white">تنبيه مخصص: {activeRingingAlarm.title}</h3>
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 font-black font-mono">الوقت الحالي: {toArabicNumbers(activeRingingAlarm.time)}</p>
+      {/* Fiqh Warning Modal for prohibited fasting days */}
+      {fiqhWarning && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn" dir="rtl">
+          <div className="bg-white dark:bg-[#18202c] border border-amber-500/30 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-right">
+            <div className="flex items-center gap-2.5 text-amber-600 dark:text-amber-400 font-black text-base">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+              <h3>{fiqhWarning.title}</h3>
             </div>
-
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold leading-relaxed">
-              تذكير مبارك من رفيق المسلم للقيام بالعبادة المخصصة والتقرب إلى الله سبحانه وتعالى.
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-bold leading-relaxed">
+              يَحْرُم صيام أيام العيدين وأيام التشريق شرعاً. تم إلغاء صيام الأيام التالية تلقائياً من جدولك:
             </p>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (globalAudioRef.current) {
-                    globalAudioRef.current.pause();
-                  }
-                  const snoozedAlarm = {
-                    ...activeRingingAlarm,
-                    id: `snooze_${Date.now()}`,
-                    title: `${activeRingingAlarm.title} (غفوة)`,
-                    time: (() => {
-                      const d = new Date();
-                      d.setMinutes(d.getMinutes() + 5);
-                      return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                    })(),
-                    days: [new Date().getDay()],
-                    enabled: true,
-                    soundType: activeRingingAlarm.soundType
-                  };
-                  setCustomAlarms(prev => [...prev, snoozedAlarm]);
-                  setActiveRingingAlarm(null);
-                  setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
-                }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-black cursor-pointer transition-all active:scale-95"
-              >
-                تأجيل ٥ دقائق
-              </button>
-              <button
-                onClick={() => {
-                  if (globalAudioRef.current) {
-                    globalAudioRef.current.pause();
-                  }
-                  setActiveRingingAlarm(null);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md cursor-pointer transition-all active:scale-95"
-              >
-                إيقاف الرنين
-              </button>
+            <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 font-bold space-y-1">
+              {fiqhWarning.removedReasons.map((reason, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <span>•</span>
+                  <span>{reason}</span>
+                </div>
+              ))}
             </div>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-black text-center">
+              نسأل الله أن يتقبل طاعتكم وفرحكم بالعيد! 🤲🌸
+            </p>
+            <button
+              onClick={() => setFiqhWarning(null)}
+              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs rounded-xl transition-all shadow-md cursor-pointer"
+            >
+              فهمت
+            </button>
           </div>
         </div>
       )}
+
+      {/* Feature Tour Guide Modal */}
+      <FeatureTourModal
+        isOpen={isTourModalOpen}
+        onClose={() => setIsTourModalOpen(false)}
+        onSelectTab={(tab, subTab) => {
+          setActiveTab(tab as any);
+          if (subTab) {
+            setActiveSettingsSubTab(subTab as any);
+          }
+        }}
+      />
 
     </div>
   );

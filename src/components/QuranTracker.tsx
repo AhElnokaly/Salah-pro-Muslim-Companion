@@ -233,23 +233,82 @@ export default function QuranTracker({
                 const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 const daysRemaining = Math.max(1, activeKhatma.durationDays - diffDays);
                 const suggestedPages = Math.ceil((activeKhatma.totalPages - activeKhatma.currentPage) / daysRemaining);
+                const perPrayerPages = Math.max(1, Math.ceil(suggestedPages / 5));
                 const isBehind = activeKhatma.currentPage < (activeKhatma.totalPages / activeKhatma.durationDays) * Math.min(activeKhatma.durationDays, diffDays + 1);
 
+                const handleQuickAdd = (pagesToAdd: number) => {
+                  const newPage = Math.min(604, activeKhatma.currentPage + pagesToAdd);
+                  const status = newPage >= 604 ? 'completed' : 'active';
+                  
+                  // Log session
+                  const newSession: QuranSession = {
+                    id: crypto.randomUUID(),
+                    date: new Date().toISOString().split('T')[0],
+                    sessionType: 'read',
+                    khatmaId: activeKhatma.id,
+                    unitType: 'pages',
+                    unitValue: pagesToAdd
+                  };
+                  setQuranSessions(prev => [newSession, ...prev]);
+
+                  setKhatmat(prev => prev.map(k => k.id === activeKhatma.id ? { ...k, currentPage: newPage, status } : k));
+                };
+
                 return (
-                  <div className="space-y-2">
-                    <div className="p-4 bg-amber-50/60 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200">
+                  <div className="space-y-4">
+                    {/* Target Banner */}
+                    <div className="p-4 bg-amber-50/70 dark:bg-amber-950/25 rounded-2xl border border-amber-100 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200 space-y-2">
                       <div className="flex items-start gap-2 text-right">
-                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                        <div className="space-y-1.5">
+                        <Sparkles className="w-4.5 h-4.5 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1.5 flex-1">
                           <span className="font-semibold leading-relaxed block">
-                            معدلك اليومي المقترح لإتمام الختمة في وقتها: <span className="font-black text-amber-700 dark:text-amber-400">{toArabicNumbers(suggestedPages)} {suggestedPages > 10 ? 'صفحة' : 'صفحات'} يومياً</span> (متبقي {toArabicNumbers(daysRemaining)} {daysRemaining > 10 ? 'يوم' : 'أيام'})
+                            المعدل اليومي المقترح لإتمام الختمة: <span className="font-black text-amber-700 dark:text-amber-400">{toArabicNumbers(suggestedPages)} {suggestedPages > 10 ? 'صفحة' : 'صفحات'} يومياً</span> (متبقي {toArabicNumbers(daysRemaining)} {daysRemaining > 10 ? 'يوم' : 'أيام'})
                           </span>
+                          <div className="flex items-center gap-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold bg-amber-100/60 dark:bg-amber-900/50 py-1 px-2.5 rounded-lg w-fit">
+                            <span>🕌 ورد كل صلاة:</span>
+                            <span className="text-amber-900 dark:text-amber-200">{toArabicNumbers(perPrayerPages)} {perPrayerPages > 10 ? 'صفحة' : 'صفحات'} بعد كل صلاة مكتوبة</span>
+                          </div>
                           {isBehind && (
-                            <span className="text-[10px] text-amber-800/80 dark:text-amber-300/85 font-semibold block leading-relaxed">
+                            <span className="text-[10px] text-amber-800/80 dark:text-amber-300/85 font-semibold block leading-relaxed pt-1">
                               💡 تم إعادة توزيع الصفحات الفائتة بهدوء ولطف على الأيام المتبقية، لتبدأ من جديد دون أي ضغط أو إحساس بالتقصير 🤍
                             </span>
                           )}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Add Buttons */}
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400 block">تسجيل إنجاز سريع للورد الحالي:</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button
+                          onClick={() => handleQuickAdd(1)}
+                          className="py-2.5 px-3 bg-slate-50 dark:bg-slate-800/70 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold border border-slate-200/80 dark:border-slate-700/60 transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>صفحة واحدة (+1)</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickAdd(perPrayerPages)}
+                          className="py-2.5 px-3 bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200/60 dark:border-indigo-800/60 transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>ورد صلاة (+{toArabicNumbers(perPrayerPages)})</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickAdd(10)}
+                          className="py-2.5 px-3 bg-emerald-50/80 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold border border-emerald-200/60 dark:border-emerald-800/60 transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>نصف جزء (+10)</span>
+                        </button>
+                        <button
+                          onClick={() => handleQuickAdd(20)}
+                          className="py-2.5 px-3 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold border border-amber-200/60 dark:border-amber-800/60 transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95"
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          <span>جزء كامل (+20)</span>
+                        </button>
                       </div>
                     </div>
                   </div>

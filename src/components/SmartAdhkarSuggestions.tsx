@@ -108,10 +108,22 @@ export default function SmartAdhkarSuggestions({
   };
 
   const handleAppRecommendationClick = (rec: SmartAppRecommendation) => {
-    if (rec.targetAction === 'open_notifications_modal' && onOpenNotificationsModal) {
-      onOpenNotificationsModal();
-    } else if (rec.targetTab && onNavigateTab) {
-      onNavigateTab(rec.targetTab);
+    if (rec.targetAction === 'open_notifications_modal') {
+      if (onOpenNotificationsModal) {
+        onOpenNotificationsModal();
+      } else {
+        window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+      }
+    } else if (rec.targetAction === 'open_prayer_settings') {
+      if (onNavigateTab) {
+        onNavigateTab('prayer');
+      } else {
+        window.dispatchEvent(new CustomEvent('open-prayer-settings'));
+      }
+    } else if (rec.targetTab) {
+      if (onNavigateTab) {
+        onNavigateTab(rec.targetTab);
+      }
     }
   };
 

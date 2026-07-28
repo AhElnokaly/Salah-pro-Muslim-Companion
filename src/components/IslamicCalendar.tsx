@@ -28,6 +28,7 @@ import {
   getArabicMonthNameGregorian,
   formatGregorianFullDateArabic
 } from '../utils/hijri';
+import { getMoonPhaseInfo } from '../utils/moonPhases';
 
 interface IslamicCalendarProps {
   settings: AppSettings;
@@ -37,6 +38,7 @@ interface IslamicCalendarProps {
   dhikrLogs?: Record<string, Record<string, number>>;
   quranSessions?: any[];
   khatmat?: any[];
+  onNavigateTab?: (tab: string) => void;
 }
 
 export default function IslamicCalendar({ 
@@ -46,7 +48,8 @@ export default function IslamicCalendar({
   fastingLogs = {},
   dhikrLogs = {},
   quranSessions = [],
-  khatmat = []
+  khatmat = [],
+  onNavigateTab
 }: IslamicCalendarProps) {
   const [viewDate, setViewDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -521,7 +524,7 @@ export default function IslamicCalendar({
         <div className="space-y-3">
           {/* Hijri Date block */}
           <div className="flex items-start gap-2.5">
-            <span className="text-base bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 p-1.5 rounded-xl block">🌙</span>
+            <span className="text-base bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 p-1.5 rounded-xl block">📅</span>
             <div className="space-y-0.5">
               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block">التاريخ الهجري</span>
               <span className="text-xs font-black text-slate-800 dark:text-white block">
@@ -529,6 +532,41 @@ export default function IslamicCalendar({
               </span>
             </div>
           </div>
+
+          {/* Moon Phase Block for Selected Day */}
+          {(() => {
+            const moonInfo = getMoonPhaseInfo(selectedHijri.day);
+            return (
+              <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-start justify-between gap-2.5">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-xl leading-none">{moonInfo.icon}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                        طور القمر: {moonInfo.name}
+                      </span>
+                      <span className="text-[9px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded-full font-bold">
+                        إضاءة {toArabicNumbers(moonInfo.illumination)}%
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                      {moonInfo.desc}
+                    </p>
+                  </div>
+                </div>
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('moon')}
+                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                  >
+                    <span>أطوار القمر</span>
+                    <span>←</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Islamic Occasion block if exists */}
           {selectedOccasion && (

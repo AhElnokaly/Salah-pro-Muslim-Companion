@@ -31,38 +31,21 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ADHKAR_DATA, FREE_TASBEEH_PRESETS, DhikrCategory, DhikrItem } from '../utils/adhkarData';
-import { getSevenStationsProgress } from '../utils/adhkarCalc';
+import { getSevenStationsProgress, SEVEN_STATIONS, PrayerKey, AdhkarStation } from '../utils/adhkarCalc';
 import { toArabicNumbers } from '../utils/hijri';
 import SmartAdhkarSuggestions from './SmartAdhkarSuggestions';
+import { trackFeatureCompletion } from '../utils/analyticsStorage';
 
 interface AdhkarTrackerProps {
   dhikrLogs: Record<string, Record<string, number>>;
   setDhikrLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, number>>>>;
   currentPrayer?: string;
   prayerTimes?: any;
+  onNavigateTab?: (tab: string) => void;
+  onOpenNotificationsModal?: () => void;
 }
 
-export type PrayerKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 
-export interface AdhkarStation {
-  id: 'morning' | 'fajr' | 'dhuhr' | 'asr' | 'evening' | 'maghrib' | 'isha';
-  title: string;
-  shortName: string;
-  categoryType: 'morning' | 'evening' | 'after_prayer';
-  prayerKey?: PrayerKey;
-  icon: string;
-  timeLabel: string;
-}
-
-export const SEVEN_STATIONS: AdhkarStation[] = [
-  { id: 'morning', title: 'أذكار الصباح', shortName: 'الصباح', categoryType: 'morning', icon: '🌅', timeLabel: 'من طلوع الفجر إلى صلاة الظهر' },
-  { id: 'fajr', title: 'أذكار صلاة الفجر', shortName: 'الفجر', categoryType: 'after_prayer', prayerKey: 'fajr', icon: '🕌', timeLabel: 'عقب صلاة الفجر' },
-  { id: 'dhuhr', title: 'أذكار صلاة الظهر', shortName: 'الظهر', categoryType: 'after_prayer', prayerKey: 'dhuhr', icon: '☀️', timeLabel: 'عقب صلاة الظهر' },
-  { id: 'asr', title: 'أذكار صلاة العصر', shortName: 'العصر', categoryType: 'after_prayer', prayerKey: 'asr', icon: '🌤️', timeLabel: 'عقب صلاة العصر' },
-  { id: 'evening', title: 'أذكار المساء', shortName: 'المساء', categoryType: 'evening', icon: '🌆', timeLabel: 'من العصر إلى منتصف الليل' },
-  { id: 'maghrib', title: 'أذكار صلاة المغرب', shortName: 'المغرب', categoryType: 'after_prayer', prayerKey: 'maghrib', icon: '🌅', timeLabel: 'عقب صلاة المغرب' },
-  { id: 'isha', title: 'أذكار صلاة العشاء', shortName: 'العشاء', categoryType: 'after_prayer', prayerKey: 'isha', icon: '🌌', timeLabel: 'عقب صلاة العشاء' },
-];
 
 export const PRAYER_SWITCHER: Array<{ key: PrayerKey; name: string; icon: string }> = [
   { key: 'fajr', name: 'الفجر', icon: '🌅' },
@@ -185,6 +168,8 @@ export default function AdhkarTracker({
   dhikrLogs,
   setDhikrLogs,
   currentPrayer = 'Fajr',
+  onNavigateTab,
+  onOpenNotificationsModal,
 }: AdhkarTrackerProps) {
   const [activeTab, setActiveTab] = useState<'categories' | 'smart_suggestions' | 'tasbeeh'>('categories');
   const [selectedCategory, setSelectedCategory] = useState<DhikrCategory | null>(null);
@@ -324,14 +309,7 @@ export default function AdhkarTracker({
    */
   const getItemCurrentCount = (catId: string, itemId: string, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
     const storageKey = getItemStorageKey(catId, itemId, prayerKey);
-    if (dayLogs[storageKey] !== undefined) {
-      return dayLogs[storageKey];
-    }
-    // Fallback if user logged before without prayer prefix
-    if (catId === 'after_prayer' && dayLogs[itemId] !== undefined) {
-      return dayLogs[itemId];
-    }
-    return 0;
+    return dayLogs[storageKey] !== undefined ? dayLogs[storageKey] : 0;
   };
 
   /**
@@ -342,7 +320,7 @@ export default function AdhkarTracker({
 
     setDhikrLogs(prev => {
       const currentDay = prev[todayStr] || {};
-      const currentItemCount = currentDay[storageKey] !== undefined ? currentDay[storageKey] : (currentDay[item.id] || 0);
+      const currentItemCount = currentDay[storageKey] !== undefined ? currentDay[storageKey] : 0;
       
       let updatedCount = setExact !== undefined ? setExact : currentItemCount + delta;
       if (updatedCount < 0) updatedCount = 0;
@@ -356,7 +334,7 @@ export default function AdhkarTracker({
       let completedCount = 0;
       cat.items.forEach(it => {
         const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
-        const countVal = updatedDay[k] !== undefined ? updatedDay[k] : (updatedDay[it.id] || 0);
+        const countVal = updatedDay[k] !== undefined ? updatedDay[k] : 0;
         if (countVal >= it.count) {
           completedCount++;
         }
@@ -364,6 +342,10 @@ export default function AdhkarTracker({
 
       const catSummaryKey = cat.id === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : cat.id;
       updatedDay[catSummaryKey] = completedCount;
+
+      if (completedCount === cat.items.length && cat.items.length > 0) {
+        trackFeatureCompletion('adhkar');
+      }
 
       return {
         ...prev,
@@ -1040,11 +1022,24 @@ export default function AdhkarTracker({
             setActiveTab('tasbeeh');
             setIsCustomTasbeeh(true);
           }}
+          onNavigateTab={(tab) => {
+            if (tab === 'adhkar' || tab === 'categories' || tab === 'stations') {
+              setActiveTab('categories');
+            } else if (tab === 'tasbeeh') {
+              setActiveTab('tasbeeh');
+            } else if (onNavigateTab) {
+              onNavigateTab(tab);
+            }
+          }}
+          onOpenNotificationsModal={() => {
+            if (onOpenNotificationsModal) {
+              onOpenNotificationsModal();
+            } else {
+              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+            }
+          }}
           completedStationsCount={
-            SEVEN_STATIONS.filter(st => {
-              const catKey = st.categoryType === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : st.id;
-              return (dayLogs[catKey] || 0) > 0;
-            }).length
+            getSevenStationsProgress(dayLogs, activePrayerKey).completedStationsCount
           }
           activePrayerName={activePrayerKey}
           isPushGranted={'Notification' in window && Notification.permission === 'granted'}

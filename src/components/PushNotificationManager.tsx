@@ -30,6 +30,7 @@ import {
   sendPushNotification 
 } from '../utils/pushNotificationService';
 import { toArabicNumbers } from '../utils/hijri';
+import ToggleSwitch from './ui/ToggleSwitch';
 
 interface PushNotificationManagerProps {
   isOpen?: boolean;
@@ -170,29 +171,25 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
           <div className="space-y-4">
             
             {/* Master Toggle */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <ShieldCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <div>
                   <h4 className="text-xs font-black text-slate-800 dark:text-white">تفعيل نظام الإشعارات الرئيسي</h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">إيقاف هذا الخيار يعطل جميع الإشعارات الفورية</p>
                 </div>
               </div>
 
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.enabled}
-                  onChange={(e) => handleSettingToggle('enabled', e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
+              <ToggleSwitch
+                checked={settings.enabled}
+                onChange={(checked) => handleSettingToggle('enabled', checked)}
+                activeColor="bg-indigo-600"
+              />
             </div>
 
             {/* CHANNEL 1: PRAYER & PRE-ALERT */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🕌</span>
                   <div>
@@ -201,25 +198,21 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
                   </div>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.prayerAthan}
-                    onChange={(e) => handleSettingToggle('prayerAthan', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
+                <ToggleSwitch
+                  checked={settings.prayerAthan}
+                  onChange={(checked) => handleSettingToggle('prayerAthan', checked)}
+                  activeColor="bg-emerald-600"
+                />
               </div>
 
               {/* Pre-prayer alert */}
               <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                  <Clock className="w-4 h-4 text-amber-500" />
+                  <Clock className="w-4 h-4 text-amber-500 shrink-0" />
                   <span>تنبيه الاستعداد قبل الأذان:</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <select
                     value={settings.preAlertMinutes}
                     onChange={(e) => handleSettingToggle('preAlertMinutes', Number(e.target.value))}
@@ -231,22 +224,19 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
                     <option value={20}>قبل ٢٠ دقيقة</option>
                   </select>
 
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.prayerPreAlert}
-                      onChange={(e) => handleSettingToggle('prayerPreAlert', e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
-                  </label>
+                  <ToggleSwitch
+                    checked={settings.prayerPreAlert}
+                    onChange={(checked) => handleSettingToggle('prayerPreAlert', checked)}
+                    activeColor="bg-amber-600"
+                    size="sm"
+                  />
                 </div>
               </div>
             </div>
 
             {/* CHANNEL 2: MORNING & EVENING ADHKAR */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">🌅</span>
                   <div>
@@ -255,18 +245,14 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
                   </div>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.adhkarMorning && settings.adhkarEvening}
-                    onChange={(e) => {
-                      handleSettingToggle('adhkarMorning', e.target.checked);
-                      handleSettingToggle('adhkarEvening', e.target.checked);
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                </label>
+                <ToggleSwitch
+                  checked={settings.adhkarMorning && settings.adhkarEvening}
+                  onChange={(checked) => {
+                    handleSettingToggle('adhkarMorning', checked);
+                    handleSettingToggle('adhkarEvening', checked);
+                  }}
+                  activeColor="bg-amber-600"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
@@ -294,7 +280,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
 
             {/* CHANNEL 3: PERIODIC ISTIGHFAR & FRIDAY */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">📿</span>
                   <div>
@@ -303,33 +289,26 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
                   </div>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.adhkarPeriodic}
-                    onChange={(e) => handleSettingToggle('adhkarPeriodic', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                </label>
+                <ToggleSwitch
+                  checked={settings.adhkarPeriodic}
+                  onChange={(checked) => handleSettingToggle('adhkarPeriodic', checked)}
+                  activeColor="bg-indigo-600"
+                />
               </div>
 
               {/* Quiet hours setting */}
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                  <Moon className="w-4 h-4 text-indigo-500" />
+                  <Moon className="w-4 h-4 text-indigo-500 shrink-0" />
                   <span>ساعات الهدوء (إيقاف الإشعارات ليلاً):</span>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.quietHours}
-                    onChange={(e) => handleSettingToggle('quietHours', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                </label>
+                <ToggleSwitch
+                  checked={settings.quietHours}
+                  onChange={(checked) => handleSettingToggle('quietHours', checked)}
+                  activeColor="bg-indigo-600"
+                  size="sm"
+                />
               </div>
             </div>
 

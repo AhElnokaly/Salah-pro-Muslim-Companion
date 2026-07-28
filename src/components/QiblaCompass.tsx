@@ -13,11 +13,14 @@ import {
   Smartphone,
   HelpCircle,
   RotateCw,
-  Sparkles
+  Sparkles,
+  Loader2,
+  Navigation
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppSettings } from '../types';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
+import { detectUserLocation } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface QiblaCompassProps {
@@ -38,6 +41,8 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
   const [showCalibrateModal, setShowCalibrateModal] = useState<boolean>(false);
   const [showBraveHelp, setShowBraveHelp] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isSyncingLoc, setIsSyncingLoc] = useState<boolean>(false);
+  const [locFeedback, setLocFeedback] = useState<string>('');
   
   const compassRef = useRef<HTMLDivElement>(null);
   const dragStartAngle = useRef<number>(0);
@@ -443,13 +448,53 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
         </div>
 
         {/* Descriptive Direction details */}
-        <div className="space-y-1">
+        <div className="space-y-1.5 flex flex-col items-center">
           <p className="text-white/65 text-xs font-semibold tracking-wide">
             الاتجاه التقريبي للقبلة في
           </p>
-          <p className="text-white text-base sm:text-lg font-black tracking-wide">
-            {settings.cityName} {toArabicNumbers(Math.round(qiblaAngle))}°
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-white text-base sm:text-lg font-black tracking-wide">
+              {settings.cityName} {toArabicNumbers(Math.round(qiblaAngle))}°
+            </p>
+            {setSettings && (
+              <button
+                type="button"
+                disabled={isSyncingLoc}
+                onClick={async () => {
+                  setIsSyncingLoc(true);
+                  setLocFeedback('');
+                  try {
+                    const res = await detectUserLocation();
+                    setSettings(prev => ({
+                      ...prev,
+                      latitude: res.latitude,
+                      longitude: res.longitude,
+                      cityName: res.cityName
+                    }));
+                    setLocFeedback(`تم التحديث: ${res.cityName}`);
+                  } catch (e) {
+                    setLocFeedback('فشل المزامنة الحية');
+                  } finally {
+                    setIsSyncingLoc(false);
+                  }
+                }}
+                className="p-1.5 bg-white/10 hover:bg-white/20 text-emerald-300 rounded-full transition-all cursor-pointer border border-white/10 active:scale-95 text-xs flex items-center gap-1"
+                title="مزامنة الموقع الحالي عبر GPS / شبكة IP"
+              >
+                {isSyncingLoc ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
+                ) : (
+                  <Navigation className="w-3.5 h-3.5 text-emerald-300" />
+                )}
+              </button>
+            )}
+          </div>
+
+          {locFeedback && (
+            <p className="text-[10px] font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+              {locFeedback}
+            </p>
+          )}
           
           {isAligned && (
             <motion.div 

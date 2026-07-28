@@ -68,7 +68,7 @@ export function getSevenStationsProgress(
       totalItems = afterPrayerCat.items.length;
       afterPrayerCat.items.forEach(it => {
         const itemKey = `${st.prayerKey}_${it.id}`;
-        const currentVal = dayLogs[itemKey] !== undefined ? dayLogs[itemKey] : (dayLogs[it.id] || 0);
+        const currentVal = dayLogs[itemKey] !== undefined ? dayLogs[itemKey] : 0;
         if (currentVal >= it.count) completedItems++;
       });
       if (dayLogs[`after_prayer_${st.prayerKey}`] !== undefined && dayLogs[`after_prayer_${st.prayerKey}`] >= totalItems) {

@@ -20,34 +20,18 @@ import {
   ChevronUp,
   Info
 } from 'lucide-react';
-import { AppSettings, PrayerName } from '../types';
+import { AppSettings, PrayerName, AlarmConfig, SpiritualAlerts } from '../types';
 import { getArabicPrayerName } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
 import PushNotificationManager from './PushNotificationManager';
 
-interface CustomAlarm {
-  id: string;
-  title: string;
-  time: string; // "HH:MM"
-  days: number[]; // 0-6
-  enabled: boolean;
-  soundType: 'beep' | 'adhan' | 'vibrate' | 'silent';
-}
-
-interface AlertConfig {
-  enabled: boolean;
-  minutes: number;
-  days: number[];
-  prayers: PrayerName[];
-}
-
 interface WorshipAlarmsProps {
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
-  customAlarms: CustomAlarm[];
-  setCustomAlarms: React.Dispatch<React.SetStateAction<CustomAlarm[]>>;
-  alerts: { before: AlertConfig; after: AlertConfig; duha: { enabled: boolean; minutes: number; days: number[] } };
-  setAlerts: React.Dispatch<React.SetStateAction<{ before: AlertConfig; after: AlertConfig; duha: { enabled: boolean; minutes: number; days: number[] } }>>;
+  customAlarms: AlarmConfig[];
+  setCustomAlarms: React.Dispatch<React.SetStateAction<AlarmConfig[]>>;
+  alerts: SpiritualAlerts;
+  setAlerts: React.Dispatch<React.SetStateAction<SpiritualAlerts>>;
   audioVolume: number;
   setAudioVolume: (vol: number) => void;
 }
@@ -174,7 +158,7 @@ export default function WorshipAlarms({
     e.preventDefault();
     if (!alarmTitle.trim()) return;
 
-    const newAlarm: CustomAlarm = {
+    const newAlarm: AlarmConfig = {
       id: `alarm_${Date.now()}`,
       title: alarmTitle,
       time: alarmTime,

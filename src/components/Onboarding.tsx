@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Compass, MapPin, ChevronLeft, Moon, Sun, Bell, Heart, Info } from 'lucide-react';
 import { AppSettings, PrayerName } from '../types';
 import { POPULAR_CITIES, calculatePrayerTimes } from '../utils/prayerCalc';
+import { detectUserLocation } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface OnboardingProps {
@@ -30,35 +31,26 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [lastPrayer, setLastPrayer] = useState<PrayerName>('Dhuhr');
   const [wasOnTime, setWasOnTime] = useState(true);
 
-  const requestLocation = () => {
-    if (!navigator.geolocation) {
-      setErrorLoc('المتصفح لا يدعم تحديد الموقع تلقائياً. يرجى اختيار مدينة من القائمة.');
-      return;
-    }
+  const requestLocation = async () => {
     setLoadingLoc(true);
     setErrorLoc('');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLoadingLoc(false);
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setCustomCoords({ lat, lng, name: 'موقعي الحالي' });
-        setSelectedCity({
-          name: 'Custom Location',
-          arabicName: 'موقعي الحالي',
-          lat,
-          lng,
-          country: 'Local'
-        });
-        setStep(2); // Proceed
-      },
-      (err) => {
-        setLoadingLoc(false);
-        console.error(err);
-        setErrorLoc('لم نتمكن من تحديد موقعك تلقائياً (ربما تم رفض الصلاحية). يرجى اختيار مدينة من القائمة أدناه.');
-      },
-      { timeout: 10000 }
-    );
+    try {
+      const res = await detectUserLocation();
+      setCustomCoords({ lat: res.latitude, lng: res.longitude, name: res.cityName });
+      setSelectedCity({
+        name: res.cityName,
+        arabicName: res.cityName,
+        lat: res.latitude,
+        lng: res.longitude,
+        country: 'Local'
+      });
+      setStep(2); // Proceed
+    } catch (err) {
+      console.error(err);
+      setErrorLoc('لم نتمكن من تحديد موقعك تلقائياً. يرجى اختيار مدينتك من القائمة أدناه.');
+    } finally {
+      setLoadingLoc(false);
+    }
   };
 
   const handleCitySelect = (city: typeof POPULAR_CITIES[0]) => {

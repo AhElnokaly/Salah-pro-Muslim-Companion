@@ -1,8 +1,10 @@
-const CACHE_NAME = 'muslim-companion-cache-v4';
+const CACHE_NAME = 'muslim-companion-cache-v5';
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './favicon.ico',
+  './apple-touch-icon.png',
   './icon-192.png',
   './icon-512.png',
   './muslim_companion_icon.jpg',

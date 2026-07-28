@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
 import { defaultMuezzins, getCustomAudios, archiveMuezzins, getDownloadedTrackIds } from '../utils/audioStorage';
+import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
 
 interface AthanOverlayProps {
   isOpen: boolean;
@@ -125,6 +126,23 @@ export default function AthanOverlay({
     }
   }, [isOpen, isPlaying]);
 
+  // Unlock audio playback on first user click/tap anywhere on screen if autoplay was blocked
+  useEffect(() => {
+    if (isOpen && !isPlaying && !showDua) {
+      const handleUserGesture = () => {
+        if (onRetryWithLocal) {
+          onRetryWithLocal();
+        } else {
+          togglePlayAthan(activeMuezzinId);
+        }
+      };
+      window.addEventListener('pointerdown', handleUserGesture, { once: true });
+      return () => {
+        window.removeEventListener('pointerdown', handleUserGesture);
+      };
+    }
+  }, [isOpen, isPlaying, showDua, activeMuezzinId, onRetryWithLocal, togglePlayAthan]);
+
   // When Athan ends, transition to Du'a screen automatically
   useEffect(() => {
     if (isOpen && hasStartedPlaying && !isPlaying && !isSunrise) {
@@ -144,28 +162,29 @@ export default function AthanOverlay({
   const activePhraseIdx = currentPhraseIdx >= 0 && currentPhraseIdx < overlayPhrases.length ? currentPhraseIdx : 0;
   const activePhrase = overlayPhrases[activePhraseIdx];
 
-  // Determine beautiful backdrop image
-  const getMosqueBackground = (muezzinId: string) => {
+  // Determine beautiful vector backdrop type based on prayer/muezzin
+  const getMosqueBackdropKey = (muezzinId: string): BackdropType => {
     if (isSunrise) {
-      return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=1200';
+      return 'gold';
     }
     switch (muezzinId) {
       case 'makkah':
       case 'fajr_makkah':
-        return 'https://images.unsplash.com/photo-1565552645632-d725f8bfc19a?auto=format&fit=crop&q=80&w=1200';
+        return 'kaaba';
       case 'medina':
       case 'fajr_medina':
-        return 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?auto=format&fit=crop&q=80&w=1200';
+        return 'emerald';
       case 'aqsa':
       case 'fajr_aqsa':
-        return 'https://images.unsplash.com/photo-1542856391-010fb87dcfed?auto=format&fit=crop&q=80&w=1200';
+        return 'banner';
       case 'fajr_yusuf':
+        return 'night_sky';
       default:
-        return 'https://images.unsplash.com/photo-1542640244-7e672d6cef21?auto=format&fit=crop&q=80&w=1200';
+        return 'classic';
     }
   };
 
-  const bgImg = getMosqueBackground(activeMuezzinId);
+  const backdropType = getMosqueBackdropKey(activeMuezzinId);
 
   const handleRetry = () => {
     if (onRetryWithLocal) {
@@ -181,13 +200,13 @@ export default function AthanOverlay({
       className="fixed inset-0 z-50 bg-[#070b11] flex flex-col justify-between p-8 sm:p-12 text-white font-sans transition-all duration-500 overflow-hidden"
       dir="rtl"
     >
-      {/* Dynamic Mosque Background with Ken Burns effect */}
-      <div 
-        className="absolute inset-0 transition-all duration-1000 ease-in-out bg-cover bg-center scale-105"
-        style={{ backgroundImage: `url(${bgImg})` }}
-      />
+      {/* High-Precision Vector Mosque Backdrop (No Checkerboard Grid, Zero Pixelation) */}
+      <div className="absolute inset-0 transition-all duration-1000 ease-in-out scale-105 opacity-60 pointer-events-none overflow-hidden">
+        <MosqueBackdrop type={backdropType} />
+      </div>
+
       {/* Spiritual gradient overlay to blend into dark, readable interface */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#04060a] via-[#070b11]/85 to-[#0b121c]/90 backdrop-blur-[2.5px] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#04060a] via-[#070b11]/80 to-[#0b121c]/85 pointer-events-none" />
 
       {/* Soft, meditative radial background glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">

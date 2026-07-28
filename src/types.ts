@@ -92,7 +92,8 @@ export interface AppSettings {
   prayerVolumes?: Record<string, number>;
   appStyle?: 'glass-dark' | 'faith-bright';
   primaryCalendar?: 'hijri' | 'gregorian';
-  backdropStyle?: 'gold' | 'classic' | 'banner' | 'auto';
+  backdropStyle?: 'gold' | 'classic' | 'banner' | 'emerald' | 'night_sky' | 'kaaba' | 'andulas' | 'minimal' | 'auto';
+  cardTheme?: 'dynamic' | 'gold_luxury' | 'emerald_royal' | 'velvet_night' | 'sunset_amber' | 'cyan_dome' | 'rose_twilight' | 'dark_onyx' | 'pure_light';
   clockStyle?: 'digital' | 'analog';
   cardCompactMode?: boolean;
   gender?: 'male' | 'female';
@@ -101,6 +102,28 @@ export interface AppSettings {
     theme: string;
     wallpaper: string;
   };
+}
+
+export interface AlarmConfig {
+  id: string;
+  title: string;
+  time: string; // "HH:MM"
+  days: number[];
+  enabled: boolean;
+  soundType: 'adhan' | 'azan' | 'beep' | 'vibrate' | 'silent';
+}
+
+export interface SpiritualAlertRule {
+  enabled: boolean;
+  minutes: number;
+  days: number[];
+  prayers: PrayerName[];
+}
+
+export interface SpiritualAlerts {
+  before: SpiritualAlertRule;
+  after: SpiritualAlertRule;
+  duha: { enabled: boolean; minutes: number; days: number[] };
 }
 
 export interface ActiveNudge {

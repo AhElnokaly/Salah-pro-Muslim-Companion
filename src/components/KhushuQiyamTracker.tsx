@@ -32,6 +32,7 @@ import {
 import { AppSettings, PrayerLog } from '../types';
 import { calculatePrayerTimes, parseTimeToMinutes } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
+import { trackFeatureCompletion } from '../utils/analyticsStorage';
 
 interface KhushuQiyamTrackerProps {
   settings: AppSettings;
@@ -191,8 +192,8 @@ export default function KhushuQiyamTracker({
   const [copiedDuaId, setCopiedDuaId] = useState<string | null>(null);
   const [logSuccessMsg, setLogSuccessMsg] = useState<string>('');
 
-  // Ambient tranquility audio generator state (Web Audio API synth)
-  const [activeAmbient, setActiveAmbient] = useState<'none' | 'rain' | 'breeze' | 'drone'>('none');
+  // Ambient background audio generator state (rain / breeze)
+  const [activeAmbient, setActiveAmbient] = useState<'none' | 'rain' | 'breeze'>('none');
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const stopAmbientAudio = () => {
@@ -203,7 +204,7 @@ export default function KhushuQiyamTracker({
     setActiveAmbient('none');
   };
 
-  const playAmbientAudio = (type: 'rain' | 'breeze' | 'drone') => {
+  const playAmbientAudio = (type: 'rain' | 'breeze') => {
     if (activeAmbient === type) {
       stopAmbientAudio();
       return;
@@ -239,18 +240,6 @@ export default function KhushuQiyamTracker({
         whiteNoise.connect(filter);
         filter.connect(masterGain);
         whiteNoise.start();
-      } else if (type === 'drone') {
-        // Serene ambient sine harmonic synth (C-G-C-E meditative chord)
-        [130.81, 196.00, 261.63, 329.63].forEach(freq => {
-          const osc = ctx.createOscillator();
-          osc.type = 'sine';
-          osc.frequency.value = freq;
-          const oscGain = ctx.createGain();
-          oscGain.gain.value = 0.02;
-          osc.connect(oscGain);
-          oscGain.connect(masterGain);
-          osc.start();
-        });
       }
 
       setActiveAmbient(type);
@@ -378,15 +367,50 @@ export default function KhushuQiyamTracker({
     return localStorage.getItem(`qiyam_notes_${todayStr}`) || '';
   });
 
+  // Helper to determine current prayer name for per-prayer resetting
+  const getCurrentPrayerName = () => {
+    const currentMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const fajr = parseTimeToMinutes(todayTimes.Fajr || '04:30');
+    const dhuhr = parseTimeToMinutes(todayTimes.Dhuhr || '12:00');
+    const asr = parseTimeToMinutes(todayTimes.Asr || '15:30');
+    const maghrib = parseTimeToMinutes(todayTimes.Maghrib || '18:00');
+    const isha = parseTimeToMinutes(todayTimes.Isha || '19:30');
+
+    if (currentMins >= fajr && currentMins < dhuhr) return 'Fajr';
+    if (currentMins >= dhuhr && currentMins < asr) return 'Dhuhr';
+    if (currentMins >= asr && currentMins < maghrib) return 'Asr';
+    if (currentMins >= maghrib && currentMins < isha) return 'Maghrib';
+    return 'Isha';
+  };
+
+  const [khushuResetMode, setKhushuResetMode] = useState<'daily' | 'prayer'>(() => {
+    return (localStorage.getItem('khushu_reset_mode') as 'daily' | 'prayer') || 'prayer';
+  });
+
+  const currentPrayerName = getCurrentPrayerName();
+  const currentKhushuKey = khushuResetMode === 'prayer' 
+    ? `khushu_steps_${todayStr}_${currentPrayerName}`
+    : `khushu_steps_${todayStr}`;
+
   // Completed Khushu checklist
   const [completedKhushuSteps, setCompletedKhushuSteps] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem(`khushu_steps_${todayStr}`);
-      return saved ? new Set(JSON.parse(saved)) : new Set(['wudu', 'gaze', 'tranquility']);
+      const saved = localStorage.getItem(currentKhushuKey);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch (e) {
-      return new Set(['wudu', 'gaze', 'tranquility']);
+      return new Set();
     }
   });
+
+  // Re-sync steps when key changes (date or prayer or reset mode change)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(currentKhushuKey);
+      setCompletedKhushuSteps(saved ? new Set(JSON.parse(saved)) : new Set());
+    } catch (e) {
+      setCompletedKhushuSteps(new Set());
+    }
+  }, [currentKhushuKey]);
 
   const toggleKhushuStep = (id: string) => {
     setCompletedKhushuSteps(prev => {
@@ -397,9 +421,20 @@ export default function KhushuQiyamTracker({
         next.add(id);
         if (navigator.vibrate) navigator.vibrate(20);
       }
-      localStorage.setItem(`khushu_steps_${todayStr}`, JSON.stringify(Array.from(next)));
+      localStorage.setItem(currentKhushuKey, JSON.stringify(Array.from(next)));
       return next;
     });
+  };
+
+  const handleResetKhushuSteps = () => {
+    setCompletedKhushuSteps(new Set());
+    localStorage.removeItem(currentKhushuKey);
+    if (navigator.vibrate) navigator.vibrate(30);
+  };
+
+  const handleModeChange = (mode: 'daily' | 'prayer') => {
+    setKhushuResetMode(mode);
+    localStorage.setItem('khushu_reset_mode', mode);
   };
 
   // Handle saving Qiyam log
@@ -409,6 +444,10 @@ export default function KhushuQiyamTracker({
 
     const updatedQiyamStatus = qRakahs > 0 ? 'A' : 'not_yet';
     const updatedWitrStatus = wRakahs > 0 ? 'A' : 'not_yet';
+
+    if (qRakahs > 0 || wRakahs > 0) {
+      trackFeatureCompletion('khushu');
+    }
 
     setPrayerLogs(prev => ({
       ...prev,
@@ -660,12 +699,12 @@ export default function KhushuQiyamTracker({
           </div>
         </div>
 
-        {/* Ambient Tranquility Audio Synthesizer Controls */}
+        {/* Ambient Background Audio Controls */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <Volume2 className="w-3.5 h-3.5 text-indigo-500" />
-              <span>مُولّد السكينة وصوتيات خشوع التهجد (بدون إنترنت):</span>
+              <span>صوتيات خفيفة لخشوع التهجد (بدون إنترنت):</span>
             </span>
 
             {activeAmbient !== 'none' && (
@@ -680,7 +719,7 @@ export default function KhushuQiyamTracker({
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => playAmbientAudio('rain')}
@@ -703,18 +742,6 @@ export default function KhushuQiyamTracker({
               }`}
             >
               <span>🍃 نسيم السحر</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => playAmbientAudio('drone')}
-              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
-                activeAmbient === 'drone'
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                  : 'bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-purple-400'
-              }`}
-            >
-              <span>🌌 نغمة السكينة</span>
             </button>
           </div>
         </div>
@@ -868,7 +895,7 @@ export default function KhushuQiyamTracker({
 
       {/* 4. KHUSHU' STEP-BY-STEP GUIDELINES & CHECKLIST */}
       <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-3">
           <div className="flex items-center gap-2">
             <Heart className="w-5 h-5 text-rose-500 fill-rose-500/20" />
             <div>
@@ -881,9 +908,49 @@ export default function KhushuQiyamTracker({
             </div>
           </div>
 
-          <span className="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
-            {toArabicNumbers(completedKhushuSteps.size)} / {toArabicNumbers(KHUSHU_STEPS.length)}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Auto-reset Mode Selector */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700/50 text-[10px]">
+              <button
+                type="button"
+                onClick={() => handleModeChange('prayer')}
+                className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  khushuResetMode === 'prayer'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                تصفير كل صلاة
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeChange('daily')}
+                className={`px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  khushuResetMode === 'daily'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                تصفير يومي
+              </button>
+            </div>
+
+            {/* Steps Counter */}
+            <span className="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+              {toArabicNumbers(completedKhushuSteps.size)} / {toArabicNumbers(KHUSHU_STEPS.length)}
+            </span>
+
+            {/* Manual Reset button */}
+            <button
+              type="button"
+              onClick={handleResetKhushuSteps}
+              title="تصفير القائمة الآن"
+              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 text-slate-600 dark:text-slate-300 hover:text-rose-500 rounded-xl text-[10px] font-bold border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>تصفير</span>
+            </button>
+          </div>
         </div>
 
         {/* Khushu Steps Checklist */}

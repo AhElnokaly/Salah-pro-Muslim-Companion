@@ -32,16 +32,26 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  MapPin,
+  Navigation,
+  Compass,
+  HelpCircle,
+  Info,
+  Globe,
+  Edit3
 } from 'lucide-react';
 import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua } from '../types';
 import { POPULAR_CITIES } from '../utils/prayerCalc';
+import { detectUserLocation } from '../utils/locationService';
+import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
 import { toArabicNumbers, formatArabicDayCount, getHijriDate } from '../utils/hijri';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins, downloadAndSaveAudio, deleteDownloadedAudio, getDownloadedTrackIds, getAudioStorageStats } from '../utils/audioStorage';
+import ToggleSwitch from './ui/ToggleSwitch';
 
 interface MoreSettingsProps {
-  subTab: 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas';
-  setSubTab: React.Dispatch<React.SetStateAction<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'backup' | 'duas'>>;
+  subTab: 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas';
+  setSubTab: React.Dispatch<React.SetStateAction<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas'>>;
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   pendingQadaPrayers: PendingQadaPrayer[];
@@ -84,6 +94,15 @@ export default function MoreSettings({
   const [backupText, setBackupText] = useState('');
   const [importText, setImportText] = useState('');
   const [showImportResult, setShowImportResult] = useState('');
+
+  // Location & GPS state
+  const [isAutoLocating, setIsAutoLocating] = useState(false);
+  const [citySearchFilter, setCitySearchFilter] = useState('');
+  const [locationStatusMsg, setLocationStatusMsg] = useState('');
+  const [customLat, setCustomLat] = useState<string>('');
+  const [customLng, setCustomLng] = useState<string>('');
+  const [showManualCoords, setShowManualCoords] = useState(false);
+  const [showGpsGuide, setShowGpsGuide] = useState(false);
 
   // Audio Testing States & Refs
   const [playingAudio, setPlayingAudio] = useState<{ id: string; url: string; name: string; isFajr: boolean } | null>(null);
@@ -840,20 +859,75 @@ export default function MoreSettings({
             </div>
 
             {/* Auto Play Toggle */}
-            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/45">
+            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/45 gap-3">
               <div className="space-y-0.5">
                 <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">الأذان التلقائي فور دخول الوقت</span>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block">تشغيل صوت الأذان كاملاً في المتصفح فور حلول وقت الفريضة.</span>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={autoPlayAthan}
-                  onChange={(e) => setAutoPlayAthan(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-10 h-6 bg-slate-300 dark:bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:-right-4 after:content-[''] after:absolute after:top-1 after:right-1 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600" />
-              </label>
+              <ToggleSwitch
+                checked={autoPlayAthan}
+                onChange={(checked) => setAutoPlayAthan(checked)}
+                activeColor="bg-indigo-600"
+              />
+            </div>
+
+            {/* Reliable Background Athans Control & Privacy Badge */}
+            <div className="p-4 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-emerald-500/10 dark:from-indigo-950/30 dark:to-slate-900 rounded-2xl border border-indigo-500/20 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                      🔔 تنبيهات الأذان والمواقيت في الخلفية
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                      ⚡ 30 يوم جاهزة
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                    يتم تحضير مواقيت الـ 30 يومًا القادمة آليًا في خلفية جهازك لضمان تنبيهك بدقة حتى لو كان المتصفح مغلقًا.
+                  </p>
+                </div>
+              </div>
+
+              {/* Privacy Badge Banner */}
+              <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 text-[10px] text-slate-600 dark:text-slate-400 font-medium flex items-center gap-2">
+                <span className="text-sm shrink-0">🔒</span>
+                <span>
+                  <strong>خصوصية تامة:</strong> مواقيت صلواتك تُحسب بالكامل محليًا على جهازك، وتُحفظ كرموز زمنية مجردة (UTC) دون مشاركة إحداثيات موقعك الجغرافي.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  حالة إذن الإشعارات: {
+                    typeof window !== 'undefined' && 'Notification' in window
+                      ? Notification.permission === 'granted'
+                        ? '✅ مُفعلة ومُصرح بها'
+                        : Notification.permission === 'denied'
+                        ? '❌ محظورة من إعدادات المتصفح'
+                        : '⚠️ بانتظار الإذن'
+                      : 'غير مدعوم'
+                  }
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (typeof window !== 'undefined' && 'Notification' in window) {
+                      const res = await Notification.requestPermission();
+                      if (res === 'granted') {
+                        alert('تم تفعيل إذن الإشعارات بنجاح! سيصلك تنبيه دخول وقت الصلاة في موعده.');
+                      } else if (res === 'denied') {
+                        alert('تم رفض الإذن. يرجى السماح بالإشعارات من إعدادات المتصفح/الموقع.');
+                      }
+                    } else {
+                      alert('المتصفح لا يدعم إشعارات النظام.');
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95"
+                >
+                  تفعيل الإشعارات
+                </button>
+              </div>
             </div>
 
             {/* Default Fajr Muezzin */}
@@ -1200,17 +1274,14 @@ export default function MoreSettings({
                 const isEnabled = settings.adhanEnabled[prayer];
 
                 return (
-                  <div key={prayer} className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/40">
+                  <div key={prayer} className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/40 gap-3">
                     <span className="text-xs font-black text-slate-700 dark:text-slate-250">{arabicName}</span>
-                    <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isEnabled}
-                        onChange={() => handleToggleAdhan(prayer)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-300 dark:bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:-right-3.5 after:content-[''] after:absolute after:top-0.5 after:right-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500" />
-                    </label>
+                    <ToggleSwitch
+                      checked={isEnabled}
+                      onChange={() => handleToggleAdhan(prayer)}
+                      activeColor="bg-emerald-500"
+                      size="sm"
+                    />
                   </div>
                 );
               })}
@@ -1274,12 +1345,12 @@ export default function MoreSettings({
       )}
 
 
-      {/* ==================== 4. APP THEME & LOCATION ==================== */}
+      {/* ==================== 4. APP THEME & DISPLAY ==================== */}
       {subTab === 'theme' && (
         <div className="space-y-6">
           <div className="flex items-center gap-2 mb-2">
             <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <h2 className="text-lg font-black text-slate-800 dark:text-white">مظهر التطبيق والموقع الجغرافي</h2>
+            <h2 className="text-lg font-black text-slate-800 dark:text-white">مظهر التطبيق وشكل الساعة</h2>
           </div>
 
           {/* Theme Selector */}
@@ -1438,13 +1509,19 @@ export default function MoreSettings({
               اختر مظهر وخلفية المسجد الأنيقة المعروضة في الكارت الرئيسي بقمة الشاشة ليتناسب مع ذوقك ومزاجك اليومي.
             </p>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
               {[
                 { 
                   id: 'auto', 
                   name: 'تلقائي ذكي 🌟', 
-                  desc: 'تتغير تلقائياً حسب فترات اليوم ويوم الجمعة المبارك',
+                  desc: 'تتغير تلقائياً حسب فترات اليوم والمناسبات',
                   bgClass: 'bg-gradient-to-r from-indigo-500/10 to-amber-500/10 border-indigo-200/50 dark:border-indigo-900/30'
+                },
+                { 
+                  id: 'kaaba', 
+                  name: 'الكعبة المشرفة 🕋', 
+                  desc: 'الكعبة المعظمة والمنارات الشامخة بالحرم المكي',
+                  bgClass: 'bg-amber-500/10 border-amber-300/50 dark:border-amber-800/40'
                 },
                 { 
                   id: 'gold', 
@@ -1453,14 +1530,38 @@ export default function MoreSettings({
                   bgClass: 'bg-amber-500/5 border-amber-200/40 dark:border-amber-900/20'
                 },
                 { 
+                  id: 'emerald', 
+                  name: 'الزمرد الملكي 🌿', 
+                  desc: 'قبة ومنارات باللون الزمردي الأخضر الروحاني',
+                  bgClass: 'bg-emerald-500/10 border-emerald-300/40 dark:border-emerald-900/30'
+                },
+                { 
+                  id: 'night_sky', 
+                  name: 'سماء المجرة 🌌', 
+                  desc: 'سماء ليلية مليئة بالنجوم المتلألئة والهدوء',
+                  bgClass: 'bg-indigo-950/20 border-indigo-300/30 dark:border-indigo-800/40'
+                },
+                { 
+                  id: 'andulas', 
+                  name: 'النجم الأندلسي 🕌', 
+                  desc: 'نقوش وزخارف هندسية أندلسية ملكية راقية',
+                  bgClass: 'bg-purple-500/10 border-purple-300/40 dark:border-purple-900/30'
+                },
+                { 
+                  id: 'ramadan', 
+                  name: 'فوانيس رمضان 🌙', 
+                  desc: 'فوانيس وهلال رمضاني مشع بالأجواء الإيمانية',
+                  bgClass: 'bg-blue-500/10 border-blue-300/40 dark:border-blue-900/30'
+                },
+                { 
                   id: 'classic', 
                   name: 'الظل الكلاسيكي 🌙', 
-                  desc: 'صورة ظلية زرقاء ليلية تمنحك طابعاً من الهدوء والسكينة',
+                  desc: 'صورة ظلية زرقاء ليلية تمنحك طابعاً من السكينة',
                   bgClass: 'bg-sky-500/5 border-sky-200/40 dark:border-sky-900/20'
                 },
                 { 
                   id: 'banner', 
-                  name: 'راية الغروب 🕌', 
+                  name: 'راية الغروب 🌅', 
                   desc: 'مظهر أوسع ومثالي لزوايا المسجد في وقت الغروب',
                   bgClass: 'bg-rose-500/5 border-rose-200/40 dark:border-rose-900/20'
                 },
@@ -1487,48 +1588,333 @@ export default function MoreSettings({
               })}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* City Selection Coordinates */}
-          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
-            <h3 className="text-sm font-black text-slate-800 dark:text-white">المدينة والموقع الجغرافي النشط</h3>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
-              تحديد مدينتك الحالية يضمن حساب أوقات الشروق والغروب ومواقيت الصلاة الخمسة بدقة فلكية تامة وبدون الحاجة لإنترنت.
-            </p>
+      {/* ==================== 5. LOCATION & GPS SETTINGS PAGE ==================== */}
+      {subTab === 'location' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+            <h2 className="text-lg font-black text-slate-800 dark:text-white">إعدادات الموقع الجغرافي والـ GPS</h2>
+          </div>
 
-            <div className="space-y-3 pt-2">
-              <label className="text-xs font-black text-slate-500 dark:text-slate-400 block">اختر إحدى المدن المقترحة</label>
-              <select
-                value={settings.cityName}
-                onChange={(e) => {
-                  const name = e.target.value;
-                  const found = POPULAR_CITIES.find(c => c.name === name);
-                  if (found) {
-                    setSettings(prev => ({
-                      ...prev,
-                      cityName: found.name,
-                      latitude: found.lat,
-                      longitude: found.lng
-                    }));
-                  }
-                }}
-                className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/85 dark:border-slate-800 text-slate-850 dark:text-slate-100 rounded-2xl px-4 py-3 text-xs font-bold outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                {POPULAR_CITIES.map((c) => (
-                  <option key={c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="p-3 bg-slate-50 dark:bg-[#111720] rounded-xl text-center space-y-1">
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block">خط العرض (Latitude)</span>
-                  <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">{settings.latitude}°</span>
+          {/* Current Active Location Card & Qibla Bearing */}
+          <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent dark:from-emerald-950/30 dark:via-teal-950/10 dark:to-transparent rounded-3xl p-5 border border-emerald-500/20 dark:border-emerald-800/40 space-y-4 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-emerald-500/10 dark:border-emerald-800/30 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-500 text-white rounded-2xl shadow-xs">
+                  <Globe className="w-5 h-5" />
                 </div>
-                <div className="p-3 bg-slate-50 dark:bg-[#111720] rounded-xl text-center space-y-1">
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block">خط الطول (Longitude)</span>
-                  <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">{settings.longitude}°</span>
+                <div>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">الموقع والمدينة الحالية</span>
+                  <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                    <span>{settings.cityName || 'غير محدد'}</span>
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-extrabold px-2 py-0.5 rounded-full border border-emerald-300/40">نشط 📍</span>
+                  </h3>
                 </div>
               </div>
+
+              {/* Action to view Qibla Compass */}
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('change-main-tab', { detail: { tab: 'qibla' } }));
+                }}
+                className="py-1.5 px-3 bg-white dark:bg-[#111720] hover:bg-slate-50 dark:hover:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 rounded-xl text-[11px] font-black cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+              >
+                <Compass className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>اتجاه القبلة</span>
+              </button>
             </div>
+
+            <p className="text-[10.5px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+              تحديد موقعك الجغرافي الدقيق يُستخدم لحساب أوقات الشروق والغروب ومواقيت الصلاة الخمسة بدقة فلكية متناهية بدون الحاجة لاتصال بالإنترنت.
+            </p>
+
+            {/* Geographical Coordinates Grid */}
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className="p-3 bg-white/80 dark:bg-[#111720]/80 backdrop-blur-xs rounded-2xl text-center space-y-1 border border-slate-200/60 dark:border-slate-800/60 shadow-2xs">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block">خط العرض (Lat)</span>
+                <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">{settings.latitude.toFixed(4)}°</span>
+              </div>
+              <div className="p-3 bg-white/80 dark:bg-[#111720]/80 backdrop-blur-xs rounded-2xl text-center space-y-1 border border-slate-200/60 dark:border-slate-800/60 shadow-2xs">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block">خط الطول (Lng)</span>
+                <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 font-mono">{settings.longitude.toFixed(4)}°</span>
+              </div>
+              <div className="p-3 bg-white/80 dark:bg-[#111720]/80 backdrop-blur-xs rounded-2xl text-center space-y-1 border border-slate-200/60 dark:border-slate-800/60 shadow-2xs">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block">زاوية القبلة 🕋</span>
+                <span className="text-xs font-black text-amber-600 dark:text-amber-400 font-mono">
+                  {Math.round(calculateQiblaBearing(settings.latitude, settings.longitude))}° ({bearingToCompassLabel(calculateQiblaBearing(settings.latitude, settings.longitude))})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* GPS Automatic Location Detector */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="text-sm font-black text-slate-800 dark:text-white">التحديد التلقائي للموقع (GPS / شبكة الاتصال)</h3>
+            </div>
+            
+            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+              اضغط على الزر التالي ليقوم التطبيق بالاستعلام التلقائي من حساس الـ GPS في جهازك أو عبر شبكة المزود لتحديد أقرب مدينة بدقة.
+            </p>
+
+            <button
+              type="button"
+              disabled={isAutoLocating}
+              onClick={async () => {
+                setIsAutoLocating(true);
+                setLocationStatusMsg('');
+                try {
+                  const res = await detectUserLocation();
+                  setSettings(prev => ({
+                    ...prev,
+                    latitude: res.latitude,
+                    longitude: res.longitude,
+                    cityName: res.cityName
+                  }));
+                  setLocationStatusMsg(res.message);
+                } catch (e) {
+                  console.error(e);
+                  setLocationStatusMsg('فشل تحديد الموقع تلقائياً. يرجى التأكد من سماح المتصفح بإذن الموقع الجغرافي أو اختيار مدينتك من القائمة أسفله.');
+                } finally {
+                  setIsAutoLocating(false);
+                }
+              }}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-98 disabled:opacity-60"
+            >
+              {isAutoLocating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>جاري تحديد موقعك التلقائي بدقة فلكية...</span>
+                </>
+              ) : (
+                <>
+                  <Navigation className="w-4 h-4 text-white animate-pulse" />
+                  <span>تحديث موقعي التلقائي الآن (GPS) 📍</span>
+                </>
+              )}
+            </button>
+
+            {locationStatusMsg && (
+              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl text-[11px] font-bold text-emerald-800 dark:text-emerald-300 text-center flex items-center justify-center gap-2 animate-fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{locationStatusMsg}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Popular Cities Shortcuts */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-3 transition-colors duration-300 shadow-sm">
+            <h3 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+              <span>🚀 اختصارات سريعة للمدن والمحافظات الكبرى</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
+              اضغط على أي مدينة لاختيارها فوراً وتعديل المواقيت وإحداثيات القبلة تلقائياً:
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[
+                { name: 'Cairo', label: 'القاهرة' },
+                { name: 'Alexandria', label: 'الإسكندرية' },
+                { name: 'Makkah', label: 'مكة المكرمة' },
+                { name: 'Medina', label: 'المدينة المنورة' },
+                { name: 'Riyadh', label: 'الرياض' },
+                { name: 'Jeddah', label: 'جدة' },
+                { name: 'Dubai', label: 'دبي' },
+                { name: 'Amman', label: 'عمان' },
+                { name: 'Dammam', label: 'الدمام' },
+                { name: 'Baghdad', label: 'بغداد' },
+                { name: 'Tunis', label: 'تونس' },
+                { name: 'Casablanca', label: 'الدار البيضاء' }
+              ].map(item => {
+                const cityData = POPULAR_CITIES.find(c => c.name === item.name || c.arabicName === item.label);
+                if (!cityData) return null;
+                const isSelected = settings.cityName === cityData.arabicName || settings.cityName === cityData.name;
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      setSettings(prev => ({
+                        ...prev,
+                        cityName: cityData.arabicName,
+                        latitude: cityData.lat,
+                        longitude: cityData.lng
+                      }));
+                      setLocationStatusMsg(`تم تحديد ${cityData.arabicName} بنجاح ✨`);
+                    }}
+                    className={`py-2 px-3.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs scale-105'
+                        : 'bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-emerald-400 hover:bg-emerald-50/50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Search & Comprehensive City Selector */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
+            <h3 className="text-sm font-black text-slate-800 dark:text-white">قائمة جميع المحافظات والمدن العربية والعالمية</h3>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
+              يمكنك البحث باسم مدينتك أو محافظتك أو دولتك من القائمة التالية المحدثة بجميع الإحداثيات الرسمية:
+            </p>
+            
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+              <input
+                type="text"
+                placeholder="ابحث عن مدينتك أو محافظتك باللغة العربية أو الإنجليزية..."
+                value={citySearchFilter}
+                onChange={(e) => setCitySearchFilter(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/85 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl pr-10 pl-4 py-2.5 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <select
+              value={settings.cityName}
+              onChange={(e) => {
+                const val = e.target.value;
+                const found = POPULAR_CITIES.find(c => c.arabicName === val || c.name === val);
+                if (found) {
+                  setSettings(prev => ({
+                    ...prev,
+                    cityName: found.arabicName,
+                    latitude: found.lat,
+                    longitude: found.lng
+                  }));
+                  setLocationStatusMsg(`تم تحديد مدينة ${found.arabicName} (${found.country}) بنجاح`);
+                }
+              }}
+              className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/85 dark:border-slate-800 text-slate-850 dark:text-slate-100 rounded-2xl px-4 py-3 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            >
+              {POPULAR_CITIES
+                .filter(c => 
+                  !citySearchFilter || 
+                  c.arabicName.includes(citySearchFilter) || 
+                  c.name.toLowerCase().includes(citySearchFilter.toLowerCase()) ||
+                  c.country.includes(citySearchFilter)
+                )
+                .map((c) => (
+                  <option key={c.name} value={c.arabicName}>
+                    {c.arabicName} — ({c.country})
+                  </option>
+                ))
+              }
+            </select>
+          </div>
+
+          {/* Manual Custom Coordinates Entry */}
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-indigo-500" />
+                <h3 className="text-sm font-black text-slate-800 dark:text-white">إدخال إحداثيات جغرافية مخصصة</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManualCoords(!showManualCoords);
+                  if (!showManualCoords) {
+                    setCustomLat(settings.latitude.toString());
+                    setCustomLng(settings.longitude.toString());
+                  }
+                }}
+                className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 cursor-pointer hover:bg-indigo-100 transition-all"
+              >
+                {showManualCoords ? 'إخفاء الإدخال اليدوي' : 'تعديل الإحداثيات يدوياً'}
+              </button>
+            </div>
+
+            {showManualCoords && (
+              <div className="space-y-3 pt-2 animate-fade-in border-t border-slate-100 dark:border-slate-800/50">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-relaxed">
+                  مفيد للمناطق الصحراوية، أو الرحلات البحرية والبرية التي لا تتوافر فيها أسماء مدن مسجلة:
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block mb-1">خط العرض (Latitude)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="مثال: 30.0444"
+                      value={customLat}
+                      onChange={(e) => setCustomLat(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block mb-1">خط الطول (Longitude)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="مثال: 31.2357"
+                      value={customLng}
+                      onChange={(e) => setCustomLng(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const latNum = parseFloat(customLat);
+                    const lngNum = parseFloat(customLng);
+                    if (!isNaN(latNum) && !isNaN(lngNum) && latNum >= -90 && latNum <= 90 && lngNum >= -180 && lngNum <= 180) {
+                      setSettings(prev => ({
+                        ...prev,
+                        latitude: latNum,
+                        longitude: lngNum,
+                        cityName: `موقع مخصص (${latNum.toFixed(2)}°, ${lngNum.toFixed(2)}°)`
+                      }));
+                      setLocationStatusMsg('تم حفظ وتحديث الإحداثيات المخصصة بنجاح ✨');
+                      setShowManualCoords(false);
+                    } else {
+                      alert('يرجى إدخال قيم صحيحة لخطوط العرض (-90 إلى 90) وخطوط الطول (-180 إلى 180).');
+                    }
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>حفظ وتطبيق الإحداثيات المخصصة</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* GPS Help & Permissions Guide */}
+          <div className="bg-slate-50 dark:bg-[#111720] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <h3 className="text-xs font-black text-slate-700 dark:text-slate-300">طريقة تفعيل إذن الموقع الجغرافي وحل المشاكل</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGpsGuide(!showGpsGuide)}
+                className="text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 font-bold underline cursor-pointer"
+              >
+                {showGpsGuide ? 'إغلاق الدليل' : 'عرض خطوات التفعيل'}
+              </button>
+            </div>
+
+            {showGpsGuide && (
+              <div className="text-[10.5px] text-slate-600 dark:text-slate-400 space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 font-medium leading-relaxed animate-fade-in">
+                <p>إذا ظهرت لك رسالة خطأ عند الضغط على زر تحديد الموقع التلقائي:</p>
+                <ul className="list-disc list-inside space-y-1.5 pr-2">
+                  <li><strong>على هواتف أندرويد (Chrome / Brave / Samsung):</strong> اضغط على أيقونة القفل 🔒 بجوار عنوان الموقع في أعلى المتصفح، ثم اختر "إعدادات الموقع" واسمح بـ (Location / الموقع الجغرافي).</li>
+                  <li><strong>على آيفون (Safari):</strong> اذهب لإعدادات الآيفون ⚙️ ➔ الخصوصية والأمان ➔ خدمات الموقع ➔ Safari ➔ اختر "أثناء استخدام التطبيق".</li>
+                  <li><strong>على الكمبيوتر / اللابتوب:</strong> يرجى السماح بالنافذة المنبثقة Permission Prompt التي تظهر بأعلى اليسار/اليمين عند الضغط على زر تحديد الموقع.</li>
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
