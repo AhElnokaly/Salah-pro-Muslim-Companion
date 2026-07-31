@@ -89,3 +89,42 @@ body {
 .animate-dynamic-glow {
   animation: dynamic-glow 2.5s ease-in-out infinite;
 }
+
+/* ============================================
+   LineArtBackdrop Animations
+   ============================================ */
+
+@keyframes lineart-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.lineart-twinkle {
+  animation: lineart-twinkle 3.5s ease-in-out infinite;
+}
+
+@keyframes lineart-pulse-slow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+.lineart-pulse-slow {
+  animation: lineart-pulse-slow 4.5s ease-in-out infinite;
+}
+
+@keyframes lineart-flicker {
+  0%, 100% { opacity: 0.85; }
+  45% { opacity: 1; }
+  55% { opacity: 0.7; }
+}
+.lineart-flicker {
+  animation: lineart-flicker 5s ease-in-out infinite;
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+  .lineart-twinkle,
+  .lineart-pulse-slow,
+  .lineart-flicker {
+    animation: none;
+  }
+}
+

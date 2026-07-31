@@ -392,7 +392,7 @@ export default function WidgetSimulator({
         <div className="absolute top-4 inset-x-4 z-50 bg-emerald-600 text-white font-black text-xs py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between gap-2 animate-bounce">
           <div className="flex items-center gap-2">
             <span className="text-base">✨</span>
-            <p className="text-right leading-relaxed">{toastMessage}</p>
+            <p className="text-end leading-relaxed">{toastMessage}</p>
           </div>
           <button 
             type="button"
@@ -414,7 +414,7 @@ export default function WidgetSimulator({
           }`}>
             📱
           </div>
-          <div className="text-right">
+          <div className="text-end">
             <h3 className="text-sm font-black leading-tight">تطبيقات شاشة الهاتف (Widgets Lab)</h3>
             <p className="text-[10.5px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">
               صمّم، جرب، وحمل المكونات الذكية التفاعلية الخاصة بهاتفك مباشرة بالأسفل
@@ -450,7 +450,7 @@ export default function WidgetSimulator({
         <div className="md:col-span-7 space-y-3.5 flex flex-col justify-between">
           
           {/* Quick Choice Grid: Widget Type */}
-          <div className="space-y-1.5 text-right">
+          <div className="space-y-1.5 text-end">
             <label className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
               <Sparkles className="w-3 h-3 animate-pulse" />
               ١. اختر شكل وتخطيط الـ Widget:
@@ -477,7 +477,7 @@ export default function WidgetSimulator({
                         setWidgetTheme('dark-blue');
                       }
                     }}
-                    className={`p-2.5 rounded-xl border text-right transition-all duration-200 hover:scale-[1.01] cursor-pointer flex flex-col justify-between h-[54px] ${
+                    className={`p-2.5 rounded-xl border text-end transition-all duration-200 hover:scale-[1.01] cursor-pointer flex flex-col justify-between h-[54px] ${
                       isSel
                         ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
                         : isFaithBright
@@ -497,7 +497,7 @@ export default function WidgetSimulator({
 
           {/* Color Themes & Palettes (Visible if not overridden by teal template) */}
           {widgetType !== 'teal' && widgetType !== 'compact' && (
-            <div className="space-y-1.5 text-right">
+            <div className="space-y-1.5 text-end">
               <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
                 ٢. النمط البصري والألوان:
               </label>
@@ -533,7 +533,7 @@ export default function WidgetSimulator({
           {/* Interactive Actions Group - Pin & Download SVG side-by-side */}
           <div className={`p-3 rounded-2xl border ${
             isFaithBright ? 'bg-amber-50/55 border-amber-100/80' : 'bg-slate-900/40 border-white/5'
-          } space-y-2.5 text-right`}>
+          } space-y-2.5 text-end`}>
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 block uppercase">٣. حفظ المكون وتصديره لهاتفك:</span>
               <span className="text-[8.5px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
@@ -570,7 +570,7 @@ export default function WidgetSimulator({
           </div>
 
           {/* Quick installation short manual */}
-          <div className={`p-3.5 rounded-2xl text-right leading-relaxed font-medium space-y-1.5 ${
+          <div className={`p-3.5 rounded-2xl text-end leading-relaxed font-medium space-y-1.5 ${
             isFaithBright ? 'bg-amber-50/50 border border-amber-100/60' : 'bg-slate-900/40 border border-white/5'
           }`}>
             <span className="text-[9.5px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block flex items-center gap-1">
@@ -620,7 +620,7 @@ export default function WidgetSimulator({
               
               {/* STYLE 1: Timeline widget */}
               {widgetType === 'timeline' && (
-                <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-right select-none scale-100 ${getWidgetThemeClass()}`}>
+                <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-end select-none scale-100 ${getWidgetThemeClass()}`}>
                   {/* Top line */}
                   <div className="flex justify-between items-start border-b border-white/10 pb-1.5">
                     <div className="flex items-center gap-1">
@@ -628,12 +628,12 @@ export default function WidgetSimulator({
                         <span className="text-[10px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
                         <span className="text-[6px] font-bold leading-none">{currentMonthName}</span>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <span className="text-[8px] font-black block text-white/90 leading-none">{dayNameArabic}</span>
                         <span className="text-[6px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianStr.split(' ').slice(0, 2).join(' '))}</span>
                       </div>
                     </div>
-                    <div className="text-left">
+                    <div className="text-start">
                       <span className="text-[6px] font-bold block text-white/40">متبقي للأذان</span>
                       <span className="text-[10px] font-extrabold block text-amber-400 font-mono leading-none mt-0.5" dir="ltr">
                         -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
@@ -645,7 +645,7 @@ export default function WidgetSimulator({
                   <div className="relative py-2.5 my-0.5 flex items-center justify-between">
                     <div className="absolute inset-x-1.5 h-[1.5px] bg-white/20 top-1/2 -translate-y-1/2 z-0 rounded-full" />
                     <div 
-                      className="absolute right-1.5 h-[1.5px] bg-amber-400 top-1/2 -translate-y-1/2 z-0 rounded-full transition-all duration-1000"
+                      className="absolute end-1.5 h-[1.5px] bg-amber-400 top-1/2 -translate-y-1/2 z-0 rounded-full transition-all duration-1000"
                       style={{ 
                         left: currentPrayer === 'Fajr' ? '80%' : currentPrayer === 'Dhuhr' ? '60%' : currentPrayer === 'Asr' ? '40%' : currentPrayer === 'Maghrib' ? '20%' : '5%' 
                       }}
@@ -678,7 +678,7 @@ export default function WidgetSimulator({
 
               {/* STYLE 2: Grid view */}
               {widgetType === 'grid' && (
-                <div className={`w-full rounded-[18px] p-2 flex flex-col justify-between transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                <div className={`w-full rounded-[18px] p-2 flex flex-col justify-between transition-all duration-500 border text-end select-none ${getWidgetThemeClass()}`}>
                   <div className="flex justify-between items-center border-b border-white/10 pb-1.5 text-[7.5px] font-black">
                     <span className="text-white">{dayNameArabic} • {toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
                     <span className="text-amber-400 flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
@@ -712,14 +712,14 @@ export default function WidgetSimulator({
               {/* STYLE 3: Teal elegant countdown */}
               {widgetType === 'teal' && (
                 <div className="w-full rounded-[18px] p-3 flex flex-col justify-between transition-all duration-500 bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white shadow-lg relative overflow-hidden select-none border border-teal-400/30 scale-100">
-                  <div className="absolute -left-3 -bottom-5 opacity-10 pointer-events-none text-4xl">🕌</div>
+                  <div className="absolute -start-3 -bottom-5 opacity-10 pointer-events-none text-4xl">🕌</div>
                   
                   <div className="flex justify-between items-center border-b border-white/15 pb-1 text-[7.5px] font-black">
                     <span className="flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
                     <span className="text-teal-100">{toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
                   </div>
 
-                  <div className="py-1.5 text-right space-y-0.5">
+                  <div className="py-1.5 text-end space-y-0.5">
                     <span className="text-[6px] font-bold text-teal-100/70 block leading-none">الصلاة القادمة</span>
                     <h3 className="text-[10px] font-black text-white flex justify-between items-center leading-none">
                       <span>صلاة {getArabicName(nextPrayer)}</span>
@@ -744,14 +744,14 @@ export default function WidgetSimulator({
 
               {/* STYLE 4: Analog style dial */}
               {widgetType === 'analog' && (
-                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-2 transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-2 transition-all duration-500 border text-end select-none ${getWidgetThemeClass()}`}>
                   {/* Miniature Clock Face */}
                   <div className="w-[60px] h-[60px] rounded-full bg-[#0a1520] border border-[#192f44] relative flex items-center justify-center shrink-0">
                     <div className="absolute inset-0.5 rounded-full border border-dashed border-white/5 pointer-events-none" />
                     <span className="absolute top-0.5 text-[6px] font-black text-white/30 font-sans">١٢</span>
-                    <span className="absolute right-0.5 text-[6px] font-black text-white/30 font-sans">٣</span>
+                    <span className="absolute end-0.5 text-[6px] font-black text-white/30 font-sans">٣</span>
                     <span className="absolute bottom-0.5 text-[6px] font-black text-white/30 font-sans">٦</span>
-                    <span className="absolute left-0.5 text-[6px] font-black text-white/30 font-sans">٩</span>
+                    <span className="absolute start-0.5 text-[6px] font-black text-white/30 font-sans">٩</span>
 
                     {/* Clock Hands */}
                     <div className="absolute w-[1.5px] h-4.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${hrDeg}deg)`, top: 'calc(50% - 4.5px)' }} />
@@ -760,7 +760,7 @@ export default function WidgetSimulator({
                     <div className="w-1 h-1 rounded-full bg-red-500 border border-white z-10" />
                   </div>
 
-                  <div className="flex-1 space-y-0.5 text-right">
+                  <div className="flex-1 space-y-0.5 text-end">
                     <span className="text-[6px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicName(nextPrayer)}</span>
                     <h4 className="text-[8px] font-black text-white leading-none">متبقي للأذان</h4>
                     <span className="text-[9px] font-black text-white block font-mono leading-none mt-0.5" dir="ltr">

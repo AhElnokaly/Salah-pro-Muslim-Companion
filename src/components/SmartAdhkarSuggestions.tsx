@@ -128,11 +128,11 @@ export default function SmartAdhkarSuggestions({
   };
 
   return (
-    <div className="space-y-6 text-right" dir="rtl">
+    <div className="space-y-6 text-end" dir="rtl">
       
       {/* HEADER BANNER */}
       <div className="p-6 bg-gradient-to-r from-indigo-900 via-indigo-800 to-[#111720] text-white rounded-3xl shadow-lg border border-indigo-700/50 relative overflow-hidden">
-        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -start-10 -bottom-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
         
         <div className="relative z-10 space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-300/30 text-xs font-bold">
@@ -268,7 +268,7 @@ export default function SmartAdhkarSuggestions({
               return (
                 <div
                   key={item.id}
-                  className={`p-5 rounded-3xl border transition-all space-y-4 text-right shadow-xs ${
+                  className={`p-5 rounded-3xl border transition-all space-y-4 text-end shadow-xs ${
                     isDone
                       ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
                       : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'

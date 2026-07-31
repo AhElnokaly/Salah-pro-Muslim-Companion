@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import AppModal, { AppModalVariant } from './shared/AppModal';
 import { 
   Calendar, 
   Moon, 
@@ -45,6 +46,7 @@ export default function FastingTracker({
   const [fastType, setFastType] = useState<'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar'>('Sunnah');
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
+  const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
 
   // Keep clock updated
   React.useEffect(() => {
@@ -182,7 +184,7 @@ export default function FastingTracker({
         const dayArabic = hijriToday.day === 11 ? 'الحادي عشر' : hijriToday.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
         reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
       }
-      alert(`⚠️ تنبيه شرعي: لا يجوز صيام هذا اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      setAppModal({ message: `تنبيه شرعي: لا يجوز صيام هذا اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`, variant: 'warning' });
       return;
     }
 
@@ -234,7 +236,7 @@ export default function FastingTracker({
         const dayArabic = hDate.day === 11 ? 'الحادي عشر' : hDate.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
         reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
       }
-      alert(`⚠️ تنبيه شرعي: لا يجوز تسجيل صيام في هذا التاريخ لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      setAppModal({ message: `تنبيه شرعي: لا يجوز تسجيل صيام في هذا التاريخ لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`, variant: 'warning' });
       return;
     }
 
@@ -258,7 +260,7 @@ export default function FastingTracker({
     }
 
     setNote('');
-    alert('تم تسجيل يوم الصيام بنجاح! تقبل الله طاعاتكم.');
+    setAppModal({ message: 'تم تسجيل يوم الصيام بنجاح! تقبل الله طاعاتكم.', variant: 'success' });
   };
 
   // Delete a fast log
@@ -363,7 +365,7 @@ export default function FastingTracker({
   const qadaFasted = fastingLogsList.filter(l => l.fastType === 'Qada').length;
 
   return (
-    <div id="fasting-tracker-root" className="space-y-6 text-right pb-10" dir="rtl">
+    <div id="fasting-tracker-root" className="space-y-6 text-end pb-10" dir="rtl">
       
       {/* 1. Ramadan / Qada Summary & Main Tracker Banner */}
       <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl p-5 border border-indigo-500/20 shadow-xl relative overflow-hidden">
@@ -454,7 +456,7 @@ export default function FastingTracker({
               <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center text-2xl shrink-0">
                 {moonInfo.icon}
               </div>
-              <div className="space-y-0.5 text-right">
+              <div className="space-y-0.5 text-end">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-black text-slate-800 dark:text-white">
                     طور القمر اليوم: {moonInfo.name}
@@ -714,7 +716,7 @@ export default function FastingTracker({
             <p className="text-[10px] mt-1">ابدأ بتسجيل صيام اليوم لتراه هنا!</p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[250px] overflow-y-auto pe-1">
             {fastingLogsList.sort((a,b) => b.date.localeCompare(a.date)).map((log) => (
               <div 
                 key={log.date}
@@ -756,6 +758,13 @@ export default function FastingTracker({
         )}
       </div>
 
+      {appModal && (
+        <AppModal
+          message={appModal.message}
+          variant={appModal.variant}
+          onClose={() => setAppModal(null)}
+        />
+      )}
     </div>
   );
 }

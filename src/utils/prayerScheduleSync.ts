@@ -5,6 +5,7 @@
 
 import { calculatePrayerTimes, parseTimeToMinutes } from './prayerCalc';
 import { ScheduledAthanItem } from '../types/pushSchedule';
+import { safeSetItem } from './storage';
 
 const SCHEDULE_STORAGE_KEY = 'mc_scheduled_athans_v1';
 const LAST_SYNC_KEY = 'mc_scheduled_athans_last_sync';
@@ -28,12 +29,8 @@ export function getStoredScheduledAthans(): ScheduledAthanItem[] {
  * Save scheduled athan items locally
  */
 export function saveScheduledAthans(items: ScheduledAthanItem[]): void {
-  try {
-    localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(items));
-    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
-  } catch (e) {
-    console.error('Error saving scheduled athans:', e);
-  }
+  safeSetItem(SCHEDULE_STORAGE_KEY, JSON.stringify(items));
+  safeSetItem(LAST_SYNC_KEY, new Date().toISOString());
 }
 
 /**

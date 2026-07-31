@@ -317,7 +317,7 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.92, y: 15 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="bg-white dark:bg-[#131922] w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-right"
+          className="bg-white dark:bg-[#131922] w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-end"
         >
           {/* Header Banner */}
           <div className={`p-4 sm:p-5 bg-gradient-to-r ${currentStep.color.gradient} text-white relative flex items-center justify-between shrink-0`}>
@@ -415,7 +415,7 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
               <button
                 type="button"
                 onClick={handleJumpToFeature}
-                className="py-2.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer ml-auto sm:ml-0"
+                className="py-2.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer ms-auto sm:ms-0"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
                 <span>جرب هذه الميزة الآن 👈</span>

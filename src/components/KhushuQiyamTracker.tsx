@@ -33,6 +33,7 @@ import { AppSettings, PrayerLog } from '../types';
 import { calculatePrayerTimes, parseTimeToMinutes } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
+import { safeSetItem } from '../utils/storage';
 
 interface KhushuQiyamTrackerProps {
   settings: AppSettings;
@@ -421,7 +422,7 @@ export default function KhushuQiyamTracker({
         next.add(id);
         if (navigator.vibrate) navigator.vibrate(20);
       }
-      localStorage.setItem(currentKhushuKey, JSON.stringify(Array.from(next)));
+      safeSetItem(currentKhushuKey, JSON.stringify(Array.from(next)));
       return next;
     });
   };
@@ -434,7 +435,7 @@ export default function KhushuQiyamTracker({
 
   const handleModeChange = (mode: 'daily' | 'prayer') => {
     setKhushuResetMode(mode);
-    localStorage.setItem('khushu_reset_mode', mode);
+    safeSetItem('khushu_reset_mode', mode);
   };
 
   // Handle saving Qiyam log
@@ -468,9 +469,9 @@ export default function KhushuQiyamTracker({
       }
     }));
 
-    localStorage.setItem(`khushu_rating_${todayStr}`, khushuRating.toString());
-    localStorage.setItem(`qiyam_surahs_${todayStr}`, surahsRead);
-    localStorage.setItem(`qiyam_notes_${todayStr}`, personalNotes);
+    safeSetItem(`khushu_rating_${todayStr}`, khushuRating.toString());
+    safeSetItem(`qiyam_surahs_${todayStr}`, surahsRead);
+    safeSetItem(`qiyam_notes_${todayStr}`, personalNotes);
 
     setLogSuccessMsg(`تم حفظ صلاة قيام الليل (${toArabicNumbers(qRakahs)} ركعات) والوتر (${toArabicNumbers(wRakahs)} ركعات) بنجاح! تقبل الله.`);
   };
@@ -506,7 +507,7 @@ export default function KhushuQiyamTracker({
       };
 
       const next = [...existing, newAlarm];
-      localStorage.setItem('salah_custom_alarms', JSON.stringify(next));
+      safeSetItem('salah_custom_alarms', JSON.stringify(next));
 
       setLogSuccessMsg(`تم إضافة ${newAlarm.title} الساعة (${toArabicNumbers(timeStr)}) بنجاح! ⏰`);
       if (onNavigateTab) {
@@ -539,11 +540,11 @@ export default function KhushuQiyamTracker({
   const { qiyamDaysCount, totalRakahsSum } = getQiyamStats();
 
   return (
-    <div className="space-y-6 text-right pb-12 animate-fade-in">
+    <div className="space-y-6 text-end pb-12 animate-fade-in">
       {/* 1. HERO BANNER */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c121e] via-[#151c2d] to-[#1f1636] p-6 text-white border border-indigo-500/30 shadow-xl">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute top-0 end-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 start-0 w-48 h-48 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -564,7 +565,7 @@ export default function KhushuQiyamTracker({
               </div>
             </div>
 
-            <div className="text-left font-mono">
+            <div className="text-start font-mono">
               <span className="text-xs text-indigo-300 font-bold block">{hijri.fullString}</span>
               <span className="text-[10px] text-slate-400 font-bold">{toArabicNumbers(todayStr)}</span>
             </div>
@@ -762,7 +763,7 @@ export default function KhushuQiyamTracker({
             </div>
           </div>
 
-          <div className="text-left">
+          <div className="text-start">
             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-black bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded-xl border border-amber-200 dark:border-amber-800">
               {toArabicNumbers(qiyamDaysCount)} ليلة في الشهر 🌙
             </span>
@@ -962,7 +963,7 @@ export default function KhushuQiyamTracker({
                 key={step.id}
                 type="button"
                 onClick={() => toggleKhushuStep(step.id)}
-                className={`w-full p-3 rounded-2xl border text-right transition-all cursor-pointer flex items-start gap-3 ${
+                className={`w-full p-3 rounded-2xl border text-end transition-all cursor-pointer flex items-start gap-3 ${
                   isDone
                     ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-slate-800 dark:text-slate-200'
                     : 'bg-slate-50/60 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/40'

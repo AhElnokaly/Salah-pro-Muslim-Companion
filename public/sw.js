@@ -114,12 +114,23 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || './';
+  if (event.action === 'dismiss') {
+    return;
+  }
+
+  const prayerName = event.notification.data?.prayerName;
+  const urlToOpen = event.notification.data?.url || (prayerName ? `./?autoAthan=true&prayer=${prayerName}` : './');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
+          if (prayerName) {
+            client.postMessage({
+              type: 'TRIGGER_ATHAN_FROM_NOTIFICATION',
+              prayerName: prayerName
+            });
+          }
           return client.focus();
         }
       }
@@ -130,9 +141,88 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// State for background exact prayer timers
+let scheduledTimers = [];
+let notifiedPrayerKeys = new Set();
+
+const ARABIC_PRAYER_NAMES = {
+  Fajr: 'الفجر',
+  Sunrise: 'الشروق',
+  Dhuhr: 'الظهر',
+  Asr: 'العصر',
+  Maghrib: 'المغرب',
+  Isha: 'العشاء'
+};
+
+function clearAllScheduledTimers() {
+  for (const timerId of scheduledTimers) {
+    clearTimeout(timerId);
+  }
+  scheduledTimers = [];
+}
+
+function triggerPrayerNotification(item, cityName) {
+  const key = `${item.dateStr}_${item.prayerName}`;
+  if (notifiedPrayerKeys.has(key)) return;
+  notifiedPrayerKeys.add(key);
+
+  const prayerArabic = ARABIC_PRAYER_NAMES[item.prayerName] || item.prayerName;
+  const city = cityName || 'القاهرة';
+
+  self.registration.showNotification(`🕌 حان الآن موعد صلاة ${prayerArabic}`, {
+    body: `حسب توقيت مدينة ${city}. تقبل الله صلاتكم وطاعاتكم. اضغط هنا لسماع الأذان.`,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: `athan-${item.prayerName}`,
+    renotify: true,
+    requireInteraction: true,
+    dir: 'rtl',
+    lang: 'ar',
+    vibrate: [300, 100, 300, 100, 500],
+    data: {
+      url: `./?autoAthan=true&prayer=${item.prayerName}`,
+      prayerName: item.prayerName
+    },
+    actions: [
+      { action: 'open_athan', title: '🔊 فتح شاشة الأذان' },
+      { action: 'dismiss', title: 'إغلاق' }
+    ]
+  });
+}
+
+function scheduleExactPrayerTimers(schedules, cityName, adhanEnabled) {
+  clearAllScheduledTimers();
+  if (!schedules || !Array.isArray(schedules)) return;
+
+  const nowMs = Date.now();
+  const validPrayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+  // Max delay for JS setTimeout is 24 hours (86,400,000 ms) to prevent 32-bit int overflow (>2147483647ms)
+  const MAX_DELAY_MS = 24 * 60 * 60 * 1000;
+
+  for (const item of schedules) {
+    if (!validPrayers.includes(item.prayerName)) continue;
+    if (adhanEnabled && adhanEnabled[item.prayerName] === false) continue;
+
+    const fireTimeMs = new Date(item.fireAtUtc).getTime();
+    if (isNaN(fireTimeMs)) continue;
+
+    const delayMs = fireTimeMs - nowMs;
+
+    // Only schedule if the prayer is strictly in the FUTURE and within the next 24 hours
+    if (delayMs > 0 && delayMs <= MAX_DELAY_MS) {
+      const timerId = setTimeout(() => {
+        triggerPrayerNotification(item, cityName);
+      }, delayMs);
+      scheduledTimers.push(timerId);
+    }
+  }
+}
+
 // Message listener from app client
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+  if (!event.data) return;
+
+  if (event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data.payload || {};
     if (title) {
       self.registration.showNotification(title, {
@@ -144,6 +234,22 @@ self.addEventListener('message', (event) => {
         ...options
       });
     }
+  } else if (event.data.type === 'SYNC_PRAYER_SCHEDULE') {
+    const payload = event.data.payload || {};
+    scheduleExactPrayerTimers(payload.schedule, payload.cityName, payload.adhanEnabled);
+  }
+});
+
+// Periodic Sync / Background Sync listeners (as fallback when browser wakes)
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'prayer-check') {
+    // If browser periodic sync wakes, timers will re-validate
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'prayer-check') {
+    // Background sync fallback
   }
 });
 

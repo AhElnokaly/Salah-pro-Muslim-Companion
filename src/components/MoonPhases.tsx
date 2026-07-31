@@ -415,7 +415,7 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
       };
     } else if (day >= 13 && day <= 15) {
       return {
-        name: 'البدر المكتمل (أيام البيض)',
+        name: 'البدر المكتمل',
         enName: 'Full Moon',
         illumination: 100,
         age: day,
@@ -445,7 +445,7 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
       };
     } else {
       return {
-        name: 'الهلال المتناقص (العرجون القديم)',
+        name: 'الهلال المتناقص',
         enName: 'Waning Crescent',
         illumination: Math.max(3, Math.round(50 - ((day - 22) / 7) * 45)),
         age: day,
@@ -483,16 +483,16 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
         }`} />
 
         {/* Top Header Badge */}
-        <div className="relative z-10 flex items-center justify-between w-full border-b border-white/10 pb-4 mb-6">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-2xl bg-indigo-950/80 border border-indigo-500/30 text-amber-300">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 w-full border-b border-white/10 pb-4 mb-6">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2.5 rounded-2xl bg-indigo-950/80 border border-indigo-500/30 text-amber-300 shrink-0">
               <Moon className="w-5 h-5 animate-pulse" />
             </span>
             <div>
               <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
                 <span>أطوار ومنازل القمر</span>
                 <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
-                  التقويم القمري المطور
+                  التقويم القمري
                 </span>
               </h2>
               <p className="text-xs text-slate-400 font-medium">
@@ -501,7 +501,7 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
             </div>
           </div>
 
-          <div className="text-left font-mono">
+          <div className="text-start font-mono shrink-0">
             <span className="text-xs text-slate-400 block font-bold">اليوم الهجري</span>
             <span className="text-xl font-black text-amber-400">
               {toArabicNumbers(targetHijriDay)} {hijriMonthName}
@@ -516,10 +516,10 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
             {/* The Spherical Moon Texture Surface */}
             <div className="w-full h-full rounded-full bg-[#111827] relative overflow-hidden shadow-inner border border-slate-700 flex items-center justify-center">
               {/* Moon Craters Simulation */}
-              <div className="absolute w-8 h-8 rounded-full bg-slate-800/40 top-8 left-10 blur-[1px]" />
-              <div className="absolute w-12 h-12 rounded-full bg-slate-800/30 bottom-10 right-8 blur-[1px]" />
-              <div className="absolute w-6 h-6 rounded-full bg-slate-800/50 top-20 right-14 blur-[1px]" />
-              <div className="absolute w-10 h-10 rounded-full bg-slate-800/25 bottom-12 left-12 blur-[1px]" />
+              <div className="absolute w-8 h-8 rounded-full bg-slate-800/40 top-8 start-10 blur-[1px]" />
+              <div className="absolute w-12 h-12 rounded-full bg-slate-800/30 bottom-10 end-8 blur-[1px]" />
+              <div className="absolute w-6 h-6 rounded-full bg-slate-800/50 top-20 end-14 blur-[1px]" />
+              <div className="absolute w-10 h-10 rounded-full bg-slate-800/25 bottom-12 start-12 blur-[1px]" />
 
               {/* Illuminated Phase Overlay Gradient */}
               <div 
@@ -541,10 +541,19 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
           </div>
 
           {/* Current Phase Title */}
-          <div className="mt-4 text-center space-y-1">
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-2xl font-black text-white">{currentPhase.name}</span>
-              <span className="text-xs font-mono text-slate-400 dir-ltr font-bold">({currentPhase.enName})</span>
+          <div className="mt-4 text-center space-y-2 px-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-none drop-shadow-xs">
+                {currentPhase.name}
+              </h1>
+              <span className="text-xs font-mono font-bold text-slate-300 bg-white/10 border border-white/15 px-2.5 py-0.5 rounded-md dir-ltr shadow-xs">
+                {currentPhase.enName}
+              </span>
+              {isAyyamBeed && (
+                <span className="text-xs font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2.5 py-0.5 rounded-full shadow-xs">
+                  ✨ أيام البيض
+                </span>
+              )}
             </div>
             <p className="text-xs text-amber-300 font-bold max-w-md mx-auto">
               نسبة الإضاءة: %{toArabicNumbers(currentPhase.illumination)} • عمر القمر: {toArabicNumbers(currentPhase.age)} يوم
@@ -810,13 +819,13 @@ export const MoonPhases: React.FC<MoonPhasesProps> = ({
           {/* ALL 28 MANSIONS EXPLORER */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-3">
             <h4 className="text-xs font-black text-slate-300">دليل منازل القمر الـ ٢٨ كاملة:</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-80 overflow-y-auto pe-1">
               {LUNAR_MANSIONS.map((mansion) => {
                 const isCurrent = mansion.id === currentMansion.id;
                 return (
                   <div
                     key={mansion.id}
-                    className={`p-2.5 rounded-xl border transition-all text-right ${
+                    className={`p-2.5 rounded-xl border transition-all text-end ${
                       isCurrent
                         ? 'bg-amber-400 text-slate-950 border-amber-300 font-extrabold shadow-md'
                         : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700'

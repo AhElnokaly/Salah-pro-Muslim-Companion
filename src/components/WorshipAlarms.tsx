@@ -221,11 +221,11 @@ export default function WorshipAlarms({
   const dayNamesArabic = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
   return (
-    <div className="pb-12 space-y-6 text-right font-sans" dir="rtl">
+    <div className="pb-12 space-y-6 text-end font-sans" dir="rtl">
       {/* Premium Header Banner */}
       <div className="relative bg-gradient-to-br from-indigo-900 to-slate-900 dark:from-indigo-950 dark:to-slate-950 rounded-3xl p-6 overflow-hidden shadow-md text-white">
-        <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -translate-x-10 -translate-y-10" />
-        <div className="absolute bottom-0 right-0 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl translate-x-10 translate-y-10" />
+        <div className="absolute top-0 start-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -translate-x-10 -translate-y-10" />
+        <div className="absolute bottom-0 end-0 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl translate-x-10 translate-y-10" />
         
         <div className="relative z-10 space-y-3">
           <div className="flex items-center gap-3">
@@ -290,7 +290,7 @@ export default function WorshipAlarms({
           <p className="leading-relaxed font-bold text-[11px] opacity-90">
             يقوم نظام تشغيل هاتفك أو متصفحك بتعطيل البرامج في الخلفية لتوفير البطارية. لحل هذه المشكلة بالكامل:
           </p>
-          <ul className="list-disc list-inside space-y-1 pr-1 font-bold text-[10.5px] opacity-80 leading-relaxed">
+          <ul className="list-disc list-inside space-y-1 pe-1 font-bold text-[10.5px] opacity-80 leading-relaxed">
             <li>قم بتثبيت التطبيق كـ <strong>تطبيق شاشة رئيسية (PWA)</strong> عبر قائمة الخيارات أو الشريط الجانبي.</li>
             <li>تأكد من السماح بالإشعارات للتطبيق لتلقي التنبيهات حتى عند إغلاق الشاشة.</li>
             <li>يتضمن رفيق المسلم <strong>محرك مزامنة ذكي (Catch-up)</strong>، فإذا أغلقت الهاتف تماماً وفاتك موعد أذان أو منبه، سيقوم التطبيق بتشغيل الصوت فور فتحك الشاشة دون فوات الأجر!</li>
@@ -434,7 +434,7 @@ export default function WorshipAlarms({
                     a.enabled ? 'border-slate-150 dark:border-slate-800/40' : 'opacity-60 border-slate-100 dark:border-slate-850'
                   }`}
                 >
-                  <div className="space-y-1 text-right min-w-0 flex-1">
+                  <div className="space-y-1 text-end min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black text-slate-800 dark:text-white">{a.title}</span>
                       {!a.enabled && <span className="bg-slate-150 dark:bg-slate-800 px-1.5 py-0.5 rounded-md text-[8.5px] text-slate-500 font-bold">معطل</span>}
@@ -745,7 +745,7 @@ export default function WorshipAlarms({
       {alertModal.show && (
         <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in" dir="rtl">
           <div className="bg-white dark:bg-[#161d26] border border-slate-200 dark:border-slate-800 w-full max-w-sm rounded-3xl p-6 text-center space-y-4 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
+            <div className="absolute top-0 start-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
             
             <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/20 flex items-center justify-center text-amber-500 dark:text-amber-400 border border-amber-500/20">
               <Info className="w-6 h-6" />
@@ -753,7 +753,7 @@ export default function WorshipAlarms({
 
             <h3 className="text-xs font-black text-slate-800 dark:text-white">{alertModal.title}</h3>
             
-            <p className="text-[10.5px] text-slate-600 dark:text-slate-400 font-bold leading-relaxed whitespace-pre-line text-right">
+            <p className="text-[10.5px] text-slate-600 dark:text-slate-400 font-bold leading-relaxed whitespace-pre-line text-end">
               {alertModal.message}
             </p>
 

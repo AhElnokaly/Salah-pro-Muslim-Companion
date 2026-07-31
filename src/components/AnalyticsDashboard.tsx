@@ -137,10 +137,10 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
   const grayCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 0).length;
 
   return (
-    <div className="space-y-6 text-right animate-fade-in pb-12">
+    <div className="space-y-6 text-end animate-fade-in pb-12">
       {/* 1. HEADER HERO BANNER */}
       <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-3xl p-5 sm:p-7 shadow-xl relative overflow-hidden border border-emerald-500/30">
-        <div className="absolute -left-10 -bottom-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -start-10 -bottom-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -323,13 +323,13 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
 
           {/* Search */}
           <div className="relative shrink-0 sm:w-52">
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+            <Search className="w-4 h-4 text-slate-400 absolute end-3 top-2.5" />
             <input
               type="text"
               placeholder="بحث عن ميزة..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl pr-9 pl-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
+              className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl pe-9 ps-3 py-2 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
             />
           </div>
         </div>
@@ -356,7 +356,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
                   className={`bg-white dark:bg-[#161d26] rounded-3xl p-5 border-2 shadow-sm transition-all hover:shadow-md flex flex-col justify-between space-y-4 relative overflow-hidden group ${tier.colorClasses.border}`}
                 >
                   {/* Top Badge Glow Accent Line */}
-                  <div className={`absolute top-0 left-0 right-0 h-1.5 ${tier.colorClasses.bg}`} />
+                  <div className={`absolute top-0 start-0 end-0 h-1.5 ${tier.colorClasses.bg}`} />
 
                   {/* Header Row: Icon + Title + Category Badge */}
                   <div className="space-y-2">
@@ -431,7 +431,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
                     </div>
 
                     {/* الأسبوع */}
-                    <div className="space-y-0.5 border-r border-l border-slate-200/80 dark:border-slate-800 px-1">
+                    <div className="space-y-0.5 border-e border-s border-slate-200/80 dark:border-slate-800 px-1">
                       <span className="text-[9.5px] font-extrabold text-slate-400 dark:text-slate-500 block" title="يتراكم ويصفر أسبوعياً مع حفظ الإجمالي">
                         الأسبوع 🔄
                       </span>
@@ -461,7 +461,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
                     </div>
 
                     {/* مرات الإتقان 100% */}
-                    <div className="col-span-2 border-t border-slate-200/80 dark:border-slate-800 pt-1.5 mt-1 pr-1">
+                    <div className="col-span-2 border-t border-slate-200/80 dark:border-slate-800 pt-1.5 mt-1 pe-1">
                       <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 block">
                         الإتقان الكامل 100%
                       </span>
@@ -657,17 +657,17 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="w-full text-end border-collapse">
                 <thead>
                   <tr className="bg-slate-100/70 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 text-[11px] font-black border-b border-slate-200/80 dark:border-slate-800">
-                    <th className="p-3.5 pr-5">الخدمة الإيمانية</th>
+                    <th className="p-3.5 pe-5">الخدمة الإيمانية</th>
                     <th className="p-3.5 text-center">اليوم</th>
                     <th className="p-3.5 text-center">الأسبوع 🔄</th>
                     <th className="p-3.5 text-center">الشهر 🔄</th>
                     <th className="p-3.5 text-center">الإجمالي</th>
                     <th className="p-3.5 text-center">الإتقان 100%</th>
                     <th className="p-3.5 text-center">وسام المستوى</th>
-                    <th className="p-3.5 text-left pl-5">الجراء والتفاعل</th>
+                    <th className="p-3.5 text-start ps-5">الجراء والتفاعل</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -675,7 +675,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
                     const Icon = ICON_MAP[item.feature.iconName] || Clock;
                     return (
                       <tr key={item.feature.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors">
-                        <td className="p-3.5 pr-5">
+                        <td className="p-3.5 pe-5">
                           <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-xl border ${item.feature.color.bg} ${item.feature.color.border} shrink-0`}>
                               <Icon className={`w-4 h-4 ${item.feature.color.text}`} />
@@ -717,7 +717,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
                           </span>
                         </td>
 
-                        <td className="p-3.5 text-left pl-5">
+                        <td className="p-3.5 text-start ps-5">
                           <button
                             type="button"
                             onClick={() => onSelectTab(item.feature.id)}

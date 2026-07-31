@@ -136,6 +136,20 @@ export default function QuranTracker({
   };
 
   const handleDeleteSession = (id: string) => {
+    const session = quranSessions.find(s => s.id === id);
+
+    // لو الـ session كانت بتضيف صفحات لختمة نشطة، ارجع الصفحات
+    if (session && session.sessionType === 'read' && session.unitType === 'pages' && session.khatmaId) {
+      setKhatmat(prev => prev.map(k => {
+        if (k.id === session.khatmaId) {
+          const restoredPage = Math.max(0, k.currentPage - session.unitValue);
+          const status = restoredPage < k.totalPages ? 'active' : 'completed';
+          return { ...k, currentPage: restoredPage, status };
+        }
+        return k;
+      }));
+    }
+
     setQuranSessions(prev => prev.filter(s => s.id !== id));
   };
 
@@ -162,7 +176,7 @@ export default function QuranTracker({
   };
 
   return (
-    <div id="quran-tracker-root" className="space-y-6 text-right" dir="rtl">
+    <div id="quran-tracker-root" className="space-y-6 text-end" dir="rtl">
       
       {/* Tab Switcher */}
       <div className="flex border-b border-slate-200 dark:border-slate-800">
@@ -194,7 +208,7 @@ export default function QuranTracker({
           {activeKhatma ? (
             <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 space-y-6 transition-colors duration-300">
               <div className="flex justify-between items-start">
-                <div className="space-y-1 text-right">
+                <div className="space-y-1 text-end">
                   <h3 className="text-xl font-extrabold text-slate-800 dark:text-white">{activeKhatma.name}</h3>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
                     مدة الختمة: <span className="font-bold text-slate-600 dark:text-slate-400">{formatArabicDayCount(activeKhatma.durationDays)}</span>
@@ -258,7 +272,7 @@ export default function QuranTracker({
                   <div className="space-y-4">
                     {/* Target Banner */}
                     <div className="p-4 bg-amber-50/70 dark:bg-amber-950/25 rounded-2xl border border-amber-100 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200 space-y-2">
-                      <div className="flex items-start gap-2 text-right">
+                      <div className="flex items-start gap-2 text-end">
                         <Sparkles className="w-4.5 h-4.5 text-amber-500 shrink-0 mt-0.5" />
                         <div className="space-y-1.5 flex-1">
                           <span className="font-semibold leading-relaxed block">
@@ -370,7 +384,7 @@ export default function QuranTracker({
                       <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
                         <Award className="w-5 h-5" />
                       </div>
-                      <div className="space-y-0.5 text-right">
+                      <div className="space-y-0.5 text-end">
                         <span className="text-sm font-bold text-slate-800 dark:text-white">{k.name}</span>
                         <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">الصفحة {toArabicNumbers(k.currentPage)} / {toArabicNumbers(k.totalPages)}</p>
                       </div>
@@ -419,7 +433,7 @@ export default function QuranTracker({
                     }`}>
                       {session.sessionType === 'memorize' ? 'حفظ' : session.sessionType === 'review' ? 'مراجعة' : 'تلاوة'}
                     </div>
-                    <div className="space-y-0.5 text-right">
+                    <div className="space-y-0.5 text-end">
                       <span className="text-sm font-bold text-slate-800 dark:text-white">
                         {toArabicNumbers(session.unitValue)} {getUnitTypeLabel(session.unitType, session.unitValue)}
                       </span>
@@ -442,7 +456,7 @@ export default function QuranTracker({
       {/* POPUP 1: Create New Khatma Modal */}
       {showAddKhatma && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <form onSubmit={handleCreateKhatma} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-right">
+          <form onSubmit={handleCreateKhatma} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-end">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white text-center">تخطيط وبدء ختمة جديدة</h3>
             
             <div className="space-y-3">
@@ -500,7 +514,7 @@ export default function QuranTracker({
       {/* POPUP 2: Update Khatma Current Page Modal */}
       {updatingKhatmaId && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <form onSubmit={handleUpdatePage} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-right">
+          <form onSubmit={handleUpdatePage} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-end">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white text-center">تحديث الصفحة الحالية</h3>
             
             <div className="space-y-3">
@@ -547,7 +561,7 @@ export default function QuranTracker({
       {/* POPUP 3: Add Session Modal */}
       {showAddSession && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <form onSubmit={handleCreateSession} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-right">
+          <form onSubmit={handleCreateSession} className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-3xl p-6 border border-slate-100 dark:border-slate-800 space-y-5 shadow-2xl text-end">
             <h3 className="text-lg font-bold text-slate-800 dark:text-white text-center">تسجيل ورد قرآن</h3>
             
             <div className="space-y-4">

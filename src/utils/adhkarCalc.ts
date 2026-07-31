@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ADHKAR_DATA } from './adhkarData';
+import { ADHKAR_DATA, isDhikrItemVisible, getDhikrItemRequiredCount } from './adhkarData';
 
 export type PrayerKey = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 
@@ -65,11 +65,13 @@ export function getSevenStationsProgress(
         completedItems = totalItems;
       }
     } else if (st.categoryType === 'after_prayer' && st.prayerKey && afterPrayerCat) {
-      totalItems = afterPrayerCat.items.length;
-      afterPrayerCat.items.forEach(it => {
+      const applicableItems = afterPrayerCat.items.filter(it => isDhikrItemVisible(it, st.prayerKey));
+      totalItems = applicableItems.length;
+      applicableItems.forEach(it => {
         const itemKey = `${st.prayerKey}_${it.id}`;
+        const targetCount = getDhikrItemRequiredCount(it, st.prayerKey);
         const currentVal = dayLogs[itemKey] !== undefined ? dayLogs[itemKey] : 0;
-        if (currentVal >= it.count) completedItems++;
+        if (currentVal >= targetCount) completedItems++;
       });
       if (dayLogs[`after_prayer_${st.prayerKey}`] !== undefined && dayLogs[`after_prayer_${st.prayerKey}`] >= totalItems) {
         completedItems = totalItems;

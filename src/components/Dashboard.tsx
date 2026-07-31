@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import AppModal, { AppModalVariant } from './shared/AppModal';
 import { 
   Bell, 
   CheckCircle, 
@@ -37,8 +38,11 @@ import {
   CustomDua,
   QuranSession,
   QuranKhatma,
-  RamadanQadaTracker
+  RamadanQadaTracker,
+  DEFAULT_CARD_LAYOUT
 } from '../types';
+import { CARD_BLOCK_REGISTRY } from './dashboard/blocks';
+import { safeSetItem } from '../utils/storage';
 import { 
   calculatePrayerTimes, 
   getCurrentAndNextPrayer, 
@@ -61,9 +65,11 @@ import PushNotificationManager from './PushNotificationManager';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
 import FeatureDiscoveryWidget from './FeatureDiscoveryWidget';
 import { PinnedFavoriteWidget } from './PinnedFavoriteWidget';
+import UnifiedProgressCard from './UnifiedProgressCard';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
+import fridayBackdrop from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
 import classicBackdrop from '../assets/images/mosque_backdrop_1784095267677.jpg';
 import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
@@ -91,7 +97,7 @@ export const BACKDROP_IMAGES = {
   ramadan: classicBackdrop,
   eid_fitr: goldBackdrop,
   eid_adha: bannerBackdrop,
-  friday: classicBackdrop
+  friday: fridayBackdrop
 };
 
 interface DashboardProps {
@@ -136,6 +142,7 @@ export default function Dashboard({
   isPwaInstalled = false
 }: DashboardProps) {
   const [selectedPrayerToLog, setSelectedPrayerToLog] = useState<PrayerName | null>(null);
+  const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
   const [now, setNow] = useState<Date>(new Date());
   const [homeDuaIdx, setHomeDuaIdx] = useState(0);
   const showAnalogClock = (settings.clockStyle || 'digital') === 'analog';
@@ -156,7 +163,7 @@ export default function Dashboard({
 
   const setClockFace = (val: 'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk') => {
     setClockFaceState(val);
-    localStorage.setItem('salah_clock_face', val);
+    safeSetItem('salah_clock_face', val);
   };
 
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
@@ -528,9 +535,9 @@ export default function Dashboard({
       id: 'general-adhkar-rem',
       type: 'spiritual_advice',
       title: 'أذكار الصباح والمساء',
-      description: 'قال رسول الله ﷺ: "مثل الذي يذكر ربه والذي لا يذكر ربه، مثل الحي والميت". يمكنك الآن الاستماع للأذكار بصوت الشيخ مشاري العفاسي مباشرة.',
-      icon: '🎧',
-      actionLabel: 'استمع للأذكار بصوت مشاري العفاسي 🎧',
+      description: 'قال رسول الله ﷺ: "مثل الذي يذكر ربه والذي لا يذكر ربه، مثل الحي والميت". حظك اليومي من الأذكار ينير بصيرتك ويحفظ يومك.',
+      icon: '📿',
+      actionLabel: 'تصفح الأذكار 📿',
       action: () => {
         if (setActiveTab) setActiveTab('adhkar');
       }
@@ -588,9 +595,9 @@ export default function Dashboard({
           [pName]: true
         }
       }));
-      alert(`تم تفعيل تنبيهات صلاة ${getArabicPrayerName(pName)} بنجاح!`);
+      setAppModal({ message: `تم تفعيل تنبيهات صلاة ${getArabicPrayerName(pName)} بنجاح!`, variant: 'success' });
     } else {
-      alert('بارك الله في سعيكم ومداومتكم على الخير 🤍');
+      setAppModal({ message: 'بارك الله في سعيكم ومداومتكم على الخير 🤍', variant: 'success' });
     }
   };
 
@@ -710,7 +717,7 @@ export default function Dashboard({
         const dayArabic = hToday.day === 11 ? 'الحادي عشر' : hToday.day === 12 ? 'الثاني عشر' : 'الثالث عشر';
         reasonStr = `أيام التشريق المباركة (يوم ${dayArabic} ذو الحجة)`;
       }
-      alert(`⚠️ تنبيه شرعي: لا يجوز صيام اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`);
+      setAppModal({ message: `تنبيه شرعي: لا يجوز صيام اليوم لأنه يصادف ${reasonStr}. الصيام في العيد وأيام التشريق محرّم شرعاً.`, variant: 'warning' });
       return;
     }
 
@@ -772,27 +779,27 @@ export default function Dashboard({
       };
     } else if (nowMins >= sunriseMins && nowMins < duhaMins) {
       return {
-        gradient: 'from-[#ff7e5f] via-[#feb47b] to-[#e9c46a]',
+        gradient: 'from-[#ea580c] via-[#f59e0b] to-[#38bdf8]',
         label: 'من الشروق للضحى'
       };
     } else if (nowMins >= duhaMins && nowMins < dhuhrMins) {
       return {
-        gradient: 'from-[#2a9d8f] via-[#3a7bd5] to-[#3a6073]',
+        gradient: 'from-[#0284c7] via-[#0ea5e9] to-[#0f766e]',
         label: isFriday ? 'من الضحى للجمعة' : 'من الضحى للظهر'
       };
     } else if (nowMins >= dhuhrMins && nowMins < asrMins) {
       return {
-        gradient: 'from-[#2193b0] via-[#3a7bd5] to-[#6dd5ed]',
+        gradient: 'from-[#0284c7] via-[#2563eb] to-[#0891b2]',
         label: isFriday ? 'من الجمعة للعصر' : 'من الظهر للعصر'
       };
     } else if (nowMins >= asrMins && nowMins < maghribMins) {
       return {
-        gradient: 'from-[#f12711] via-[#f5af19] to-[#ff9f43]',
+        gradient: 'from-[#ea580c] via-[#f59e0b] to-[#b45309]',
         label: 'من العصر للمغرب'
       };
     } else if (nowMins >= maghribMins && nowMins < ishaMins) {
       return {
-        gradient: 'from-[#741543] via-[#411b5c] to-[#1f1640]',
+        gradient: 'from-[#701a75] via-[#4c1d95] to-[#1e1b4b]',
         label: 'من المغرب للعشاء'
       };
     } else if (nowMins >= ishaMins && nowMins < 1440) {
@@ -802,7 +809,7 @@ export default function Dashboard({
       };
     } else {
       return {
-        gradient: 'from-[#050508] via-[#090d22] to-[#11111d]',
+        gradient: 'from-[#050508] via-[#0f172a] to-[#111827]',
         label: 'من منتصف الليل للفجر'
       };
     }
@@ -920,7 +927,24 @@ export default function Dashboard({
     : settings.backdropStyle;
 
   const getGradientForBackdrop = (bKey: BackdropType, defaultGrad: string) => {
+    // If user set 'auto' or no specific style, ALWAYS use defaultGrad (the exact time-of-day sky gradient!)
+    if (!settings.backdropStyle || settings.backdropStyle === 'auto') {
+      return defaultGrad;
+    }
+
     switch (bKey) {
+      case 'glass_crystal':
+        return 'from-slate-900/50 via-slate-800/30 to-slate-900/50 backdrop-blur-2xl border-white/25 shadow-2xl';
+      case 'glass_emerald':
+        return 'from-emerald-950/50 via-teal-900/30 to-emerald-950/50 backdrop-blur-2xl border-emerald-400/30 shadow-2xl';
+      case 'glass_blue':
+        return 'from-sky-950/50 via-blue-900/30 to-sky-950/50 backdrop-blur-2xl border-sky-400/30 shadow-2xl';
+      case 'glass_dark':
+        return 'from-black/60 via-slate-900/40 to-black/60 backdrop-blur-2xl border-white/15 shadow-2xl';
+      case 'madinah':
+        return 'from-[#022c22] via-[#064e3b] to-[#0f766e]';
+      case 'aqsa':
+        return 'from-[#78350f] via-[#b45309] to-[#d97706]';
       case 'kaaba':
         return 'from-[#0b0f19] via-[#111827] to-[#1e293b]';
       case 'emerald':
@@ -930,7 +954,7 @@ export default function Dashboard({
       case 'night_sky':
         return 'from-[#020617] via-[#0f172a] to-[#1e1b4b]';
       case 'gold':
-        return 'from-[#451a03] via-[#78350f] to-[#b45309]';
+        return 'from-[#d97706] via-[#f59e0b] to-[#b45309]';
       case 'banner':
         return 'from-[#4c0519] via-[#881337] to-[#be185d]';
       case 'ramadan':
@@ -1156,9 +1180,9 @@ export default function Dashboard({
         }`}>
           {/* Numbers */}
           <span className={`absolute top-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>١٢</span>
-          <span className={`absolute right-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>٣</span>
+          <span className={`absolute end-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>٣</span>
           <span className={`absolute bottom-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>٦</span>
-          <span className={`absolute left-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>٩</span>
+          <span className={`absolute start-1 text-[9px] font-black font-mono ${isFaithBright ? 'text-amber-800' : 'text-amber-300'}`}>٩</span>
           
           <svg className="w-full h-full absolute inset-0" viewBox="0 0 100 100">
             {/* 12 dial tick marks */}
@@ -1206,9 +1230,9 @@ export default function Dashboard({
           </div>
           
           <span className={`absolute top-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>١٢</span>
-          <span className={`absolute right-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>٣</span>
+          <span className={`absolute end-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>٣</span>
           <span className={`absolute bottom-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>٦</span>
-          <span className={`absolute left-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>٩</span>
+          <span className={`absolute start-1 text-[9px] font-black ${isFaithBright ? 'text-emerald-900' : 'text-emerald-300'}`}>٩</span>
           
           <svg className="w-full h-full absolute inset-0" viewBox="0 0 100 100">
             {/* 12 Islamic dots or tiny stars as ticks */}
@@ -1295,9 +1319,9 @@ export default function Dashboard({
         }`}>
           {/* Numbers */}
           <span className={`absolute top-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>١٢</span>
-          <span className={`absolute right-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>٣</span>
+          <span className={`absolute end-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>٣</span>
           <span className={`absolute bottom-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>٦</span>
-          <span className={`absolute left-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>٩</span>
+          <span className={`absolute start-1 text-[9px] font-black font-sans ${isFaithBright ? 'text-blue-900' : 'text-white/40'}`}>٩</span>
           
           {/* Center Digital Clock Readout & Calligraphic Arabic Day Name */}
           <div className="absolute top-1/2 -translate-y-1/2 text-center select-none pointer-events-none">
@@ -1386,6 +1410,33 @@ export default function Dashboard({
     );
   };
 
+  const cardLayout = settings.mainCardLayout ?? DEFAULT_CARD_LAYOUT;
+  const visibleBlocks = [...cardLayout.blocks]
+    .filter(b => b.visible)
+    .sort((a, b) => a.order - b.order);
+
+  const blockSharedProps = {
+    hijri,
+    gregorianClean,
+    dayNameArabic,
+    setActiveTab,
+    getMoonPhaseInfo,
+    toArabicNumbers,
+    getIslamicEventLabel,
+    now,
+    showAnalogClock,
+    setShowAnalogClock,
+    renderCardAnalogClock,
+    clockFace,
+    setClockFace,
+    next,
+    times,
+    getArabicPrayerName,
+    timeRemainingStr,
+    current,
+    getPrayerProgressPercentage,
+  };
+
   return (
     <div id="dashboard-root" className="space-y-6" dir="rtl">
       {/* Location GPS Sync Toast Notification Banner */}
@@ -1411,189 +1462,28 @@ export default function Dashboard({
       {/* 1. High-Fidelity Main Prayer Card with Custom Gradient & Elegant Image Backdrop */}
       <div 
         id="main-prayer-card"
-        className={`w-full bg-gradient-to-b ${activeCardGradient} text-white rounded-3xl p-4 sm:p-5 gap-4 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
+        className={`w-full bg-gradient-to-b ${activeCardGradient} text-white rounded-3xl p-4 sm:p-5 gap-3 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
         {/* High-Precision Islamic Mosque Vector Backdrop (Offline, Sharp, No Checkerboard, No Broken Alt Text) */}
-        <div className="absolute inset-0 pointer-events-none select-none opacity-40 overflow-hidden">
-          <MosqueBackdrop type={currentBackdropKey} />
+        <div className={`absolute inset-0 pointer-events-none select-none overflow-hidden ${currentBackdropKey === 'friday' ? 'opacity-55 sm:opacity-65' : 'opacity-45'}`}>
+          <MosqueBackdrop type={currentBackdropKey} renderMode={settings.backdropRenderMode} />
         </div>
 
-        {/* Centered Premium Header Section with Location, Date & Controls */}
-        <div className="flex flex-col items-center justify-center text-center gap-2 z-10 w-full border-b border-white/10 pb-2.5">
-          {/* Compact Single-Row Date & Moon Phase Widget */}
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 bg-black/30 backdrop-blur-md px-2.5 sm:px-3.5 py-1 rounded-full border border-white/15 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none text-[10px] sm:text-xs">
-            <div className="flex items-center gap-1 shrink-0">
-              <Calendar className="w-3 h-3 text-amber-300 shrink-0" />
-              <span className="font-extrabold leading-none text-white drop-shadow-xs" title="التاريخ الهجري">{hijri.fullString}</span>
-            </div>
-
-            <span className="text-white/25 font-light shrink-0">•</span>
-
-            {/* Compact Moon Phase Pill */}
-            {(() => {
-              const moonInfo = getMoonPhaseInfo(hijri.day);
-              return (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab && setActiveTab('moon' as any)}
-                  className="inline-flex items-center gap-1 bg-amber-400/20 hover:bg-amber-400/35 text-amber-200 hover:text-white font-black px-2 py-0.5 rounded-full border border-amber-300/30 transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 text-[10px] sm:text-[11px] group"
-                  title={`طور القمر اليوم: ${moonInfo.name} (${toArabicNumbers(moonInfo.illumination)}% إضاءة) - اضغط لعرض منازل وأطوار القمر`}
-                >
-                  <span className="text-xs leading-none group-hover:scale-110 transition-transform">{moonInfo.icon}</span>
-                  <span className="leading-none">{moonInfo.name}</span>
-                </button>
-              );
-            })()}
-
-            <span className="text-white/25 font-light shrink-0">•</span>
-            <span className="font-black text-amber-200 leading-none shrink-0">{dayNameArabic}</span>
-            <span className="text-white/25 font-light shrink-0">•</span>
-            <span className="font-bold text-white/90 leading-none shrink-0" title="التاريخ الميلادي">{gregorianClean}</span>
-          </div>
-        </div>
-
-        {/* Central Glowing Prayer Meta & Clock Dashboard Grid */}
-        <div className="z-10 py-1 w-full">
-          {/* Dual-Column Responsive Dashboard */}
-          <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4 md:gap-6 px-1">
-            
-            {/* Column 1: The Focal Spiritual Clock */}
-            <div className="flex flex-col items-center text-center space-y-2.5 flex-1 w-full order-1 md:order-2">
-              {/* Event Tag */}
-              {(() => {
-                const ev = getIslamicEventLabel();
-                if (!ev) return null;
-                return (
-                  <div className="bg-gradient-to-r from-amber-500/10 via-emerald-600/25 to-amber-500/10 border border-amber-400/15 backdrop-blur-md px-3 py-0.5 rounded-full text-center animate-pulse">
-                    <span className="font-black text-amber-300 text-[9px] block leading-normal">{ev.text}</span>
-                  </div>
-                );
-              })()}
-
-              {/* Heartwarming spiritual greeting */}
-              <span className="text-[11px] sm:text-xs font-extrabold text-amber-200/95 tracking-wide drop-shadow-sm">
-                {(() => {
-                  const hr = now.getHours();
-                  if (hr >= 4 && hr < 12) return "صباحك بذكر الله أجمل 🌸";
-                  if (hr >= 12 && hr < 16) return "يومك مبارك وسعيد ☀️";
-                  if (hr >= 16 && hr < 19) return "مساؤك عامر بالرضا والطاعة ✨";
-                  return "ليلتك هادئة بذكر الله 🌙";
-                })()}
-              </span>
-
-              {/* Clock Display */}
-              {showAnalogClock ? (
-                <div className="flex flex-col items-center gap-1.5 py-0.5 transition-all duration-500 scale-90 sm:scale-95">
-                  {renderCardAnalogClock()}
-                </div>
-              ) : (
-                /* Giant Digital Current Time Clock */
-                <div className="flex items-baseline gap-1 select-all py-0.5 justify-center">
-                  <span className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.35)]">
-                    {(() => {
-                      let hrs = now.getHours();
-                      const mins = now.getMinutes().toString().padStart(2, '0');
-                      hrs = hrs % 12 || 12;
-                      return `${toArabicNumbers(hrs.toString())}:${toArabicNumbers(mins)}`;
-                    })()}
-                  </span>
-                  <span className="text-[9px] font-black text-amber-300 bg-black/20 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/5">
-                    {now.getHours() >= 12 ? 'م' : 'ص'}
-                  </span>
-                </div>
-              )}
-
-              {/* Segmented Clock Mode Button underneath */}
-              <button
-                type="button"
-                onClick={() => setShowAnalogClock(!showAnalogClock)}
-                className="text-[9px] font-black text-white/50 hover:text-amber-300 transition-all cursor-pointer bg-white/5 px-2 py-0.5 rounded-md border border-white/5 active:scale-95"
-              >
-                {showAnalogClock ? 'عرض الساعة الرقمية 🕒' : 'عرض ساعة العقارب 🕰️'}
-              </button>
-
-              {/* Analog Clock Face Options Selector - Shown under clock button when analog clock is active */}
-              {showAnalogClock && (
-                <div className="flex items-center justify-center gap-1 z-10 w-full animate-fade-in mt-1 scale-90">
-                  <div className="flex bg-black/25 backdrop-blur-md p-0.5 rounded-lg border border-white/5 shadow-inner">
-                    {(['classic', 'islamic', 'minimal', 'cyber', 'salatuk'] as const).map(face => (
-                      <button
-                        key={face}
-                        type="button"
-                        onClick={() => setClockFace(face)}
-                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black cursor-pointer transition-all ${
-                          clockFace === face
-                            ? 'bg-amber-400 text-slate-950 font-black'
-                            : 'text-white/60 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {face === 'classic' ? 'كلاسيك' : face === 'islamic' ? 'إسلامي' : face === 'minimal' ? 'بسيط' : face === 'cyber' ? 'سايبر' : 'صلاتك'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Subtle vertical separator for tablet/desktop */}
-            <div className="hidden md:block w-[1px] h-28 bg-white/10 shrink-0 order-2" />
-
-            {/* Column 2: Prayer Status Hub */}
-            <div className="flex flex-col items-center md:items-start text-center md:text-right space-y-3.5 flex-1 w-full order-3 md:order-1 max-w-sm mx-auto md:mx-0">
-              {/* Glassmorphic Upcoming Prayer Status Pill */}
-              <div className="bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl p-2.5 flex flex-col items-center md:items-start gap-1 shadow-md w-full hover:border-white/20 transition-all duration-300">
-                <div className="flex items-center gap-1.5 justify-center md:justify-start w-full">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <span className="text-white/60 text-[9.5px] font-extrabold tracking-wider">الصلاة القادمة</span>
-                  <span className="text-amber-300 text-xs font-black">
-                    {getArabicPrayerName(next, now)}
-                  </span>
-                  <span className="text-[9.5px] text-white/50 font-mono">({toArabicNumbers(times[next])})</span>
-                </div>
-                
-                <div className="text-[11px] font-black text-white flex items-center gap-1 border-t border-white/15 pt-1.5 w-full justify-center md:justify-start">
-                  <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
-                  <span>متبقي {toArabicNumbers(timeRemainingStr)}</span>
-                </div>
-              </div>
-
-              {/* Prayer Progress Bar */}
-              <div className="w-full space-y-1.5">
-                <div className="flex justify-between items-center text-[9.5px] text-white/75 font-bold px-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-white/50">الحالية:</span>
-                    <span className="text-emerald-300 font-extrabold">{getArabicPrayerName(current, now)}</span>
-                  </div>
-                  <span className="text-amber-300 font-black bg-white/10 px-1 py-0.5 rounded-md text-[8.5px]">{toArabicNumbers(Math.round(getPrayerProgressPercentage()))}%</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-white/50">التالية:</span>
-                    <span className="text-amber-200 font-extrabold">{getArabicPrayerName(next, now)}</span>
-                  </div>
-                </div>
-                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden relative border border-white/5 shadow-inner">
-                  <div 
-                    className="h-full bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-400 rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${getPrayerProgressPercentage()}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Sunnah & Remembrance motivational quote or quick recommendation */}
-              <div className="text-[9.5px] font-bold text-white/80 bg-white/5 border border-white/5 rounded-xl px-2.5 py-1.5 w-full leading-relaxed flex items-start gap-1.5 shadow-sm text-right">
-                <span className="text-amber-300 text-[11px] shrink-0 mt-0.5">💡</span>
-                <span className="leading-normal">
-                  {(() => {
-                    const hr = now.getHours();
-                    if (hr >= 4 && hr < 11) return "سنة الضحى صلاة الأوابين، تجزئ عن ٣٦٠ صدقة من مفاصل جسدك.";
-                    if (hr >= 11 && hr < 15) return "رواتب الظهر: أربع ركعات قبلها وركعتان بعدها تبني لك بيتًا في الجنة.";
-                    if (hr >= 15 && hr < 18) return "أربع ركعات قبل العصر رحم الله امرءاً صلى قبل العصر أربعاً.";
-                    return "احرص على ركعة الوتر قبل النوم ليكون مسك ختام يومك المبارك.";
-                  })()}
-                </span>
-              </div>
-            </div>
-
-          </div>
+        {/* Dynamic Configurable Card Blocks System */}
+        <div className="z-10 w-full flex flex-col items-center justify-between gap-1.5">
+          {visibleBlocks.map(blockConfig => {
+            const registryEntry = CARD_BLOCK_REGISTRY[blockConfig.id];
+            if (!registryEntry) return null;
+            const BlockComponent = registryEntry.component;
+            return (
+              <BlockComponent
+                key={blockConfig.id}
+                size={blockConfig.size}
+                accent={blockConfig.accent}
+                {...blockSharedProps}
+              />
+            );
+          })}
         </div>
 
         {/* Horizontal list of 6 prayers inside the card */}
@@ -1710,14 +1600,14 @@ export default function Dashboard({
                 >
                   {/* Small absolute indicator dot for logged prayers */}
                   {!isActive && !isSunrise && status !== 'future' && (
-                    <span className={`w-1 h-1 rounded-full absolute top-1 right-1 ${
+                    <span className={`w-1 h-1 rounded-full absolute top-1 end-1 ${
                       status === 'A' ? 'bg-emerald-400 animate-pulse' : status === 'B' ? 'bg-amber-400' : status === 'E' ? 'bg-purple-400' : 'bg-rose-400'
                     }`} />
                   )}
                   
                   {/* Small gold dot indicator for the current active prayer */}
                   {isActive && (
-                    <span className="w-1 h-1 rounded-full bg-amber-500 dark:bg-amber-950 absolute top-1 right-1" />
+                    <span className="w-1 h-1 rounded-full bg-amber-500 dark:bg-amber-950 absolute top-1 end-1" />
                   )}
 
                   <span className={`text-[9px] block font-black leading-none ${textNameClass}`}>
@@ -1765,267 +1655,17 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 4 Elegant Dynamic Bento Circular Widgets as Quick worship center portal */}
-      <div className={`rounded-3xl p-4 border transition-all duration-300 grid grid-cols-4 gap-2 sm:gap-4 text-center ${
-        currentStyle === 'glass-dark'
-          ? 'bg-[#111723]/90 backdrop-blur-md border-white/5 shadow-2xl text-slate-200'
-          : 'bg-white border-[#e2e8f0] shadow-sm text-slate-800'
-      }`}>
-        
-        {/* Widget 1: Al-Salah with Segmented + Gold Sunnah concentric circle */}
-        <button 
-          onClick={() => {
-            if (setActiveTab) {
-              setActiveTab('salah');
-            } else {
-              const el = document.getElementById('main-prayer-card');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }
-          }}
-          className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
-        >
-          <div className="relative w-14 h-14 flex items-center justify-center">
-            {/* SVG Segmented Obligatory Rings + Gold Sunnah Ring */}
-            <svg className="absolute w-full h-full" viewBox="0 0 36 36">
-              {/* Obligatory segmented arcs (Radius 16) */}
-              {fiveDailyPrayers.map((p, idx) => {
-                const log = todayLogs[p];
-                const status = log?.status || 'future';
-                let strokeColor = currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(148, 163, 184, 0.15)';
-                if (status === 'A') strokeColor = '#10b981';
-                else if (status === 'B') strokeColor = '#f59e0b';
-                else if (status === 'C' || status === 'D') strokeColor = '#ef4444';
-                else if (status === 'E') strokeColor = '#a855f7'; // Lavender/Purple for Excused status
-
-                const r = 16;
-                const c = 100.53;
-                const segmentLength = (c / 5) - 1.5;
-                const gapLength = c - segmentLength;
-                const offset = (c / 4) - (idx * (c / 5)); // start from top and rotate clockwise
-
-                return (
-                  <circle
-                    key={p}
-                    cx="18"
-                    cy="18"
-                    r={r}
-                    stroke={strokeColor}
-                    strokeWidth="2.2"
-                    fill="transparent"
-                    strokeDasharray={`${segmentLength} ${gapLength}`}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
-                    className="transition-all duration-500"
-                  />
-                );
-              })}
-
-              {/* Inner Golden Sunnah Ring (Radius 11.5) */}
-              <circle
-                cx="18"
-                cy="18"
-                r="11.5"
-                stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(148, 163, 184, 0.1)'}
-                strokeWidth="1.5"
-                fill="transparent"
-              />
-              <circle
-                cx="18"
-                cy="18"
-                r="11.5"
-                stroke="#d4af37"
-                strokeWidth="1.5"
-                fill="transparent"
-                strokeDasharray="72.25"
-                strokeDashoffset={72.25 - (72.25 * sunnahPercent) / 100}
-                strokeLinecap="round"
-                className="transition-all duration-1000 ease-out"
-              />
-            </svg>
-            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center z-10 shadow-xs group-hover:scale-105 transition-transform">
-              <span className="text-sm leading-none">🕌</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none">الصلاة</span>
-          <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 font-mono leading-none">
-            {toArabicNumbers(salahPercent)}%
-          </span>
-        </button>
-
-        {/* Widget 2: Al-Siyam with fast progression live countdown ring */}
-        <button 
-          onClick={() => {
-            if (setActiveTab) {
-              setActiveTab('fasting');
-            } else {
-              const el = document.getElementById('fasting-tracker-container');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }
-          }}
-          className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
-        >
-          <div className="relative w-14 h-14 flex items-center justify-center">
-            {/* SVG Progress Ring */}
-            <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="16" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(14, 165, 233, 0.12)'} strokeWidth="2.2" fill="transparent" />
-              <circle 
-                cx="18" 
-                cy="18" 
-                r="16" 
-                stroke="#0ea5e9" 
-                strokeWidth="2.2" 
-                fill="transparent" 
-                strokeDasharray="100.53" 
-                strokeDashoffset={100.53 - (100.53 * fastingProgress.percent) / 100} 
-                strokeLinecap="round" 
-                className="transition-all duration-1000 ease-out" 
-              />
-            </svg>
-            <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 flex items-center justify-center z-10 shadow-xs group-hover:scale-105 transition-transform">
-              <span className="text-sm leading-none">🌙</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none">الصيام</span>
-          <span className="text-[9px] font-extrabold text-sky-600 dark:text-sky-400 font-mono leading-none">
-            {fastingProgress.countdownStr}
-          </span>
-        </button>
-
-        {/* Widget 3: Al-Quran with 3 nested concentric rings (Reading, Memorization, Revision) */}
-        <button 
-          onClick={() => setActiveTab && setActiveTab('quran')}
-          className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
-        >
-          <div className="relative w-14 h-14 flex items-center justify-center">
-            {/* SVG 3 Concentric Nested Rings */}
-            <svg className="absolute w-full h-full" viewBox="0 0 36 36">
-              {/* Outer Ring: Reading */}
-              <circle cx="18" cy="18" r="16" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(148, 163, 184, 0.1)'} strokeWidth="1.8" fill="transparent" />
-              <circle
-                cx="18"
-                cy="18"
-                r="16"
-                stroke="#f59e0b"
-                strokeWidth="1.8"
-                fill="transparent"
-                strokeDasharray="100.53"
-                strokeDashoffset={100.53 - (100.53 * quranReadPercent) / 100}
-                strokeLinecap="round"
-                transform="rotate(-90 18 18)"
-                className="transition-all duration-1000 ease-out"
-              />
-
-              {/* Middle Ring: Memorization */}
-              <circle cx="18" cy="18" r="12.5" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(148, 163, 184, 0.1)'} strokeWidth="1.8" fill="transparent" />
-              <circle
-                cx="18"
-                cy="18"
-                r="12.5"
-                stroke="#06b6d4"
-                strokeWidth="1.8"
-                fill="transparent"
-                strokeDasharray="78.54"
-                strokeDashoffset={78.54 - (78.54 * quranMemorizePercent) / 100}
-                strokeLinecap="round"
-                transform="rotate(-90 18 18)"
-                className="transition-all duration-1000 ease-out"
-              />
-
-              {/* Inner Ring: Revision */}
-              <circle cx="18" cy="18" r="9.0" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(148, 163, 184, 0.1)'} strokeWidth="1.8" fill="transparent" />
-              <circle
-                cx="18"
-                cy="18"
-                r="9.0"
-                stroke="#a855f7"
-                strokeWidth="1.8"
-                fill="transparent"
-                strokeDasharray="56.55"
-                strokeDashoffset={56.55 - (56.55 * quranReviewPercent) / 100}
-                strokeLinecap="round"
-                transform="rotate(-90 18 18)"
-                className="transition-all duration-1000 ease-out"
-              />
-            </svg>
-            <div className="w-8 h-8 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center z-10 shadow-xs group-hover:scale-105 transition-transform">
-              <span className="text-[13px] leading-none">📖</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none">القرآن</span>
-          <span className="text-[9px] font-extrabold text-amber-600 dark:text-amber-400 font-mono leading-none">
-            {toArabicNumbers(quranPercent)}%
-          </span>
-        </button>
-
-        {/* Widget 4: Al-Adhkar with 7-Segmented Station Ring */}
-        <button 
-          onClick={() => setActiveTab && setActiveTab('adhkar')}
-          className="flex flex-col items-center gap-1.5 group cursor-pointer focus:outline-none"
-          title={`أذكار اليوم: ${toArabicNumbers(completedDhikrSessions)} من ٧ محطات مكتملة`}
-        >
-          <div className="relative w-14 h-14 flex items-center justify-center">
-            {/* SVG 7-Segment Arc Rings for the 7 Adhkar Stations */}
-            <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              {adhkarProgress.stations.map((st, idx) => {
-                let strokeColor = currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(168, 85, 247, 0.18)';
-                if (st.isDone) strokeColor = '#10b981'; // Emerald
-                else if (st.isPartial) strokeColor = '#f59e0b'; // Amber
-                else if (st.isCurrentTimeStation) strokeColor = '#c084fc'; // Active time purple
-
-                const r = 16;
-                const c = 100.53;
-                const segmentLength = (c / 7) - 1.4;
-                const gapLength = c - segmentLength;
-                const offset = (c / 4) - (idx * (c / 7));
-
-                return (
-                  <circle
-                    key={st.id}
-                    cx="18"
-                    cy="18"
-                    r={r}
-                    stroke={strokeColor}
-                    strokeWidth={st.isCurrentTimeStation ? "2.6" : "2.0"}
-                    fill="transparent"
-                    strokeDasharray={`${segmentLength} ${gapLength}`}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
-                    className="transition-all duration-500"
-                  />
-                );
-              })}
-
-              {/* Inner Ring for overall percentage */}
-              <circle cx="18" cy="18" r="11.5" stroke={currentStyle === 'glass-dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(168, 85, 247, 0.08)'} strokeWidth="1.2" fill="transparent" />
-              <circle 
-                cx="18" 
-                cy="18" 
-                r="11.5" 
-                stroke="#a855f7" 
-                strokeWidth="1.2" 
-                fill="transparent" 
-                strokeDasharray="72.25" 
-                strokeDashoffset={72.25 - (72.25 * dhikrPercent) / 100} 
-                strokeLinecap="round" 
-                className="transition-all duration-1000 ease-out" 
-              />
-            </svg>
-            <div className="w-8 h-8 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center z-10 shadow-xs group-hover:scale-105 transition-transform">
-              <span className="text-sm leading-none">📿</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-none flex items-center gap-0.5">
-            <span>الأذكار</span>
-            <span className="text-[8.5px] px-1 py-0.2 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-extrabold">
-              {toArabicNumbers(completedDhikrSessions)}/٧
-            </span>
-          </span>
-          <span className="text-[9px] font-extrabold text-purple-600 dark:text-purple-400 font-mono leading-none">
-            {toArabicNumbers(dhikrPercent)}%
-          </span>
-        </button>
-
-      </div>
+      {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons) */}
+      <UnifiedProgressCard
+        prayerLogs={prayerLogs}
+        fastingLogs={fastingLogs}
+        dhikrLogs={dhikrLogs}
+        quranSessions={quranSessions}
+        khatmat={khatmat}
+        isWomenExcuse={settings?.isWomenExcuse}
+        onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
+        appStyle={currentStyle}
+      />
 
       {/* 5. Smart Companion Insights & Friday Mode */}
       <CompanionInsights 
@@ -2055,7 +1695,7 @@ export default function Dashboard({
         <div className="flex justify-between items-center pb-2 border-b border-slate-200/40 dark:border-slate-800/50">
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
-            <div className="text-right">
+            <div className="text-end">
               <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none">السنن الإضافية والنوافل</h3>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1">سجل سنن الضحى، قيام الليل، والوتر مباشرة</p>
             </div>
@@ -2091,7 +1731,7 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">☀️</span>
-                    <div className="text-right">
+                    <div className="text-end">
                       <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">صلاة الضحى</span>
                       <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
                         {currentDuhaRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentDuhaRakahs)} ركعات` : 'الضحى (٢، ٤، ٦، ٨)'}
@@ -2161,7 +1801,7 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">🌃</span>
-                    <div className="text-right">
+                    <div className="text-end">
                       <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">قيام الليل والتهجد</span>
                       <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
                         {currentQiyamRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentQiyamRakahs)} ركعة` : 'التهجد (٢، ٤، ٦، ٨+)'}
@@ -2231,7 +1871,7 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">🌟</span>
-                    <div className="text-right">
+                    <div className="text-end">
                       <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">الشفع والوتر</span>
                       <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
                         {currentWitrRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentWitrRakahs)} ركعة` : 'الوتر (١، ٣، ٥، ٧)'}
@@ -2304,7 +1944,7 @@ export default function Dashboard({
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
                 يمثل شروق الشمس نهاية وقت صلاة الفجر وموعد شروقها، ولا يصح أداء صلاة الفجر بعد هذا الوقت كأداء بل تُصلى قضاءً.
               </p>
-              <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl mt-2 text-right">
+              <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl mt-2 text-end">
                 <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 block mb-1">💡 سنة الضحى (صلاة الأوابين):</span>
                 <p className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold leading-relaxed">
                   يُستحب بعد شروق الشمس بثلث ساعة تقريباً صلاة الضحى، وهي سنة مؤكدة مباركة تُعادل صدقة عن كل سلامى (مفصل) في جسد الإنسان. أقلها ركعتان وأكثرها ثمان ركعات.
@@ -2364,7 +2004,7 @@ export default function Dashboard({
 
             {/* Content card */}
             <div className="relative z-10 space-y-4">
-              <p className="text-sm font-semibold leading-relaxed text-right text-indigo-50/90 whitespace-pre-line font-sans">
+              <p className="text-sm font-semibold leading-relaxed text-end text-indigo-50/90 whitespace-pre-line font-sans">
                 {activeDua.text}
               </p>
               
@@ -2607,7 +2247,7 @@ export default function Dashboard({
                     {/* Sunnah Before */}
                     {hasSunnahBefore && (
                       <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
-                        <div className="text-right">
+                        <div className="text-end">
                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans">سنة قبلية ({toArabicNumbers(sunnahBeforeMax)} ركعات)</span>
                           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
                             {(log.sunnahBefore ?? 0) >= sunnahBeforeMax ? '✨ اكتملت السنة القبلية' : (log.sunnahBefore ?? 0) > 0 ? `تمت صلاة ${toArabicNumbers(log.sunnahBefore ?? 0)} ركعات` : 'لم تصلَّ بعد'}
@@ -2662,7 +2302,7 @@ export default function Dashboard({
                     {/* Sunnah After */}
                     {hasSunnahAfter && (
                       <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
-                        <div className="text-right">
+                        <div className="text-end">
                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans">سنة بعدية ({toArabicNumbers(sunnahAfterMax)} ركعات)</span>
                           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
                             {(log.sunnahAfter ?? 0) >= sunnahAfterMax ? '✨ اكتملت السنة البعدية' : 'لم تصلَّ بعد'}
@@ -2745,7 +2385,7 @@ export default function Dashboard({
           <div className="p-3 bg-emerald-100 dark:bg-[#1e4638] text-emerald-700 dark:text-emerald-300 rounded-2xl">
             <Sparkles className="w-6 h-6 animate-pulse" />
           </div>
-          <div className="space-y-3 flex-1 text-right">
+          <div className="space-y-3 flex-1 text-end">
             <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300">توجيه رفيق مبارك</h4>
             <p className="text-sm text-emerald-800 dark:text-emerald-100 leading-relaxed font-semibold">
               {activeNudge.message}
@@ -2764,7 +2404,7 @@ export default function Dashboard({
 
       {/* Fasting Tracker Bar - Compact Full-Width */}
       <div id="fasting-tracker-container" className="bg-white dark:bg-[#161d26] rounded-3xl p-4 border border-[#e2e8f0]/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 transition-colors duration-300 shadow-xs">
-        <div className="flex items-center gap-3 text-right">
+        <div className="flex items-center gap-3 text-end">
           <div className="p-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-2xl shrink-0">
             <Heart className="w-5 h-5 text-rose-500" />
           </div>
@@ -2836,7 +2476,7 @@ export default function Dashboard({
           />
 
           {/* Modal Container */}
-          <div className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl border border-slate-100 dark:border-slate-800/80 shadow-2xl p-5 flex flex-col gap-4 relative z-10 animate-scale-up text-right">
+          <div className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl border border-slate-100 dark:border-slate-800/80 shadow-2xl p-5 flex flex-col gap-4 relative z-10 animate-scale-up text-end">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
               <div className="flex items-center gap-2">
@@ -2856,7 +2496,7 @@ export default function Dashboard({
             </div>
 
             {/* List */}
-            <div className="space-y-3.5 max-h-[350px] overflow-y-auto pr-1">
+            <div className="space-y-3.5 max-h-[350px] overflow-y-auto pe-1">
               {getSpiritualNotifications().map((notif, idx) => (
                 <div 
                   key={notif.id || idx}
@@ -2921,6 +2561,13 @@ export default function Dashboard({
         onClose={() => setShowPushControlCenter(false)}
       />
 
+      {appModal && (
+        <AppModal
+          message={appModal.message}
+          variant={appModal.variant}
+          onClose={() => setAppModal(null)}
+        />
+      )}
     </div>
   );
 }

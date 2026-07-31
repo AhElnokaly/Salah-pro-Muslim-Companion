@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { PrayerLog, QuranSession, QuranKhatma, AppSettings } from '../types';
 import { toArabicNumbers, formatArabicDayCount } from '../utils/hijri';
+import { safeSetItem } from '../utils/storage';
 
 interface CompanionInsightsProps {
   prayerLogs: Record<string, Record<string, PrayerLog>>;
@@ -156,7 +157,7 @@ export default function CompanionInsights({
         if (navigator.vibrate) navigator.vibrate(25);
       }
       const todayKey = new Date().toISOString().split('T')[0];
-      localStorage.setItem('companion_micro_habits_today', JSON.stringify({
+      safeSetItem('companion_micro_habits_today', JSON.stringify({
         date: todayKey,
         completed: Array.from(next)
       }));
@@ -246,7 +247,7 @@ export default function CompanionInsights({
   return (
     <div 
       id="companion-insights-root" 
-      className={`rounded-2xl p-4 border transition-all duration-300 space-y-4 text-right overflow-hidden ${
+      className={`rounded-2xl p-4 border transition-all duration-300 space-y-4 text-end overflow-hidden ${
         currentStyle === 'glass-dark'
           ? 'bg-[#111723]/95 backdrop-blur-md border-white/10 shadow-xl text-slate-200'
           : 'bg-white border-slate-200/80 shadow-xs text-slate-800'
@@ -306,7 +307,7 @@ export default function CompanionInsights({
 
       {/* FRIDAY SPIRITUAL NUDGE BANNER */}
       {isFridayWindow && (
-        <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-between gap-2 text-right">
+        <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-500/25 rounded-xl flex items-center justify-between gap-2 text-end">
           <div className="flex items-center gap-2">
             <span className="text-lg">✨</span>
             <div>
@@ -417,7 +418,7 @@ export default function CompanionInsights({
                     key={mood.id}
                     type="button"
                     onClick={() => setSelectedMoodId(mood.id)}
-                    className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-start gap-1.5 border text-right leading-tight ${
+                    className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center justify-start gap-1.5 border text-end leading-tight ${
                       isSelected
                         ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs ring-1 ring-indigo-400/30 font-black'
                         : 'bg-slate-50/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -488,7 +489,7 @@ export default function CompanionInsights({
                     key={habit.id}
                     type="button"
                     onClick={() => toggleMicroHabit(habit.id)}
-                    className={`p-2 rounded-lg text-right text-[11px] transition-all cursor-pointer flex items-center gap-2 border ${
+                    className={`p-2 rounded-lg text-end text-[11px] transition-all cursor-pointer flex items-center gap-2 border ${
                       isDone
                         ? 'bg-emerald-50/90 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/70 font-bold'
                         : 'bg-slate-50/60 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/70'

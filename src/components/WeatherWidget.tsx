@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeSetItem } from '../utils/storage';
 import { Sun, CloudSun, Cloud, CloudRain, CloudLightning, CloudFog, Snowflake, Thermometer } from 'lucide-react';
 
 interface WeatherWidgetProps {
@@ -57,11 +58,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ lat, lng }) => {
 
           if (isMounted) {
             setWeather(weatherObj);
-            try {
-              localStorage.setItem('muslim_companion_weather_cache', JSON.stringify(weatherObj));
-            } catch {
-              // ignore
-            }
+            safeSetItem('muslim_companion_weather_cache', JSON.stringify(weatherObj));
           }
         }
       } catch (err) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Dispatch, SetStateAction } from 'react';
+import { safeSetItem } from '../utils/storage';
 import { 
   AppSettings, 
   PrayerLog, 
@@ -50,6 +51,7 @@ export interface UseSpiritualStateReturn {
   customDuas: CustomDua[];
   setCustomDuas: Dispatch<SetStateAction<CustomDua[]>>;
   isLoaded: boolean;
+  storageWriteError: boolean;
 }
 
 export function useSpiritualState(): UseSpiritualStateReturn {
@@ -69,6 +71,7 @@ export function useSpiritualState(): UseSpiritualStateReturn {
   const [dhikrLogs, setDhikrLogs] = useState<Record<string, Record<string, number>>>({});
   const [customDuas, setCustomDuas] = useState<CustomDua[]>([]);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [storageWriteError, setStorageWriteError] = useState<boolean>(false);
 
   // 1. Load data from LocalStorage on mount
   useEffect(() => {
@@ -163,47 +166,65 @@ export function useSpiritualState(): UseSpiritualStateReturn {
   // 2. Persist state changes to LocalStorage
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_settings', JSON.stringify(settings));
+    if (!safeSetItem('mc_settings', JSON.stringify(settings))) {
+      setStorageWriteError(true);
+    }
   }, [settings, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_prayer_logs', JSON.stringify(prayerLogs));
+    if (!safeSetItem('mc_prayer_logs', JSON.stringify(prayerLogs))) {
+      setStorageWriteError(true);
+    }
   }, [prayerLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_pending_qada', JSON.stringify(pendingQadaPrayers));
+    if (!safeSetItem('mc_pending_qada', JSON.stringify(pendingQadaPrayers))) {
+      setStorageWriteError(true);
+    }
   }, [pendingQadaPrayers, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_fasting_logs', JSON.stringify(fastingLogs));
+    if (!safeSetItem('mc_fasting_logs', JSON.stringify(fastingLogs))) {
+      setStorageWriteError(true);
+    }
   }, [fastingLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_ramadan_qada', JSON.stringify(ramadanQada));
+    if (!safeSetItem('mc_ramadan_qada', JSON.stringify(ramadanQada))) {
+      setStorageWriteError(true);
+    }
   }, [ramadanQada, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_quran_sessions', JSON.stringify(quranSessions));
+    if (!safeSetItem('mc_quran_sessions', JSON.stringify(quranSessions))) {
+      setStorageWriteError(true);
+    }
   }, [quranSessions, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_khatmat', JSON.stringify(khatmat));
+    if (!safeSetItem('mc_khatmat', JSON.stringify(khatmat))) {
+      setStorageWriteError(true);
+    }
   }, [khatmat, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_dhikr_logs', JSON.stringify(dhikrLogs));
+    if (!safeSetItem('mc_dhikr_logs', JSON.stringify(dhikrLogs))) {
+      setStorageWriteError(true);
+    }
   }, [dhikrLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('mc_custom_duas', JSON.stringify(customDuas));
+    if (!safeSetItem('mc_custom_duas', JSON.stringify(customDuas))) {
+      setStorageWriteError(true);
+    }
   }, [customDuas, isLoaded]);
 
   return {
@@ -226,5 +247,6 @@ export function useSpiritualState(): UseSpiritualStateReturn {
     customDuas,
     setCustomDuas,
     isLoaded,
+    storageWriteError,
   };
 }

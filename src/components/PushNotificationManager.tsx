@@ -86,7 +86,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-sm animate-fadeIn" dir="rtl">
-      <div className="bg-white dark:bg-[#161d26] w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] flex flex-col text-right">
+      <div className="bg-white dark:bg-[#161d26] w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] flex flex-col text-end">
         
         {/* MODAL HEADER */}
         <div className="p-5 bg-gradient-to-r from-indigo-900 via-indigo-800 to-[#111720] text-white flex items-center justify-between shrink-0">

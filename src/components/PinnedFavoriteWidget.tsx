@@ -103,12 +103,12 @@ export const PinnedFavoriteWidget: React.FC<PinnedFavoriteWidgetProps> = ({
                       <span className="text-[10px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
                       <span className="text-[6px] font-bold leading-none">{currentMonthName}</span>
                     </div>
-                    <div className="text-right">
+                    <div className="text-end">
                       <span className="text-[8px] font-black block text-white/90 leading-none">{dayNameArabic}</span>
                       <span className="text-[6px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianClean.split(' ').slice(0, 2).join(' '))}</span>
                     </div>
                   </div>
-                  <div className="text-left">
+                  <div className="text-start">
                     <span className="text-[6px] font-bold block text-white/40">متبقي للأذان</span>
                     <span className="text-[10px] font-extrabold block text-amber-400 font-mono leading-none mt-0.5" dir="ltr">
                       -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
@@ -177,7 +177,7 @@ export const PinnedFavoriteWidget: React.FC<PinnedFavoriteWidgetProps> = ({
                   <span className="flex items-center gap-0.5">📍 {cityName || 'الإسكندرية'}</span>
                   <span className="text-teal-100">{toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
                 </div>
-                <div className="py-1.5 text-right space-y-0.5">
+                <div className="py-1.5 text-end space-y-0.5">
                   <span className="text-[6px] font-bold text-teal-100/70 block leading-none">الصلاة القادمة</span>
                   <h3 className="text-[10px] font-black text-white flex justify-between items-center leading-none">
                     <span>صلاة {getArabicNameLocal(next)}</span>
@@ -205,16 +205,16 @@ export const PinnedFavoriteWidget: React.FC<PinnedFavoriteWidgetProps> = ({
                 <div className="w-[54px] h-[54px] rounded-full bg-[#0a1520] border border-[#192f44] relative flex items-center justify-center shrink-0">
                   <div className="absolute inset-0.5 rounded-full border border-dashed border-white/5 pointer-events-none" />
                   <span className="absolute top-0.5 text-[5px] font-black text-white/30">١٢</span>
-                  <span className="absolute right-0.5 text-[5px] font-black text-white/30">٣</span>
+                  <span className="absolute end-0.5 text-[5px] font-black text-white/30">٣</span>
                   <span className="absolute bottom-0.5 text-[5px] font-black text-white/30">٦</span>
-                  <span className="absolute left-0.5 text-[5px] font-black text-white/30">٩</span>
+                  <span className="absolute start-0.5 text-[5px] font-black text-white/30">٩</span>
                   
                   {/* Hands */}
                   <div className="absolute w-[1.5px] h-3.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${(now.getHours() % 12) * 30 + now.getMinutes() * 0.5}deg)`, top: 'calc(50% - 3.5px)' }} />
                   <div className="absolute w-[1px] h-5.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${now.getMinutes() * 6}deg)`, top: 'calc(50% - 5.5px)' }} />
                   <div className="w-1 h-1 rounded-full bg-red-500 border border-white z-10" />
                 </div>
-                <div className="flex-1 space-y-0.5 text-right">
+                <div className="flex-1 space-y-0.5 text-end">
                   <span className="text-[6px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicNameLocal(next)}</span>
                   <h4 className="text-[8px] font-black text-white leading-none">متبقي للأذان</h4>
                   <span className="text-[9px] font-black text-white block font-mono leading-none mt-0.5" dir="ltr">

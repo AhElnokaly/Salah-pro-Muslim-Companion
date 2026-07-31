@@ -20,7 +20,7 @@ import {
   Heart,
   Moon
 } from 'lucide-react';
-import { AppSettings, PrayerLog } from '../types';
+import { AppSettings, PrayerLog, QuranSession, QuranKhatma } from '../types';
 import { 
   getHijriDate, 
   toArabicNumbers, 
@@ -36,8 +36,8 @@ interface IslamicCalendarProps {
   prayerLogs?: Record<string, Record<string, PrayerLog>>;
   fastingLogs?: Record<string, { date: string; fasted: boolean; fastType: string }>;
   dhikrLogs?: Record<string, Record<string, number>>;
-  quranSessions?: any[];
-  khatmat?: any[];
+  quranSessions?: QuranSession[];
+  khatmat?: QuranKhatma[];
   onNavigateTab?: (tab: string) => void;
 }
 
@@ -297,7 +297,7 @@ export default function IslamicCalendar({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5 mb-4">
           <div className="flex items-center gap-2">
             <span className="text-xl">📅</span>
-            <div className="text-right">
+            <div className="text-end">
               <h3 className="text-sm font-black leading-none">التقويم الهجري والميلادي</h3>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold mt-1">تنسيق متبادل للمناسبات والأيام البيض</p>
             </div>
@@ -464,7 +464,7 @@ export default function IslamicCalendar({
               >
                 {/* Visual Indicators for Occasions, White Days, or Mon/Thu Fasting */}
                 {cell.isCurrentMonth && !isSelectedDay && (
-                  <div className="absolute top-1 right-1 flex gap-0.5">
+                  <div className="absolute top-1 end-1 flex gap-0.5">
                     {occasion && (
                       <span className="w-1 h-1 rounded-full bg-emerald-500" title={occasion} />
                     )}
@@ -513,7 +513,7 @@ export default function IslamicCalendar({
       </div>
 
       {/* Selected Day details card */}
-      <div className="bg-slate-50 dark:bg-[#161d26]/40 rounded-3xl p-4 border border-[#e2e8f0]/60 dark:border-slate-800/60 text-right space-y-3.5">
+      <div className="bg-slate-50 dark:bg-[#161d26]/40 rounded-3xl p-4 border border-[#e2e8f0]/60 dark:border-slate-800/60 text-end space-y-3.5">
         <div className="flex items-center justify-between border-b border-slate-200/40 dark:border-slate-800/30 pb-2">
           <span className="text-[10px] font-black text-slate-400 dark:text-slate-500">تفاصيل اليوم المحدّد</span>
           <span className="text-[9px] font-mono bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded-md font-bold">
@@ -718,7 +718,7 @@ export default function IslamicCalendar({
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/40 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📈</span>
-                <div className="text-right">
+                <div className="text-end">
                   <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none">مؤشر التقدم والعبادات</h3>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1">حصاد طاعاتك ودرجة التزامك بالأوراد</p>
                 </div>

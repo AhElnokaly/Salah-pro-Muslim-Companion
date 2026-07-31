@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { AppSettings } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
+import { safeSetItem } from '../utils/storage';
 
 interface FridayModeProps {
   settings: AppSettings;
@@ -82,20 +83,20 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
   // Save checklist
   useEffect(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    localStorage.setItem('mc_friday_checklist', JSON.stringify(checklist));
-    localStorage.setItem('mc_friday_checklist_date', todayStr);
+    safeSetItem('mc_friday_checklist', JSON.stringify(checklist));
+    safeSetItem('mc_friday_checklist_date', todayStr);
   }, [checklist]);
 
   // Save salawat count
   useEffect(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    localStorage.setItem('mc_friday_salawat_count', salawatCount.toString());
-    localStorage.setItem('mc_friday_salawat_date', todayStr);
+    safeSetItem('mc_friday_salawat_count', salawatCount.toString());
+    safeSetItem('mc_friday_salawat_date', todayStr);
   }, [salawatCount]);
 
   // Save sound setting
   useEffect(() => {
-    localStorage.setItem('mc_friday_sound', soundEnabled.toString());
+    safeSetItem('mc_friday_sound', soundEnabled.toString());
   }, [soundEnabled]);
 
   const handleToggleCheck = (key: string) => {
@@ -182,14 +183,14 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
   return (
     <div 
       id="friday-mode-root" 
-      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6 text-right ${
+      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6 text-end ${
         currentStyle === 'glass-dark'
           ? 'bg-gradient-to-br from-[#1b3c22] via-[#111723] to-[#122216] border-emerald-500/20 shadow-2xl text-slate-100'
           : 'bg-gradient-to-br from-[#f4faf5] via-white to-[#f0f8f2] border-emerald-500/30 shadow-md text-slate-800'
       }`}
     >
       {/* Background Decorative Element */}
-      <div className="absolute top-2 left-3 select-none opacity-20 pointer-events-none">
+      <div className="absolute top-2 start-3 select-none opacity-20 pointer-events-none">
         <span className="text-4xl">🕌</span>
       </div>
 
@@ -298,7 +299,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
                 key={idx}
                 className="p-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs"
               >
-                <p className="font-bold text-slate-800 dark:text-slate-200 leading-relaxed text-right flex-1 select-text">
+                <p className="font-bold text-slate-800 dark:text-slate-200 leading-relaxed text-end flex-1 select-text">
                   {dua}
                 </p>
                 <button
@@ -350,7 +351,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
                 key={item.key}
                 type="button"
                 onClick={() => handleToggleCheck(item.key)}
-                className={`p-3 rounded-2xl border text-right flex items-start gap-3 transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border text-end flex items-start gap-3 transition-all cursor-pointer ${
                   isChecked
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-bold'
                     : currentStyle === 'glass-dark'

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Bell } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
+import type { AlarmConfig } from '../types';
 
 interface CustomAlarmOverlayProps {
-  activeRingingAlarm: any | null;
+  activeRingingAlarm: AlarmConfig | null;
   onSnooze: () => void;
   onStop: () => void;
 }
@@ -18,7 +19,7 @@ export const CustomAlarmOverlay: React.FC<CustomAlarmOverlayProps> = ({
   return (
     <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" dir="rtl">
       <div className="bg-white dark:bg-[#161d26] border border-indigo-500/30 w-full max-w-sm rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
+        <div className="absolute top-0 start-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
         
         <div className="mx-auto w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 animate-bounce">
           <Bell className="w-8 h-8" />

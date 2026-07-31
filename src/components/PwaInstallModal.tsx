@@ -27,7 +27,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 350 }}
-          className="bg-white dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-right flex flex-col gap-4 text-slate-800 dark:text-slate-100"
+          className="bg-white dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-end flex flex-col gap-4 text-slate-800 dark:text-slate-100"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -79,7 +79,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
                 <h4 className="text-xs font-black text-indigo-600 dark:text-indigo-400 mb-1.5 flex items-center gap-1">
                   <span>🍎 أجهزة آيفون وآيباد (iOS Safari):</span>
                 </h4>
-                <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
+                <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pe-4 list-decimal">
                   <li>اضغط على زر المشاركة 📤 في أسفل أو أعلى المتصفح.</li>
                   <li>اختر "إضافة إلى الشاشة الرئيسية" (Add to Home Screen) ➕.</li>
                   <li>اضغط على "إضافة" (Add) في الزاوية لتثبيته.</li>
@@ -91,7 +91,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
                 <h4 className="text-xs font-black text-emerald-600 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
                   <span>🤖 أجهزة أندرويد والكمبيوتر:</span>
                 </h4>
-                <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pr-4 list-decimal">
+                <ul className="text-[10px] text-slate-600 dark:text-slate-300 font-extrabold space-y-1 pe-4 list-decimal">
                   <li>انقر على قائمة المتصفح (الثلاث نقاط ⋮) في الزاوية.</li>
                   <li>اختر "تثبيت التطبيق" (Install App).</li>
                   <li>قم بتأكيد التثبيت ليظهر على الشاشة الرئيسية!</li>

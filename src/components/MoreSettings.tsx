@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import AppModal, { AppModalVariant } from './shared/AppModal';
 import { 
   Settings, 
   Trash2, 
@@ -41,13 +42,14 @@ import {
   Globe,
   Edit3
 } from 'lucide-react';
-import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua } from '../types';
+import { AppSettings, BackdropRenderMode, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua, QuranSession, QuranKhatma, MuezzinOption } from '../types';
 import { POPULAR_CITIES } from '../utils/prayerCalc';
 import { detectUserLocation } from '../utils/locationService';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
 import { toArabicNumbers, formatArabicDayCount, getHijriDate } from '../utils/hijri';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins, downloadAndSaveAudio, deleteDownloadedAudio, getDownloadedTrackIds, getAudioStorageStats } from '../utils/audioStorage';
 import ToggleSwitch from './ui/ToggleSwitch';
+import { safeSetItem } from '../utils/storage';
 
 interface MoreSettingsProps {
   subTab: 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas';
@@ -62,10 +64,10 @@ interface MoreSettingsProps {
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
   fastingLogs: Record<string, { date: string; fasted: boolean; fastType: string }>;
   setFastingLogs: React.Dispatch<React.SetStateAction<Record<string, { date: string; fasted: boolean; fastType: string }>>>;
-  quranSessions: any[];
-  setQuranSessions: React.Dispatch<React.SetStateAction<any[]>>;
-  khatmat: any[];
-  setKhatmat: React.Dispatch<React.SetStateAction<any[]>>;
+  quranSessions: QuranSession[];
+  setQuranSessions: React.Dispatch<React.SetStateAction<QuranSession[]>>;
+  khatmat: QuranKhatma[];
+  setKhatmat: React.Dispatch<React.SetStateAction<QuranKhatma[]>>;
   customDuas: CustomDua[];
   setCustomDuas: React.Dispatch<React.SetStateAction<CustomDua[]>>;
 }
@@ -92,6 +94,7 @@ export default function MoreSettings({
 }: MoreSettingsProps) {
   
   const [backupText, setBackupText] = useState('');
+  const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
   const [importText, setImportText] = useState('');
   const [showImportResult, setShowImportResult] = useState('');
 
@@ -122,22 +125,22 @@ export default function MoreSettings({
   const [autoPlayAthan, setAutoPlayAthan] = useState(() => localStorage.getItem('salah_auto_play_athan') !== 'false');
 
   useEffect(() => {
-    localStorage.setItem('salah_fajr_muezzin', fajrMuezzin);
+    safeSetItem('salah_fajr_muezzin', fajrMuezzin);
   }, [fajrMuezzin]);
 
   useEffect(() => {
-    localStorage.setItem('salah_general_muezzin', generalMuezzin);
+    safeSetItem('salah_general_muezzin', generalMuezzin);
   }, [generalMuezzin]);
 
   useEffect(() => {
-    localStorage.setItem('salah_audio_volume', audioVolume.toString());
+    safeSetItem('salah_audio_volume', audioVolume.toString());
     if (audioRef.current) {
       audioRef.current.volume = audioVolume;
     }
   }, [audioVolume]);
 
   useEffect(() => {
-    localStorage.setItem('salah_auto_play_athan', autoPlayAthan ? 'true' : 'false');
+    safeSetItem('salah_auto_play_athan', autoPlayAthan ? 'true' : 'false');
   }, [autoPlayAthan]);
 
   // Clean up audio on unmount
@@ -149,7 +152,7 @@ export default function MoreSettings({
     };
   }, []);
 
-  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+  const [customMuezzins, setCustomMuezzins] = useState<MuezzinOption[]>([]);
   const [showArchiveFajr, setShowArchiveFajr] = useState(false);
   const [showArchiveGeneral, setShowArchiveGeneral] = useState(false);
   const [fajrSearch, setFajrSearch] = useState('');
@@ -168,24 +171,25 @@ export default function MoreSettings({
 
   useEffect(() => {
     getCustomAudios().then(tracks => {
-      setCustomMuezzins(tracks);
+      setCustomMuezzins(tracks as MuezzinOption[]);
     }).catch(err => {
       console.error('Failed to load custom muezzins in Settings:', err);
     });
     refreshStorageData();
   }, []);
 
-  const handleDownloadTrack = async (track: any) => {
+  const handleDownloadTrack = async (track: MuezzinOption) => {
     setDownloadingId(track.id);
     setAudioError(null);
     setAudioSuccessMessage(null);
     try {
-      await downloadAndSaveAudio(track);
+      await downloadAndSaveAudio(track as any);
       refreshStorageData();
       setAudioSuccessMessage(`تم تحميل وتخزين "${track.name}" بنجاح للعمل أوفلاين بدون إنترنت!`);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Download failed:', err);
-      setAudioError('فشل تحميل الصوت أوفلاين: ' + (err.message || 'خطأ في الشبكة'));
+      const errMsg = err instanceof Error ? err.message : 'خطأ في الشبكة';
+      setAudioError('فشل تحميل الصوت أوفلاين: ' + errMsg);
     } finally {
       setDownloadingId(null);
     }
@@ -225,8 +229,9 @@ export default function MoreSettings({
       }
       refreshStorageData();
       setAudioSuccessMessage(`تم تحميل وتخزين ${downloadedCount} صوت أذان بنجاح للعمل أوفلاين! ⚡`);
-    } catch (err: any) {
-      setAudioError('حدث خطأ أثناء التحميل: ' + (err.message || 'خطأ في الاتصال'));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'خطأ في الاتصال';
+      setAudioError('حدث خطأ أثناء التحميل: ' + errMsg);
     } finally {
       setIsBulkDownloading(false);
       setBulkProgress(null);
@@ -425,7 +430,7 @@ export default function MoreSettings({
           fastType: 'Qada'
         }
       }));
-      alert('بشرى! تم قضاء يوم واحد وتسجيله في صيام اليوم المبارك. تقبل الله منك 🤍');
+      setAppModal({ message: 'بشرى! تم قضاء يوم واحد وتسجيله في صيام اليوم المبارك. تقبل الله منك 🤍', variant: 'success' });
     }
   };
 
@@ -446,7 +451,7 @@ export default function MoreSettings({
   // Manual Prayer Qada log
   const handleRemoveQadaItem = (qadaId: string) => {
     setPendingQadaPrayers(prev => prev.filter(q => q.id !== qadaId));
-    alert('تم تأدية الفريضة الفائتة بنجاح بفضل الله وتقبله 🤍');
+    setAppModal({ message: 'تم تأدية الفريضة الفائتة بنجاح بفضل الله وتقبله 🤍', variant: 'success' });
   };
 
   const handleAddManualMissedPrayer = (prayerName: PrayerName) => {
@@ -527,7 +532,7 @@ export default function MoreSettings({
   const todayHijri = getHijriDate(new Date(), settings.hijriOffset);
 
   return (
-    <div id="settings-root" className="space-y-6 text-right animate-fade-in w-full" dir="rtl">
+    <div id="settings-root" className="space-y-6 text-end animate-fade-in w-full" dir="rtl">
       
       {/* ==================== 1. PRAYER CALCULATIONS & MADHAB ==================== */}
       {subTab === 'prayer' && (
@@ -569,8 +574,8 @@ export default function MoreSettings({
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setSettings(prev => ({ ...prev, madhab: item.id as any }))}
-                    className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
+                    onClick={() => setSettings(prev => ({ ...prev, madhab: item.id as AppSettings['madhab'] }))}
+                    className={`p-3.5 rounded-2xl border text-end transition-all cursor-pointer flex flex-col justify-between ${
                       settings.madhab === item.id
                         ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-350'
                         : 'border-[#e2e8f0] dark:border-slate-800 bg-slate-50/55 dark:bg-[#111720] text-slate-600 dark:text-slate-400'
@@ -595,7 +600,7 @@ export default function MoreSettings({
                     key={item.id}
                     type="button"
                     onClick={() => setSettings(prev => ({ ...prev, gender: item.id as any }))}
-                    className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
+                    className={`p-3.5 rounded-2xl border text-end transition-all cursor-pointer flex flex-col justify-between ${
                       (settings.gender || 'male') === item.id
                         ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-350 font-black'
                         : 'border-[#e2e8f0] dark:border-slate-800 bg-slate-50/55 dark:bg-[#111720] text-slate-600 dark:text-slate-400'
@@ -608,7 +613,7 @@ export default function MoreSettings({
               </div>
               
               {(settings.gender === 'female') && (
-                <div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/5 border border-indigo-500/20 rounded-2xl text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed font-semibold mt-2 animate-fade-in text-right">
+                <div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/5 border border-indigo-500/20 rounded-2xl text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed font-semibold mt-2 animate-fade-in text-end">
                   ✨ <strong>رخصة العذر الشرعي مفعلة:</strong> لقد تم تفعيل وضع المرأة المسلمة. يتيح لكِ التطبيق الآن تسجيل صلواتكِ كـ «عذر شرعي رخصة» في لوحة التحكم أثناء أيام عذركِ الشرعي. لن تؤثر هذه الأيام بالسلب على نسب إتمام العبادات أو تهدم تتابع السلاسل الإيمانية الخاص بكِ تيسيراً ورفقاً بكِ 🤍.
                 </div>
               )}
@@ -675,7 +680,7 @@ export default function MoreSettings({
 
           {/* Premium Interactive Audio Player / Scrubber */}
           {playingAudio && (
-            <div className="p-4 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-[#131b26] dark:to-[#17212f] rounded-2xl border border-indigo-100 dark:border-indigo-950/50 space-y-3 shadow-md text-right transition-all">
+            <div className="p-4 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-[#131b26] dark:to-[#17212f] rounded-2xl border border-indigo-100 dark:border-indigo-950/50 space-y-3 shadow-md text-end transition-all">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
                   <span className="relative flex h-2 w-2">
@@ -915,12 +920,12 @@ export default function MoreSettings({
                     if (typeof window !== 'undefined' && 'Notification' in window) {
                       const res = await Notification.requestPermission();
                       if (res === 'granted') {
-                        alert('تم تفعيل إذن الإشعارات بنجاح! سيصلك تنبيه دخول وقت الصلاة في موعده.');
+                        setAppModal({ message: 'تم تفعيل إذن الإشعارات بنجاح! سيصلك تنبيه دخول وقت الصلاة في موعده.', variant: 'success' });
                       } else if (res === 'denied') {
-                        alert('تم رفض الإذن. يرجى السماح بالإشعارات من إعدادات المتصفح/الموقع.');
+                        setAppModal({ message: 'تم رفض الإذن. يرجى السماح بالإشعارات من إعدادات المتصفح/الموقع.', variant: 'error' });
                       }
                     } else {
-                      alert('المتصفح لا يدعم إشعارات النظام.');
+                      setAppModal({ message: 'المتصفح لا يدعم إشعارات النظام.', variant: 'info' });
                     }
                   }}
                   className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95"
@@ -931,7 +936,7 @@ export default function MoreSettings({
             </div>
 
             {/* Default Fajr Muezzin */}
-            <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-right">
+            <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-end">
               <label className="text-xs font-black text-slate-500 dark:text-slate-400 block">صوت أذان الفجر (الخاص بالتثويب)</label>
               <div className="space-y-2">
                 {muezzins.filter(m => m.isFajr && !m.id.startsWith('archive_')).map((m) => {
@@ -967,7 +972,7 @@ export default function MoreSettings({
                             {!m.id.startsWith('custom_') && (
                               <button
                                 onClick={() => handleDeleteDownloadedTrack(m.id)}
-                                className="p-0.5 hover:text-rose-500 transition-colors ml-1 cursor-pointer"
+                                className="p-0.5 hover:text-rose-500 transition-colors ms-1 cursor-pointer"
                                 title="حذف النسخة المحفوظة أوفلاين"
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -1025,12 +1030,12 @@ export default function MoreSettings({
                         placeholder="البحث عن مؤذن للفجر..."
                         value={fajrSearch}
                         onChange={(e) => setFajrSearch(e.target.value)}
-                        className="w-full p-2.5 pr-10 pl-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-right"
+                        className="w-full p-2.5 pe-10 ps-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-end"
                       />
-                      <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                      <Search className="w-4 h-4 text-slate-400 absolute end-3 top-3.5" />
                     </div>
                     
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+                    <div className="max-h-60 overflow-y-auto space-y-2 pe-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
                       {muezzins
                         .filter(m => m.isFajr && m.id.startsWith('archive_') && m.name.toLowerCase().includes(fajrSearch.toLowerCase()))
                         .map((m) => {
@@ -1042,7 +1047,7 @@ export default function MoreSettings({
                             <div 
                               key={m.id}
                               onClick={() => setFajrMuezzin(m.id)}
-                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-right ${
+                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-end ${
                                 isSelected 
                                   ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10' 
                                   : 'border-slate-100 dark:border-slate-800/40 bg-white dark:bg-[#161d26] hover:bg-slate-50 dark:hover:bg-[#111720]/50'
@@ -1093,7 +1098,7 @@ export default function MoreSettings({
             </div>
 
             {/* Default General Muezzin */}
-            <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-right">
+            <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-end">
               <label className="text-xs font-black text-slate-500 dark:text-slate-400 block">صوت بقية الصلوات (المساجد الشهيرة)</label>
               <div className="space-y-2">
                 {muezzins.filter(m => !m.isFajr && !m.id.startsWith('archive_')).map((m) => {
@@ -1129,7 +1134,7 @@ export default function MoreSettings({
                             {!m.id.startsWith('custom_') && (
                               <button
                                 onClick={() => handleDeleteDownloadedTrack(m.id)}
-                                className="p-0.5 hover:text-rose-500 transition-colors ml-1 cursor-pointer"
+                                className="p-0.5 hover:text-rose-500 transition-colors ms-1 cursor-pointer"
                                 title="حذف النسخة المحفوظة أوفلاين"
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -1187,12 +1192,12 @@ export default function MoreSettings({
                         placeholder="البحث عن مؤذن..."
                         value={generalSearch}
                         onChange={(e) => setGeneralSearch(e.target.value)}
-                        className="w-full p-2.5 pr-10 pl-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-right"
+                        className="w-full p-2.5 pe-10 ps-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-end"
                       />
-                      <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                      <Search className="w-4 h-4 text-slate-400 absolute end-3 top-3.5" />
                     </div>
                     
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+                    <div className="max-h-60 overflow-y-auto space-y-2 pe-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
                       {muezzins
                         .filter(m => !m.isFajr && m.id.startsWith('archive_') && m.name.toLowerCase().includes(generalSearch.toLowerCase()))
                         .map((m) => {
@@ -1204,7 +1209,7 @@ export default function MoreSettings({
                             <div 
                               key={m.id}
                               onClick={() => setGeneralMuezzin(m.id)}
-                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-right ${
+                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-end ${
                                 isSelected 
                                   ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10' 
                                   : 'border-slate-100 dark:border-slate-800/40 bg-white dark:bg-[#161d26] hover:bg-slate-50 dark:hover:bg-[#111720]/50'
@@ -1481,7 +1486,7 @@ export default function MoreSettings({
                   <button
                     key={style.id}
                     onClick={() => setSettings(prev => ({ ...prev, appStyle: style.id as any }))}
-                    className={`p-3 rounded-2xl border text-right flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer ${
+                    className={`p-3 rounded-2xl border text-end flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer ${
                       isSelected
                         ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 ring-2 ring-indigo-400/20 shadow-xs'
                         : 'border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/40 text-slate-500'
@@ -1509,13 +1514,80 @@ export default function MoreSettings({
               اختر مظهر وخلفية المسجد الأنيقة المعروضة في الكارت الرئيسي بقمة الشاشة ليتناسب مع ذوقك ومزاجك اليومي.
             </p>
 
+            {/* Backdrop Render Mode Selection (LineArt vs Illustrated vs Auto) */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <span className="text-xs font-black text-slate-700 dark:text-slate-300 block">
+                نمط عرض الرسم والتفاصيل
+              </span>
+              <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                {[
+                  { id: 'lineArt', name: '🪶 خط ذهبي رفيع', desc: 'رسم متجهات ذهبي خفيف' },
+                  { id: 'illustrated', name: '🖼️ صور مصوّرة', desc: 'صور دقيقة (عند توفرها)' },
+                  { id: 'auto', name: '⚡ تلقائي ذكي', desc: 'صور إن وُجدت، وإلا خط ذهبي' },
+                ].map((m) => {
+                  const active = (settings.backdropRenderMode || 'auto') === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSettings(prev => ({ ...prev, backdropRenderMode: m.id as BackdropRenderMode }))}
+                      className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                        active
+                          ? 'bg-white dark:bg-[#1f2937] text-indigo-600 dark:text-indigo-400 font-extrabold shadow-xs border border-indigo-200/50 dark:border-indigo-800/50'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium'
+                      }`}
+                    >
+                      <span className="text-[10px] sm:text-xs leading-tight">{m.name}</span>
+                      <span className="text-[8px] opacity-75 hidden sm:block">{m.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
               {[
                 { 
                   id: 'auto', 
                   name: 'تلقائي ذكي 🌟', 
-                  desc: 'تتغير تلقائياً حسب فترات اليوم والمناسبات',
+                  desc: 'يتغير تلقائياً حسب أوقات اليوم والمناسبات',
                   bgClass: 'bg-gradient-to-r from-indigo-500/10 to-amber-500/10 border-indigo-200/50 dark:border-indigo-900/30'
+                },
+                { 
+                  id: 'glass_crystal', 
+                  name: 'شفاف زجاجي كريستالي 💎', 
+                  desc: 'خلفية شفافة بلورية راقية بدون شبكة أو ألوان داكنة',
+                  bgClass: 'bg-white/40 dark:bg-slate-800/40 border-slate-300/60 dark:border-slate-700/60 backdrop-blur-md'
+                },
+                { 
+                  id: 'glass_emerald', 
+                  name: 'شفاف زمردي ناعم 🌿', 
+                  desc: 'شفافية بلورية هادئة مع نفحات زمردية خضراء',
+                  bgClass: 'bg-emerald-500/15 border-emerald-300/50 dark:border-emerald-800/40 backdrop-blur-md'
+                },
+                { 
+                  id: 'glass_blue', 
+                  name: 'شفاف سماوي ناصع 🌤️', 
+                  desc: 'شفافية زجاجية ناصعة مع لمسات من الأزرق السماوي',
+                  bgClass: 'bg-sky-500/15 border-sky-300/50 dark:border-sky-800/40 backdrop-blur-md'
+                },
+                { 
+                  id: 'glass_dark', 
+                  name: 'شفاف بلوري داكن 🌙', 
+                  desc: 'شفافية بلورية داكنة وفاخرة لراحة العين',
+                  bgClass: 'bg-slate-900/40 border-slate-700/60 dark:border-slate-800/60 backdrop-blur-md'
+                },
+                { 
+                  id: 'madinah', 
+                  name: 'المسجد النبوي الشريف 🟢', 
+                  desc: 'القبة الخضراء الشريفة والمنارات بالمدينة المنورة',
+                  bgClass: 'bg-emerald-600/15 border-emerald-400/50 dark:border-emerald-800/40'
+                },
+                { 
+                  id: 'aqsa', 
+                  name: 'المسجد الأقصى المبارك 🕌', 
+                  desc: 'قبة الصخرة المشرفة والموازين الذهبية بالقدس',
+                  bgClass: 'bg-amber-600/15 border-amber-400/50 dark:border-amber-800/40'
                 },
                 { 
                   id: 'kaaba', 
@@ -1571,7 +1643,7 @@ export default function MoreSettings({
                   <button
                     key={item.id}
                     onClick={() => setSettings(prev => ({ ...prev, backdropStyle: item.id as any }))}
-                    className={`p-3 rounded-2xl border text-right flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer hover:scale-[1.01] ${item.bgClass} ${
+                    className={`p-3 rounded-2xl border text-end flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer hover:scale-[1.01] ${item.bgClass} ${
                       isSelected
                         ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-transparent shadow-sm'
                         : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
@@ -1767,13 +1839,13 @@ export default function MoreSettings({
             </p>
             
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+              <Search className="w-4 h-4 text-slate-400 absolute end-3.5 top-3.5" />
               <input
                 type="text"
                 placeholder="ابحث عن مدينتك أو محافظتك باللغة العربية أو الإنجليزية..."
                 value={citySearchFilter}
                 onChange={(e) => setCitySearchFilter(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/85 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl pr-10 pl-4 py-2.5 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/85 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl pe-10 ps-4 py-2.5 text-xs font-bold outline-hidden focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
@@ -1877,7 +1949,7 @@ export default function MoreSettings({
                       setLocationStatusMsg('تم حفظ وتحديث الإحداثيات المخصصة بنجاح ✨');
                       setShowManualCoords(false);
                     } else {
-                      alert('يرجى إدخال قيم صحيحة لخطوط العرض (-90 إلى 90) وخطوط الطول (-180 إلى 180).');
+                      setAppModal({ message: 'يرجى إدخال قيم صحيحة لخطوط العرض (-90 إلى 90) وخطوط الطول (-180 إلى 180).', variant: 'error' });
                     }
                   }}
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
@@ -1908,7 +1980,7 @@ export default function MoreSettings({
             {showGpsGuide && (
               <div className="text-[10.5px] text-slate-600 dark:text-slate-400 space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800 font-medium leading-relaxed animate-fade-in">
                 <p>إذا ظهرت لك رسالة خطأ عند الضغط على زر تحديد الموقع التلقائي:</p>
-                <ul className="list-disc list-inside space-y-1.5 pr-2">
+                <ul className="list-disc list-inside space-y-1.5 pe-2">
                   <li><strong>على هواتف أندرويد (Chrome / Brave / Samsung):</strong> اضغط على أيقونة القفل 🔒 بجوار عنوان الموقع في أعلى المتصفح، ثم اختر "إعدادات الموقع" واسمح بـ (Location / الموقع الجغرافي).</li>
                   <li><strong>على آيفون (Safari):</strong> اذهب لإعدادات الآيفون ⚙️ ➔ الخصوصية والأمان ➔ خدمات الموقع ➔ Safari ➔ اختر "أثناء استخدام التطبيق".</li>
                   <li><strong>على الكمبيوتر / اللابتوب:</strong> يرجى السماح بالنافذة المنبثقة Permission Prompt التي تظهر بأعلى اليسار/اليمين عند الضغط على زر تحديد الموقع.</li>
@@ -1945,7 +2017,7 @@ export default function MoreSettings({
 
             {ramadanQada.trackMode === 'fasting' ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/10 p-4 rounded-2xl border border-amber-500/10 text-right">
+                <div className="flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/10 p-4 rounded-2xl border border-amber-500/10 text-end">
                   <div className="space-y-1">
                     <span className="text-xs font-black text-slate-700 dark:text-slate-200">الأيام المتبقية في ذمتك</span>
                     <span className="text-xs text-slate-400 dark:text-slate-500 font-semibold block">سجل الأيام التي أفطرتها بعذر شرعي لقضائها</span>
@@ -1989,7 +2061,7 @@ export default function MoreSettings({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/10 p-4 rounded-2xl border border-emerald-500/10 text-right">
+                <div className="flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/10 p-4 rounded-2xl border border-emerald-500/10 text-end">
                   <div className="space-y-1">
                     <span className="text-xs font-black text-slate-750 dark:text-slate-200">فدية إطعام مسكين</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block">للعاجز عن الصوم بمرض مستمر أو كبر سن.</span>
@@ -2161,7 +2233,7 @@ export default function MoreSettings({
                     key={dua.id} 
                     className="p-4 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/40 space-y-3"
                   >
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line text-right font-sans">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line text-end font-sans">
                       {dua.text}
                     </p>
                     <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/30 pt-2 text-xs">
@@ -2230,9 +2302,9 @@ export default function MoreSettings({
                   rows={4}
                   value={backupText}
                   onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                  className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-[10px] font-mono text-left"
+                  className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-[10px] font-mono text-start"
                 />
-                <span className="text-[9px] text-emerald-600 font-bold block text-right">تم نسخ النص تلقائياً، يمكنك نسخه وحفظه في أي ملف نصي آمن.</span>
+                <span className="text-[9px] text-emerald-600 font-bold block text-end">تم نسخ النص تلقائياً، يمكنك نسخه وحفظه في أي ملف نصي آمن.</span>
               </div>
             )}
           </div>
@@ -2252,7 +2324,7 @@ export default function MoreSettings({
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               placeholder="ألصق هنا النص البرمجي الكامل للنسخة الاحتياطية..."
-              className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/80 dark:border-slate-800 rounded-2xl p-4 text-[10px] font-mono text-left outline-hidden focus:ring-2 focus:ring-indigo-500"
+              className="w-full bg-slate-50 dark:bg-[#111720] border border-[#e2e8f0]/80 dark:border-slate-800 rounded-2xl p-4 text-[10px] font-mono text-start outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
 
             <button
@@ -2272,6 +2344,13 @@ export default function MoreSettings({
         </div>
       )}
 
+      {appModal && (
+        <AppModal
+          message={appModal.message}
+          variant={appModal.variant}
+          onClose={() => setAppModal(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
-import { defaultMuezzins, getCustomAudios, archiveMuezzins, getDownloadedTrackIds } from '../utils/audioStorage';
+import { safeSetItem } from '../utils/storage';
+import { defaultMuezzins, getCustomAudios, archiveMuezzins, getDownloadedTrackIds, AudioTrack } from '../utils/audioStorage';
+import type { MuezzinOption } from '../types';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
 
 interface AthanOverlayProps {
@@ -42,7 +44,7 @@ export default function AthanOverlay({
   const [isMuted, setIsMuted] = useState(false);
   const [showDua, setShowDua] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
-  const [muezzinOptions, setMuezzinOptions] = useState<any[]>(defaultMuezzins);
+  const [muezzinOptions, setMuezzinOptions] = useState<MuezzinOption[]>(defaultMuezzins as MuezzinOption[]);
   const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -210,13 +212,13 @@ export default function AthanOverlay({
 
       {/* Soft, meditative radial background glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[250px] h-[250px] bg-amber-500/10 dark:bg-amber-400/5 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute top-1/3 start-1/2 -translate-x-1/2 w-[250px] h-[250px] bg-amber-500/10 dark:bg-amber-400/5 rounded-full blur-[80px] pointer-events-none" />
       </div>
 
       {/* Top Bar (Mute and Close) */}
       <div className="flex justify-between items-center z-10 w-full max-w-2xl mx-auto">
-        <div className="text-right">
+        <div className="text-end">
           <span className="text-[10px] tracking-widest text-emerald-400/70 font-black uppercase block">
             {isSunrise ? 'تنبيه الشروق' : 'نداء الصلاة'}
           </span>
@@ -277,7 +279,7 @@ export default function AthanOverlay({
           </div>
         ) : (
           /* Sleek Minimalist Post-Athan Du'a */
-          <div className="space-y-4 w-full max-w-md py-6 px-8 bg-white/[0.02] border border-white/[0.05] rounded-3xl text-right animate-fade-in shadow-xl">
+          <div className="space-y-4 w-full max-w-md py-6 px-8 bg-white/[0.02] border border-white/[0.05] rounded-3xl text-end animate-fade-in shadow-xl">
             <div className="flex items-center gap-1.5 text-amber-300">
               <Sparkles className="w-3.5 h-3.5" />
               <span className="text-[10px] tracking-wider font-extrabold block">دعاء ما بعد الأذان المبارك</span>
@@ -294,7 +296,7 @@ export default function AthanOverlay({
         {/* Audio Error Alert & Retry Action */}
         <div className="space-y-3 w-full max-w-md pt-2">
           {audioError && (
-            <div className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-right text-amber-200 text-xs space-y-2 animate-fade-in shadow-lg">
+            <div className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-end text-amber-200 text-xs space-y-2 animate-fade-in shadow-lg">
               <div className="flex items-center gap-2 font-bold text-amber-300">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>تنبيه خطأ تشغيل الصوت:</span>
@@ -329,17 +331,17 @@ export default function AthanOverlay({
                 value={activeMuezzinId}
                 onChange={(e) => {
                   const newId = e.target.value;
-                  localStorage.setItem(`salah_muezzin_${pKey}`, newId);
+                  safeSetItem(`salah_muezzin_${pKey}`, newId);
                   if (isFajr) {
                     setFajrMuezzin(newId);
-                    localStorage.setItem('salah_fajr_muezzin', newId);
+                    safeSetItem('salah_fajr_muezzin', newId);
                   } else {
                     setCurrentMuezzin(newId);
-                    localStorage.setItem('salah_general_muezzin', newId);
+                    safeSetItem('salah_general_muezzin', newId);
                   }
                   togglePlayAthan(newId);
                 }}
-                className="bg-transparent text-amber-300 font-bold cursor-pointer outline-none border-none pr-1 focus:ring-0"
+                className="bg-transparent text-amber-300 font-bold cursor-pointer outline-none border-none pe-1 focus:ring-0"
               >
                 {muezzinOptions.map(m => {
                   const isDownloaded = downloadedTrackIds.has(m.id) || m.id.startsWith('custom_');
@@ -359,7 +361,7 @@ export default function AthanOverlay({
 
       {/* Footer minimal information & Close */}
       <div className="mt-auto z-10 w-full max-w-2xl mx-auto border-t border-white/[0.05] pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <span className="text-[10px] text-white/40 font-medium text-center sm:text-right max-w-sm leading-relaxed">
+        <span className="text-[10px] text-white/40 font-medium text-center sm:text-end max-w-sm leading-relaxed">
           {isSunrise
             ? 'قال النبي ﷺ: "من صلى الفجر في جماعة ثم قعد يذكر الله حتى تطلع الشمس ثم صلى ركعتين كانت له كأجر حجة وعمرة تامّتين".'
             : 'حُضوركَ في الصف الأول صلاة جماعة تزيد عن صلاتك منفرداً بسبعٍ وعشرين درجة مباركة. تقبل الله طاعتك.'}

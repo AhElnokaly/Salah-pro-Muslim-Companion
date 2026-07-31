@@ -40,7 +40,10 @@ import {
   QuranSession, 
   QuranKhatma,
   PrayerName,
-  CustomDua
+  CustomDua,
+  AlarmConfig,
+  TabId,
+  SettingsSubTabId
 } from './types';
 
 // Component imports
@@ -75,11 +78,12 @@ import PwaInstallModal from './components/PwaInstallModal';
 import CustomAlarmOverlay from './components/CustomAlarmOverlay';
 
 import { syncUpcomingPrayerSchedule } from './utils/prayerScheduleSync';
+import { syncPrayerScheduleWithSW } from './utils/pushNotificationService';
 import { trackFeatureUsage } from './utils/analyticsStorage';
-import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios } from './utils/audioStorage';
+import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios, silentlyCacheAudio } from './utils/audioStorage';
 
 // Import companion icon
-import companionIcon from './assets/images/muslim_companion_icon_1784362373898.jpg';
+import companionIcon from './assets/images/app_icon_refaiq_1785232801939.jpg';
 
 // Calculations for standalone widget state synchronization
 import { calculatePrayerTimes, getCurrentAndNextPrayer, getArabicPrayerName } from './utils/prayerCalc';
@@ -233,12 +237,17 @@ const playSpiritualChime = (pitch: number = 523.25) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon'>('home');
+  const [activeTab, setActiveTab] = useState<TabId>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas'>('prayer');
+  const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<SettingsSubTabId>('prayer');
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
+  const [storageWarningAcknowledged, setStorageWarningAcknowledged] = useState<boolean>(false);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() => 
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState<boolean>(false);
 
   // Custom Hooks Extraction
   const {
@@ -260,7 +269,8 @@ export default function App() {
     setDhikrLogs,
     customDuas,
     setCustomDuas,
-    isLoaded
+    isLoaded,
+    storageWriteError
   } = useSpiritualState();
 
   const {
@@ -311,6 +321,24 @@ export default function App() {
     audioVolume,
     setToastMessage
   });
+
+  // Pre-cache preferred muezzins on app load
+  useEffect(() => {
+    if (!isLoaded || !navigator.onLine) return;
+    const fajrMuezzinId = localStorage.getItem('salah_fajr_muezzin') || 'fajr_makkah';
+    const generalMuezzinId = localStorage.getItem('salah_general_muezzin') || 'makkah';
+    const tracks = [...defaultMuezzins, ...archiveMuezzins];
+
+    [
+      { id: fajrMuezzinId, isFajr: true },
+      { id: generalMuezzinId, isFajr: false },
+    ].forEach(({ id, isFajr }) => {
+      const track = tracks.find(t => t.id === id);
+      if (track) {
+        silentlyCacheAudio(track.id, track.url, isFajr).catch(() => {});
+      }
+    });
+  }, [isLoaded]);
 
   // Portal of Serenity & Spiritual Breath States
   const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
@@ -469,13 +497,6 @@ export default function App() {
 
   const { now, hijri, gregorianStr, times, current, next, timeRemainingStr, dayNameArabic } = usePrayerClock(settings);
 
-  // Request notification permission after app finishes loading
-  useEffect(() => {
-    if (isLoaded && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, [isLoaded]);
-
   // Sync 30-day prayer schedule in local background storage
   useEffect(() => {
     if (isLoaded) {
@@ -548,6 +569,51 @@ export default function App() {
       window.removeEventListener('trigger-athan-simulation', handleSimulationTrigger);
     };
   }, [current, next, togglePlayAthanGlobal, setAthanOverlayPrayer, setShowAthanOverlay, globalAudioRef]);
+
+  // Synchronize prayer schedule with Service Worker for background notifications
+  useEffect(() => {
+    if (isLoaded) {
+      syncPrayerScheduleWithSW(settings);
+    }
+  }, [
+    isLoaded,
+    settings.latitude,
+    settings.longitude,
+    settings.cityName,
+    settings.calcMethod,
+    settings.madhab,
+    settings.prayerOffsets,
+    settings.adhanEnabled
+  ]);
+
+  // Handle autoAthan URL parameter and Service Worker notification clicks
+  useEffect(() => {
+    // 1. Check URL parameters (e.g. ?autoAthan=true&prayer=Maghrib)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autoAthan') === 'true') {
+      const p = (params.get('prayer') as PrayerName) || 'Dhuhr';
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('trigger-athan-simulation', { detail: { prayerName: p } }));
+      }, 300);
+    }
+
+    // 2. Listen to SW messages when app is active
+    if ('serviceWorker' in navigator) {
+      const handleSwMessage = (event: MessageEvent) => {
+        if (event.data && event.data.type === 'TRIGGER_ATHAN_FROM_NOTIFICATION') {
+          const prayerName = event.data.prayerName as PrayerName;
+          if (prayerName) {
+            window.dispatchEvent(new CustomEvent('trigger-athan-simulation', { detail: { prayerName } }));
+          }
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      };
+    }
+  }, []);
 
   // Prohibited Fasting Days check and automatic cancellation
   useEffect(() => {
@@ -657,7 +723,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-right flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
+    <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-end flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
       
       {/* 1. Sticky Top Header Bar */}
       <header className="w-full max-w-md md:max-w-xl bg-white/95 dark:bg-[#121820]/95 backdrop-blur-md border-b border-[#e2e8f0]/80 dark:border-slate-800/80 px-3 md:px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-xs transition-colors duration-300 rounded-b-3xl">
@@ -751,27 +817,26 @@ export default function App() {
                 {/* Dynamic Smart Network & Sync Status Indicator Dot */}
                 {isSyncing ? (
                   <span 
-                    className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-amber-400 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_10px_#f59e0b] animate-ping"
+                    className="absolute bottom-0.5 end-0.5 w-3 h-3 bg-amber-400 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_10px_#f59e0b] animate-ping"
                     title="جاري التحديث ومزامنة المواقيت أونلاين... 🟡"
                   />
                 ) : isOnline ? (
                   <span 
-                    className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]"
+                    className="absolute bottom-0.5 end-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#10b981]"
                     title="متصل بالشبكة - الخدمة أونلاين 🟢"
                   />
                 ) : (
                   <span 
-                    className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#f43f5e] animate-pulse"
+                    className="absolute bottom-0.5 end-0.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-900 rounded-full shadow-[0_0_8px_#f43f5e] animate-pulse"
                     title="غير متصل بالشبكة - يعمل أوفلاين بالكامل 🔴"
                   />
                 )}
               </motion.button>
             </div>
 
-            <div className="flex flex-col text-right min-w-0">
+            <div className="flex flex-col text-end min-w-0">
               <div className="flex items-center gap-1 min-w-0">
                 <h1 className="text-xs md:text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">رفيق المسلم</h1>
-                <span className="text-[8px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1 py-0.2 rounded border border-amber-500/25 shrink-0">المطور</span>
               </div>
               <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
                 <button
@@ -817,8 +882,8 @@ export default function App() {
             title="جولة تفاعلية في مزايا التطبيق 💡"
           >
             <Lightbulb className="w-4 h-4 text-indigo-600 dark:text-indigo-300 group-hover:scale-110 transition-transform" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
+            <span className="absolute -top-1 -end-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+            <span className="absolute -top-1 -end-1 w-2.5 h-2.5 bg-amber-400 rounded-full" />
           </button>
 
           {/* Theme toggle button */}
@@ -843,6 +908,56 @@ export default function App() {
 
       {/* 2. Main Content Stage Container */}
       <main className="w-full max-w-md p-4 space-y-6">
+        {storageWriteError && !storageWarningAcknowledged && (
+          <div className="w-full p-3.5 bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 rounded-2xl text-rose-900 dark:text-rose-100 space-y-2 text-end text-xs shadow-md">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <span className="text-base">⚠️</span>
+              <span>تنبيه هام: تعذر حفظ البيانات</span>
+            </div>
+            <p className="leading-relaxed">
+              تعذر حفظ البيانات في ذاكرة الجهاز المحلية (قد تكون المساحة ممتلئة أو التصفح الخاص مفعّلاً). يرجى تفريغ مساحة على جهازك أو إغلاق الوضع الخاص لضمان حفظ سجلاتك وطاعاتك.
+            </p>
+            <button
+              onClick={() => setStorageWarningAcknowledged(true)}
+              className="mt-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              حسناً، فهمت
+            </button>
+          </div>
+        )}
+
+        {notifPermission === 'default' && !notifBannerDismissed && (
+          <div className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 rounded-2xl text-indigo-900 dark:text-indigo-100 flex items-center justify-between gap-3 text-end text-xs shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">🔔</span>
+              <div>
+                <p className="font-bold text-sm">تفعيل التنبيهات</p>
+                <p className="text-[11px] text-indigo-700 dark:text-indigo-300">احصل على تذكير في مواقيت الصلاة والأذكار</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={async () => {
+                  if ('Notification' in window) {
+                    const res = await Notification.requestPermission();
+                    setNotifPermission(res);
+                  }
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                فعّل تذكير الصلاة
+              </button>
+              <button
+                onClick={() => setNotifBannerDismissed(true)}
+                className="p-1.5 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 transition-colors cursor-pointer"
+                aria-label="إغلاق التنبيه"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab !== 'home' && activeTab !== 'calendar' && activeTab !== 'qibla' && (
           <button
             onClick={() => setActiveTab('home')}
@@ -889,7 +1004,7 @@ export default function App() {
               dhikrLogs={dhikrLogs}
               quranSessions={quranSessions}
               khatmat={khatmat}
-              onNavigateTab={(tab) => setActiveTab(tab as any)}
+              onNavigateTab={(tab) => setActiveTab(tab as TabId)}
             />
           </div>
         )}
@@ -924,10 +1039,10 @@ export default function App() {
               if (tab === 'settings' || tab === 'prayer' || tab === 'adhan') {
                 setActiveTab('settings');
                 if (tab === 'prayer' || tab === 'adhan') {
-                  setActiveSettingsSubTab(tab as any);
+                  setActiveSettingsSubTab(tab as SettingsSubTabId);
                 }
               } else {
-                setActiveTab(tab as any);
+                setActiveTab(tab as TabId);
               }
             }}
             onOpenNotificationsModal={() => {
@@ -951,7 +1066,7 @@ export default function App() {
             setFastingLogs={setFastingLogs}
             ramadanQada={ramadanQada}
             setRamadanQada={setRamadanQada}
-            onNavigateTab={(tab) => setActiveTab(tab as any)}
+            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
           />
         )}
 
@@ -1012,13 +1127,13 @@ export default function App() {
             settings={settings}
             prayerLogs={prayerLogs}
             setPrayerLogs={setPrayerLogs}
-            onNavigateTab={(tab) => setActiveTab(tab as any)}
+            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
           />
         )}
 
         {activeTab === 'analytics' && (
           <AnalyticsDashboard
-            onSelectTab={(tab) => setActiveTab(tab as any)}
+            onSelectTab={(tab) => setActiveTab(tab as TabId)}
           />
         )}
 
@@ -1030,7 +1145,7 @@ export default function App() {
             hijriYear={hijri.year}
             cityName={settings.cityName}
             toArabicNumbers={toArabicNumbers}
-            onNavigateTab={(tab) => setActiveTab(tab as any)}
+            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
           />
         )}
       </main>
@@ -1054,7 +1169,7 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="fixed top-0 right-0 h-full w-4/5 max-w-xs bg-white dark:bg-[#161d26] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto"
+              className="fixed top-0 end-0 h-full w-4/5 max-w-xs bg-white dark:bg-[#161d26] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto"
               dir="rtl"
             >
               <div className="space-y-6">
@@ -1132,33 +1247,35 @@ export default function App() {
                 </div>
 
                 {/* Main Worship Navigation */}
-                <div className="space-y-2 text-right">
+                <div className="space-y-2 text-end">
                   <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">الأقسام والعبادات</span>
                   <div className="grid grid-cols-1 gap-1">
-                    {[
-                      { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
-                      { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
-                      { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
-                      { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
-                      { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
-                      { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
-                      { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
-                      { id: 'fasting', label: 'متابعة وتتبع الصيام', icon: Moon },
-                      { id: 'adhkar', label: 'الأذكار اليومية والاستغفار', icon: Sparkles },
-                      { id: 'alarms', label: 'منبهات العبادات والصلوات ⏰', icon: Bell },
-                      { id: 'qibla', label: 'تحديد اتجاه القبلة', icon: Compass },
-                      { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
-                    ].map((item) => {
+                    {(
+                      [
+                        { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
+                        { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
+                        { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
+                        { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
+                        { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
+                        { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
+                        { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
+                        { id: 'fasting', label: 'متابعة وتتبع الصيام', icon: Moon },
+                        { id: 'adhkar', label: 'الأذكار اليومية والاستغفار', icon: Sparkles },
+                        { id: 'alarms', label: 'منبهات العبادات والصلوات ⏰', icon: Bell },
+                        { id: 'qibla', label: 'تحديد اتجاه القبلة', icon: Compass },
+                        { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
+                      ] as { id: TabId; label: string; icon: React.ElementType }[]
+                    ).map((item) => {
                       const Icon = item.icon;
                       const isSelected = activeTab === item.id;
                       return (
                         <button
                           key={item.id}
                           onClick={() => {
-                            setActiveTab(item.id as any);
+                            setActiveTab(item.id);
                             setIsSidebarOpen(false);
                           }}
-                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
+                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-end transition-all cursor-pointer w-full ${
                             isSelected
                               ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-black'
                               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -1173,19 +1290,21 @@ export default function App() {
                 </div>
 
                 {/* Dedicated Settings Pages Section */}
-                <div className="space-y-2 text-right">
+                <div className="space-y-2 text-end">
                   <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">إعدادات وضبط التطبيق</span>
                   <div className="grid grid-cols-1 gap-1">
-                    {[
-                      { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
-                      { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
-                      { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
-                      { id: 'calendar', label: 'تعديل التقويم الهجري', icon: Calendar },
-                      { id: 'theme', label: 'مظهر التطبيق وشكل الساعة', icon: Settings },
-                      { id: 'qada', label: 'سجل القضاء وتتبع الفوائت', icon: Clock },
-                      { id: 'duas', label: 'الأدعية المخصصة المحفوظة', icon: Heart },
-                      { id: 'backup', label: 'نسخ احتياطي واسترداد البيانات', icon: RotateCcw },
-                    ].map((item) => {
+                    {(
+                      [
+                        { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
+                        { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
+                        { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
+                        { id: 'calendar', label: 'تعديل التقويم الهجري', icon: Calendar },
+                        { id: 'theme', label: 'مظهر التطبيق وشكل الساعة', icon: Settings },
+                        { id: 'qada', label: 'سجل القضاء وتتبع الفوائت', icon: Clock },
+                        { id: 'duas', label: 'الأدعية المخصصة المحفوظة', icon: Heart },
+                        { id: 'backup', label: 'نسخ احتياطي واسترداد البيانات', icon: RotateCcw },
+                      ] as { id: SettingsSubTabId; label: string; icon: React.ElementType }[]
+                    ).map((item) => {
                       const Icon = item.icon;
                       const isSelected = activeTab === 'settings' && activeSettingsSubTab === item.id;
                       return (
@@ -1193,10 +1312,10 @@ export default function App() {
                           key={item.id}
                           onClick={() => {
                             setActiveTab('settings');
-                            setActiveSettingsSubTab(item.id as any);
+                            setActiveSettingsSubTab(item.id);
                             setIsSidebarOpen(false);
                           }}
-                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
+                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-end transition-all cursor-pointer w-full ${
                             isSelected
                               ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-black border border-amber-500/20'
                               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -1211,7 +1330,7 @@ export default function App() {
                 </div>
 
                 {/* Feature Discovery Tour Launch Card inside Sidebar */}
-                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-right">
+                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-end">
                   <div className="flex items-center gap-2">
                     <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
                     <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">دليل وجولة مزايا التطبيق 💡</span>
@@ -1232,7 +1351,7 @@ export default function App() {
                 </div>
 
                 {/* Share App Action inside Sidebar */}
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-right">
+                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-end">
                   <div className="flex items-center gap-2">
                     <Share2 className="w-4 h-4 text-indigo-500 animate-pulse" />
                     <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">نشر الخير ومشاركة التطبيق</span>
@@ -1254,7 +1373,7 @@ export default function App() {
 
                 {/* PWA Install Promo inside Sidebar */}
                 {!isInstalled && (
-                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-right">
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-end">
                     <div className="flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-500 animate-bounce" />
                       <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل رفيق المسلم كـ App</span>
@@ -1288,7 +1407,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* 3. Rebalanced Fixed Bottom Navigation (5 Primary High-Priority Tabs) */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-[#161d26]/95 backdrop-blur-md border-t border-[#e2e8f0] dark:border-slate-800/80 py-2 px-1 shadow-xl z-40 flex justify-around items-center w-full max-w-md mx-auto rounded-t-3xl transition-colors duration-300">
+      <nav className="fixed bottom-0 start-0 end-0 bg-white/95 dark:bg-[#161d26]/95 backdrop-blur-md border-t border-[#e2e8f0] dark:border-slate-800/80 py-2 px-1 shadow-xl z-40 flex justify-around items-center w-full max-w-md mx-auto rounded-t-3xl transition-colors duration-300">
         
         {/* 1. Home / Dashboard */}
         <button
@@ -1344,7 +1463,7 @@ export default function App() {
           <div className="relative">
             <Bell className="w-5 h-5" />
             {notificationsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[7.5px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white dark:border-[#161d26] animate-pulse">
+              <span className="absolute -top-1.5 -end-2 bg-rose-500 text-white text-[7.5px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white dark:border-[#161d26] animate-pulse">
                 {(() => {
                   const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
                   return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
@@ -1365,7 +1484,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="fixed bottom-24 left-4 right-4 md:left-auto md:right-4 md:max-w-md bg-slate-900/95 dark:bg-[#161d26]/98 backdrop-blur-md text-white px-5 py-4 rounded-2xl border border-slate-700/50 shadow-2xl z-50 flex items-start gap-3.5 text-right font-sans"
+            className="fixed bottom-24 start-4 end-4 md:start-auto md:end-4 md:max-w-md bg-slate-900/95 dark:bg-[#161d26]/98 backdrop-blur-md text-white px-5 py-4 rounded-2xl border border-slate-700/50 shadow-2xl z-50 flex items-start gap-3.5 text-end font-sans"
             dir="rtl"
           >
             <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl shrink-0 mt-0.5">
@@ -1437,7 +1556,7 @@ export default function App() {
             enabled: true,
             soundType: activeRingingAlarm.soundType
           };
-          setCustomAlarms((prev: any[]) => [...prev, snoozedAlarm]);
+          setCustomAlarms((prev: AlarmConfig[]) => [...prev, snoozedAlarm]);
           setActiveRingingAlarm(null);
           setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
         }}
@@ -1452,7 +1571,7 @@ export default function App() {
       {/* Fiqh Warning Modal for prohibited fasting days */}
       {fiqhWarning && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn" dir="rtl">
-          <div className="bg-white dark:bg-[#18202c] border border-amber-500/30 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-right">
+          <div className="bg-white dark:bg-[#18202c] border border-amber-500/30 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-end">
             <div className="flex items-center gap-2.5 text-amber-600 dark:text-amber-400 font-black text-base">
               <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
               <h3>{fiqhWarning.title}</h3>
@@ -1486,9 +1605,9 @@ export default function App() {
         isOpen={isTourModalOpen}
         onClose={() => setIsTourModalOpen(false)}
         onSelectTab={(tab, subTab) => {
-          setActiveTab(tab as any);
+          setActiveTab(tab as TabId);
           if (subTab) {
-            setActiveSettingsSubTab(subTab as any);
+            setActiveSettingsSubTab(subTab as SettingsSubTabId);
           }
         }}
       />

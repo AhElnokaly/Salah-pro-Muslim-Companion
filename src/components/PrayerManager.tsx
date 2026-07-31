@@ -32,10 +32,11 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus } from '../types';
+import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus, ClockFace, AlarmSoundType } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
+import { safeSetItem } from '../utils/storage';
 import { 
   defaultMuezzins, 
   getCustomAudios, 
@@ -116,12 +117,12 @@ export default function PrayerManager({
   }, []);
 
   // Clock face selection state
-  const [clockFace, setClockFace] = useState<'classic' | 'islamic' | 'minimal' | 'hybrid'>(() => {
-    return (localStorage.getItem('salah_clock_face') as any) || 'classic';
+  const [clockFace, setClockFace] = useState<ClockFace>(() => {
+    return (localStorage.getItem('salah_clock_face') as ClockFace) || 'classic';
   });
 
   useEffect(() => {
-    localStorage.setItem('salah_clock_face', clockFace);
+    safeSetItem('salah_clock_face', clockFace);
   }, [clockFace]);
 
   // Athan Audio Player States in PrayerManager
@@ -187,7 +188,7 @@ export default function PrayerManager({
   });
 
   useEffect(() => {
-    localStorage.setItem('salah_custom_alarms', JSON.stringify(customAlarms));
+    safeSetItem('salah_custom_alarms', JSON.stringify(customAlarms));
   }, [customAlarms]);
 
   // Alarms Form States
@@ -212,7 +213,7 @@ export default function PrayerManager({
   });
 
   useEffect(() => {
-    localStorage.setItem('salah_last_triggered_alarms', JSON.stringify(lastTriggeredAlarms));
+    safeSetItem('salah_last_triggered_alarms', JSON.stringify(lastTriggeredAlarms));
   }, [lastTriggeredAlarms]);
 
   const handleAddCustomMuezzin = async (e: React.FormEvent) => {
@@ -416,7 +417,7 @@ export default function PrayerManager({
           // Play Athan automatically!
           togglePlayAthan(prayer);
           setLastAutoPlayedKey(uniqueKey);
-          localStorage.setItem('salah_last_auto_played_key', uniqueKey);
+          safeSetItem('salah_last_auto_played_key', uniqueKey);
 
           // Trigger a beautiful push notification if supported and allowed
           if ('Notification' in window && Notification.permission === 'granted') {
@@ -524,7 +525,7 @@ export default function PrayerManager({
   });
 
   useEffect(() => {
-    localStorage.setItem('salah_alerts', JSON.stringify(alerts));
+    safeSetItem('salah_alerts', JSON.stringify(alerts));
   }, [alerts]);
 
   // Sound Modes per prayer
@@ -542,7 +543,7 @@ export default function PrayerManager({
   });
 
   useEffect(() => {
-    localStorage.setItem('salah_sound_modes', JSON.stringify(soundModes));
+    safeSetItem('salah_sound_modes', JSON.stringify(soundModes));
   }, [soundModes]);
 
   const dayLogs = prayerLogs[dateStr] || {};
@@ -860,9 +861,9 @@ export default function PrayerManager({
       return (
         <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full border-[3px] sm:border-4 border-amber-500/40 bg-[#111720] flex items-center justify-center shadow-md transition-colors">
           <span className="absolute top-1 sm:top-1.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">١٢</span>
-          <span className="absolute right-2 sm:right-2.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">٣</span>
+          <span className="absolute end-2 sm:end-2.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">٣</span>
           <span className="absolute bottom-1 sm:bottom-1.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">٦</span>
-          <span className="absolute left-2 sm:left-2.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">٩</span>
+          <span className="absolute start-2 sm:start-2.5 text-[8px] sm:text-[10px] font-black text-amber-500 font-mono">٩</span>
           
           <svg className="w-full h-full absolute inset-0" viewBox="0 0 100 100">
             <line x1="50" y1="50" x2="50" y2="28" stroke="#f59e0b" strokeWidth="3.5" strokeLinecap="round" transform={`rotate(${hrDeg} 50 50)`} />
@@ -885,9 +886,9 @@ export default function PrayerManager({
             </svg>
           </div>
           <span className="absolute top-1 sm:top-1.5 text-[8px] sm:text-[10px] font-black text-emerald-800">١٢</span>
-          <span className="absolute right-2 sm:right-2.5 text-[8px] sm:text-[10px] font-black text-emerald-800">٣</span>
+          <span className="absolute end-2 sm:end-2.5 text-[8px] sm:text-[10px] font-black text-emerald-800">٣</span>
           <span className="absolute bottom-1 sm:bottom-1.5 text-[8px] sm:text-[10px] font-black text-emerald-800">٦</span>
-          <span className="absolute left-2 sm:left-2.5 text-[8px] sm:text-[10px] font-black text-emerald-800">٩</span>
+          <span className="absolute start-2 sm:start-2.5 text-[8px] sm:text-[10px] font-black text-emerald-800">٩</span>
           
           <svg className="w-full h-full absolute inset-0" viewBox="0 0 100 100">
             <line x1="50" y1="50" x2="50" y2="30" stroke="#047857" strokeWidth="3" strokeLinecap="round" transform={`rotate(${hrDeg} 50 50)`} />
@@ -903,8 +904,8 @@ export default function PrayerManager({
         <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-center shadow-sm transition-colors">
           <div className="absolute top-1 sm:top-1.5 w-0.5 sm:w-1 h-1.5 sm:h-2 bg-indigo-500 rounded" />
           <div className="absolute bottom-1 sm:bottom-1.5 w-0.5 sm:w-1 h-1.5 sm:h-2 bg-indigo-500 rounded" />
-          <div className="absolute right-1 sm:right-1.5 h-0.5 sm:h-1 w-1.5 sm:w-2 bg-indigo-500 rounded" />
-          <div className="absolute left-1 sm:left-1.5 h-0.5 sm:h-1 w-1.5 sm:w-2 bg-indigo-500 rounded" />
+          <div className="absolute end-1 sm:end-1.5 h-0.5 sm:h-1 w-1.5 sm:w-2 bg-indigo-500 rounded" />
+          <div className="absolute start-1 sm:start-1.5 h-0.5 sm:h-1 w-1.5 sm:w-2 bg-indigo-500 rounded" />
           
           <svg className="w-full h-full absolute inset-0" viewBox="0 0 100 100">
             <line x1="50" y1="50" x2="50" y2="32" stroke="currentColor" className="text-slate-800 dark:text-slate-100" strokeWidth="2.5" strokeLinecap="round" transform={`rotate(${hrDeg} 50 50)`} />
@@ -935,21 +936,23 @@ export default function PrayerManager({
   };
 
   return (
-    <div id="prayer-manager-root" className="space-y-4 text-right" dir="rtl">
+    <div id="prayer-manager-root" className="space-y-4 text-end" dir="rtl">
       
       {/* Sleek, Space-Saving Top Navigation Sub-Tabs Bar */}
       <div className="flex bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/40 dark:border-slate-700/50 overflow-x-auto scrollbar-none gap-0.5 shrink-0">
-        {[
-          { id: 'times', label: 'مواقيت الصلاة', icon: Clock },
-          { id: 'worship', label: `سجل العبادات والفوائت ${totalQadaCount > 0 ? `(${toArabicNumbers(totalQadaCount)})` : ''}`, icon: CheckCircle },
-        ].map((tab) => {
+        {(
+          [
+            { id: 'times', label: 'مواقيت الصلاة', icon: Clock },
+            { id: 'worship', label: `سجل العبادات والفوائت ${totalQadaCount > 0 ? `(${toArabicNumbers(totalQadaCount)})` : ''}`, icon: CheckCircle },
+          ] as { id: SubTab; label: string; icon: React.ElementType }[]
+        ).map((tab) => {
           const Icon = tab.icon;
           const isSelected = activeSubTab === tab.id || (activeSubTab === 'settings' && tab.id === 'worship');
           return (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveSubTab(tab.id as any)}
+              onClick={() => setActiveSubTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-[11px] sm:text-xs font-black rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                 isSelected
                   ? 'bg-white dark:bg-[#111720] text-indigo-600 dark:text-indigo-400 shadow-sm font-black'
@@ -998,18 +1001,20 @@ export default function PrayerManager({
 
               {/* Clock Face Customizer Carousel */}
               <div className="space-y-1 w-full">
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-black text-right block">شكل وجه الساعة:</span>
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-black text-end block">شكل وجه الساعة:</span>
                 <div className="grid grid-cols-4 gap-1 w-full">
-                  {[
-                    { id: 'classic', label: 'كلاسيكي داكن' },
-                    { id: 'islamic', label: 'زخرفة إسلامية' },
-                    { id: 'minimal', label: 'حديث بسيط' },
-                    { id: 'hybrid', label: 'هجين رقمي' },
-                  ].map((face) => (
+                  {(
+                    [
+                      { id: 'classic', label: 'كلاسيكي داكن' },
+                      { id: 'islamic', label: 'زخرفة إسلامية' },
+                      { id: 'minimal', label: 'حديث بسيط' },
+                      { id: 'hybrid', label: 'هجين رقمي' },
+                    ] as { id: ClockFace; label: string }[]
+                  ).map((face) => (
                     <button
                       key={face.id}
                       type="button"
-                      onClick={() => setClockFace(face.id as any)}
+                      onClick={() => setClockFace(face.id)}
                       className={`py-1 px-1 text-[9px] sm:text-[10px] font-black rounded-lg transition-all border cursor-pointer text-center truncate ${
                         clockFace === face.id
                           ? 'bg-indigo-600 border-indigo-600 text-white font-black shadow-xs'
@@ -1035,7 +1040,7 @@ export default function PrayerManager({
 
             {/* List of Prayer Times with Sound Mode Switcher */}
             <div className="space-y-2">
-              {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as any[]).map((pName: string) => {
+              {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as (PrayerName | 'Sunrise')[]).map((pName) => {
                 const pTime = times[pName as PrayerName];
                 const isNext = pName === nextPrayerName;
                 const sMode = soundModes[pName] || 'adhan';
@@ -1145,8 +1150,8 @@ export default function PrayerManager({
                        {/* First sub-row: Offset & Muezzin */}
                        <div className="flex items-center gap-2">
                          {/* Offset Adjuster (الضبط لأقرب مسجد) */}
-                         <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-right" title="الضبط لأقرب مسجد">
-                           <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold ml-1.5 shrink-0">المسجد:</span>
+                         <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-end" title="الضبط لأقرب مسجد">
+                           <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold ms-1.5 shrink-0">المسجد:</span>
                            <div className="flex items-center gap-1">
                              <button
                                type="button"
@@ -1187,17 +1192,17 @@ export default function PrayerManager({
                                onChange={(e) => {
                                  const val = e.target.value;
                                  setPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
-                                 localStorage.setItem(`salah_muezzin_${pName}`, val);
+                                 safeSetItem(`salah_muezzin_${pName}`, val);
                                  if (pName === 'Fajr') {
                                    setFajrMuezzin(val);
-                                   localStorage.setItem('salah_fajr_muezzin', val);
+                                   safeSetItem('salah_fajr_muezzin', val);
                                  } else if (pName !== 'Sunrise') {
                                    setCurrentMuezzin(val);
-                                   localStorage.setItem('salah_general_muezzin', val);
+                                   safeSetItem('salah_general_muezzin', val);
                                  }
                                  setLogSuccessMessage(`تم تحديد الصوت لـ ${getArabicPrayerName(pName as PrayerName)}`);
                                }}
-                               className="bg-transparent text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pr-1 ml-0.5 min-w-0 flex-1 appearance-none"
+                               className="bg-transparent text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pe-1 ms-0.5 min-w-0 flex-1 appearance-none"
                              >
                                {muezzins.map((m) => (
                                  <option key={m.id} value={m.id} className="dark:bg-[#161d26] text-slate-800 dark:text-slate-200">
@@ -1227,7 +1232,7 @@ export default function PrayerManager({
                              title="حجم الصوت لهذا التنبيه"
                            />
                          </div>
-                         <span className="text-[10px] sm:text-xs font-mono text-slate-500 dark:text-slate-400 font-bold mr-3 min-w-[32px] text-left">
+                         <span className="text-[10px] sm:text-xs font-mono text-slate-500 dark:text-slate-400 font-bold me-3 min-w-[32px] text-start">
                            {toArabicNumbers(Math.round((settings.prayerVolumes?.[pName] ?? audioVolume) * 100))}%
                          </span>
                        </div>
@@ -1238,7 +1243,7 @@ export default function PrayerManager({
             </div>
 
             {/* Integrated Calculation Method & Madhab Selector Card */}
-            <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4 text-right">
+            <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4 text-end">
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
                 <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <div>
@@ -1292,7 +1297,7 @@ export default function PrayerManager({
             <div className="bg-white dark:bg-[#161d26] rounded-3xl border border-[#e2e8f0]/80 dark:border-slate-800/80 shadow-xs p-5 transition-all duration-300 space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
                 <Compass className="w-5 h-5 text-indigo-500 animate-spin-slow" />
-                <div className="text-right">
+                <div className="text-end">
                   <h4 className="text-sm font-black text-slate-800 dark:text-white">مواقيت الحرمين الشريفين والمسجد الأقصى</h4>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">مواقيت الصلاة والعد التنازلي المباشر لأقدس بقاع الأرض</p>
                 </div>
@@ -1317,7 +1322,7 @@ export default function PrayerManager({
                   const countdownInfo = getExactCountdown(cityTimes, currentTime);
 
                   return (
-                    <div key={city.id} className="bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-3 border border-slate-100/50 dark:border-slate-800/40 space-y-2 text-right">
+                    <div key={city.id} className="bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-3 border border-slate-100/50 dark:border-slate-800/40 space-y-2 text-end">
                       <div className="flex justify-between items-start gap-1">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1">
@@ -1327,7 +1332,7 @@ export default function PrayerManager({
                           </div>
                           <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium leading-none">{city.desc}</p>
                         </div>
-                        <div className="text-left leading-tight shrink-0">
+                        <div className="text-start leading-tight shrink-0">
                           <span className="text-[8px] text-slate-400 font-bold block">القادم: {countdownInfo.arabicNextName}</span>
                           <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-wider">+ {countdownInfo.countdownStr}</span>
                         </div>
@@ -1432,7 +1437,7 @@ export default function PrayerManager({
           </div>
 
           {/* Hadith Quote Card */}
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-500/10 dark:border-amber-500/20 p-4 rounded-3xl space-y-2 text-right">
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-500/10 dark:border-amber-500/20 p-4 rounded-3xl space-y-2 text-end">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400 animate-spin-slow" />
               <span className="text-xs font-black text-amber-800 dark:text-amber-400">فضل الرواتب والسنن:</span>
@@ -1562,7 +1567,7 @@ export default function PrayerManager({
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">☀️</span>
-                      <div className="text-right">
+                      <div className="text-end">
                         <h4 className="text-sm font-black text-amber-800 dark:text-amber-400">
                           صلاة الضحى (سنة مؤكدة)
                         </h4>
@@ -1765,7 +1770,7 @@ export default function PrayerManager({
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🌃</span>
-                      <div className="text-right">
+                      <div className="text-end">
                         <h4 className="text-sm font-black text-indigo-800 dark:text-indigo-400">
                           صلاة قيام الليل والتهجد
                         </h4>
@@ -1830,7 +1835,7 @@ export default function PrayerManager({
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🌟</span>
-                      <div className="text-right">
+                      <div className="text-end">
                         <h4 className="text-sm font-black text-purple-800 dark:text-purple-400">
                           صلاة الشفع والوتر
                         </h4>
@@ -1995,7 +2000,7 @@ export default function PrayerManager({
 
       {/* --- SubTab 3: Integrated into Dedicated Settings Screens in the Sidebar --- */}
       {false && (
-        <div className="space-y-6 animate-fade-in text-right">
+        <div className="space-y-6 animate-fade-in text-end">
           
           {/* General Audio Settings Card */}
           <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4">
@@ -2011,7 +2016,7 @@ export default function PrayerManager({
 
                   {/* Volume Slider */}
                   <div className="p-3 bg-slate-50/50 dark:bg-[#111720]/20 rounded-2xl border border-slate-100/50 dark:border-slate-800/30 space-y-3.5">
-                    <div className="space-y-1.5 text-right">
+                    <div className="space-y-1.5 text-end">
                       <div className="flex justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
                         <span>مستوى صوت الأذان والتنبيهات</span>
                         <span className="font-mono">{toArabicNumbers(Math.round(audioVolume * 100))}%</span>
@@ -2025,7 +2030,7 @@ export default function PrayerManager({
                         onChange={(e) => {
                           const vol = parseFloat(e.target.value);
                           setAudioVolume(vol);
-                          localStorage.setItem('salah_audio_volume', vol.toString());
+                          safeSetItem('salah_audio_volume', vol.toString());
                           if (audioRef.current) {
                             audioRef.current.volume = vol;
                           }
@@ -2037,7 +2042,7 @@ export default function PrayerManager({
 
                   {/* Auto-play Athan switch */}
                   <div className="flex justify-between items-center p-3.5 bg-slate-50/50 dark:bg-[#111720]/20 rounded-2xl border border-slate-100/50 dark:border-slate-800/30">
-                    <div className="space-y-0.5 text-right">
+                    <div className="space-y-0.5 text-end">
                       <span className="text-xs font-black text-slate-800 dark:text-white block">تشغيل الأذان تلقائياً في الخلفية</span>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold block">تشغيل الأذان الكامل وإرسال تنبيه للمتصفح عند دخول وقت الصلاة تلقائياً</span>
                     </div>
@@ -2046,7 +2051,7 @@ export default function PrayerManager({
                       onClick={() => {
                         const nextVal = !autoPlayOnTime;
                         setAutoPlayOnTime(nextVal);
-                        localStorage.setItem('salah_auto_play_athan', nextVal ? 'true' : 'false');
+                        safeSetItem('salah_auto_play_athan', nextVal ? 'true' : 'false');
                         if (nextVal) {
                           requestNotificationPermission();
                           setLogSuccessMessage('تم تفعيل تشغيل الأذان تلقائياً عند دخول الوقت.');
@@ -2072,7 +2077,7 @@ export default function PrayerManager({
               <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4">
                 <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
                   <Plus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  <div className="text-right">
+                  <div className="text-end">
                     <h4 className="text-sm font-black text-slate-800 dark:text-white">إضافة صوت أو مؤذن مخصص</h4>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">أضف أصوات أذان خاصة بك من روابط ويب أو ملفات محلية</p>
                   </div>
@@ -2081,7 +2086,7 @@ export default function PrayerManager({
                 <form onSubmit={handleAddCustomMuezzin} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Name */}
-                    <div className="space-y-1.5 text-right">
+                    <div className="space-y-1.5 text-end">
                       <label className="text-[10px] text-slate-400 dark:text-slate-500 font-black block">اسم المؤذن / الصوت:</label>
                       <input
                         type="text"
@@ -2093,7 +2098,7 @@ export default function PrayerManager({
                     </div>
 
                     {/* Sound Type Toggle */}
-                    <div className="space-y-1.5 text-right flex flex-col justify-end">
+                    <div className="space-y-1.5 text-end flex flex-col justify-end">
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-black block mb-2">نوع الصوت:</span>
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
@@ -2127,19 +2132,19 @@ export default function PrayerManager({
 
                   {/* Input Based on Source Type */}
                   {muezzinSourceType === 'url' ? (
-                    <div className="space-y-1.5 text-right">
+                    <div className="space-y-1.5 text-end">
                       <label className="text-[10px] text-slate-400 dark:text-slate-500 font-black block">رابط الملف الصوتي المباشر (MP3):</label>
                       <input
                         type="url"
                         value={newMuezzinUrl}
                         onChange={(e) => setNewMuezzinUrl(e.target.value)}
                         placeholder="https://example.com/audio/adhan.mp3"
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-2xl py-2 px-3 text-xs font-mono text-left focus:ring-1 focus:ring-indigo-500 focus:outline-hidden"
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-2xl py-2 px-3 text-xs font-mono text-start focus:ring-1 focus:ring-indigo-500 focus:outline-hidden"
                         dir="ltr"
                       />
                     </div>
                   ) : (
-                    <div className="space-y-2 text-right">
+                    <div className="space-y-2 text-end">
                       <label className="text-[10px] text-slate-400 dark:text-slate-500 font-black block">اختر ملفاً صوتياً من جهازك:</label>
                       <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-center hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-all relative">
                         <input
@@ -2189,10 +2194,10 @@ export default function PrayerManager({
                 {customMuezzins.length > 0 && (
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800/60 space-y-2">
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-black block">قائمة الأصوات المخصصة المضافة:</span>
-                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pe-1">
                       {customMuezzins.map((m) => (
                         <div key={m.id} className="bg-slate-50/70 dark:bg-slate-900/40 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800/40 flex justify-between items-center gap-2">
-                          <div className="flex items-center gap-2 text-right min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-end min-w-0 flex-1">
                             <span className="text-xs font-black text-slate-700 dark:text-slate-300 truncate">{m.name}</span>
                             <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 px-1.5 py-0.5 rounded-md font-extrabold shrink-0">
                               {m.isFajr ? 'أذان فجر' : 'أذان عام'}
@@ -2224,8 +2229,8 @@ export default function PrayerManager({
               </div>
 
             {/* Worship Alarms Section */}
-            <div className="space-y-4 text-right">
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-500/10 dark:border-indigo-500/20 p-4 rounded-3xl space-y-1.5 text-right">
+            <div className="space-y-4 text-end">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-500/10 dark:border-indigo-500/20 p-4 rounded-3xl space-y-1.5 text-end">
                 <div className="flex items-center gap-2">
                   <Bell className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400 animate-bounce" />
                   <span className="text-xs font-black text-indigo-800 dark:text-indigo-400">منبهات الأذكار والصلوات:</span>
@@ -2547,7 +2552,7 @@ export default function PrayerManager({
               </div>
 
               {/* 4. Custom Additional Alarms Section */}
-              <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 shadow-xs space-y-4 text-right">
+              <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 shadow-xs space-y-4 text-end">
                 <div className="flex justify-between items-center border-b border-slate-150 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
                     <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
@@ -2627,18 +2632,20 @@ export default function PrayerManager({
                     <div className="space-y-2">
                       <label className="text-[10px] text-slate-450 dark:text-slate-500 font-black block">طريقة التنبيه والصوت:</label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {[
-                          { type: 'beep', label: 'رنين منبه (Beep)' },
-                          { type: 'adhan', label: 'صوت الأذان كامل' },
-                          { type: 'vibrate', label: 'اهتزاز فقط' },
-                          { type: 'silent', label: 'تنبيه صامت (إشعار)' },
-                        ].map((sound) => {
+                        {(
+                          [
+                            { type: 'beep', label: 'رنين منبه (Beep)' },
+                            { type: 'adhan', label: 'صوت الأذان كامل' },
+                            { type: 'vibrate', label: 'اهتزاز فقط' },
+                            { type: 'silent', label: 'تنبيه صامت (إشعار)' },
+                          ] as { type: AlarmSoundType; label: string }[]
+                        ).map((sound) => {
                           const isSelected = alarmSoundType === sound.type;
                           return (
                             <button
                               key={sound.type}
                               type="button"
-                              onClick={() => setAlarmSoundType(sound.type as any)}
+                              onClick={() => setAlarmSoundType(sound.type)}
                               className={`py-2 text-center text-xs font-bold rounded-xl cursor-pointer border transition-all ${
                                 isSelected
                                   ? 'bg-indigo-50 dark:bg-indigo-950/20 border-indigo-500/20 text-indigo-700 dark:text-indigo-400 font-black'
@@ -2670,13 +2677,13 @@ export default function PrayerManager({
                     لا يوجد منبهات إضافية مضافة حالياً. يمكنك استخدام زر "إضافة منبه" بالأعلى لضبط منبهات مخصصة لقيام الليل، السحور، أو قراءة الورد اليومي.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2.5 max-h-64 overflow-y-auto pr-1">
+                  <div className="flex flex-col gap-2.5 max-h-64 overflow-y-auto pe-1">
                     {customAlarms.map((a) => {
                       const soundLabel = a.soundType === 'beep' ? 'رنين' : a.soundType === 'adhan' ? 'أذان' : a.soundType === 'vibrate' ? 'اهتزاز' : 'صامت';
                       const daysText = a.days.length === 7 ? 'يومياً' : a.days.map(d => ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'][d]).join('، ');
                       return (
                         <div key={a.id} className="bg-slate-50/70 dark:bg-[#111720]/30 px-4 py-3 rounded-2xl border border-slate-100 dark:border-slate-800/50 flex justify-between items-center gap-4">
-                          <div className="space-y-1 text-right min-w-0 flex-1">
+                          <div className="space-y-1 text-end min-w-0 flex-1">
                             <span className="text-xs font-black text-slate-800 dark:text-white block">{a.title}</span>
                             <div className="flex flex-wrap gap-x-2 gap-y-1 items-center text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">
                               <span className="text-indigo-600 dark:text-indigo-400 font-black">{toArabicNumbers(a.time)}</span>

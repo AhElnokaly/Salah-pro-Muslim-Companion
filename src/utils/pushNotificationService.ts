@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { safeSetItem } from './storage';
+
 export interface PushNotificationSettings {
   enabled: boolean;
   prayerAthan: boolean;
@@ -66,11 +68,7 @@ export function getPushSettings(): PushNotificationSettings {
  * Save push settings
  */
 export function savePushSettings(settings: PushNotificationSettings): void {
-  try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch (e) {
-    console.error('Error saving push settings', e);
-  }
+  safeSetItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
 /**
@@ -113,6 +111,54 @@ export async function requestPushPermission(): Promise<NotificationPermission> {
   } catch (err) {
     console.error('Error requesting notification permission:', err);
     return 'denied';
+  }
+}
+
+import { syncUpcomingPrayerSchedule } from './prayerScheduleSync';
+
+/**
+ * Sync calculated prayer schedule with Service Worker for background notifications when browser is minimized/closed
+ */
+export async function syncPrayerScheduleWithSW(settings: any): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
+
+  try {
+    let reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      reg = await registerServiceWorker();
+    }
+    if (!reg) return;
+
+    // Register periodic sync if supported
+    if ('periodicSync' in reg) {
+      try {
+        const tags = await (reg as any).periodicSync.getTags();
+        if (!tags.includes('prayer-check')) {
+          await (reg as any).periodicSync.register('prayer-check', {
+            minInterval: 15 * 60 * 1000 // Every 15 mins
+          });
+        }
+      } catch (e) {
+        // Periodic sync permission may not be granted, fallback to SW internal timer
+      }
+    }
+
+    const schedule = syncUpcomingPrayerSchedule(settings);
+    const sw = reg.active || navigator.serviceWorker.controller;
+    
+    if (sw) {
+      sw.postMessage({
+        type: 'SYNC_PRAYER_SCHEDULE',
+        payload: {
+          schedule,
+          cityName: settings.cityName || 'القاهرة',
+          adhanEnabled: settings.adhanEnabled || {}
+        }
+      });
+      console.log('[PushService] Synced prayer schedule to SW:', schedule.length, 'items');
+    }
+  } catch (err) {
+    console.error('[PushService] Failed to sync prayer schedule with SW:', err);
   }
 }
 

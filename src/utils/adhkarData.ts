@@ -11,6 +11,7 @@ export interface DhikrItem {
   description?: string;
   reward?: string; // الفضل والبركة
   timingNote?: string; // وقت الذكر أو التخصيص
+  applicablePrayers?: ('fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha')[];
 }
 
 export interface DhikrCategory {
@@ -442,7 +443,8 @@ export const ADHKAR_DATA: DhikrCategory[] = [
         count: 10,
         timingNote: 'خاص بصلاتي الفجر والمغرب قبل ثني الرجلين',
         description: 'تهليل وتوحيد وتنزيه',
-        reward: 'حفظ من كل مكروه وحجاب من الشيطان.'
+        reward: 'حفظ من كل مكروه وحجاب من الشيطان.',
+        applicablePrayers: ['fajr', 'maghrib']
       },
       {
         id: 'p_ajirni_minan_nar',
@@ -451,7 +453,8 @@ export const ADHKAR_DATA: DhikrCategory[] = [
         count: 7,
         timingNote: 'خاصة بعد صلاتي الفجر والمغرب',
         description: 'طلب الحماية والاستجارة من النار',
-        reward: 'إذا مات في يومه أو ليلته كتب له جوار من النار.'
+        reward: 'إذا مات في يومه أو ليلته كتب له جوار من النار.',
+        applicablePrayers: ['fajr', 'maghrib']
       },
       {
         id: 'p_ilman_nafian',
@@ -460,7 +463,8 @@ export const ADHKAR_DATA: DhikrCategory[] = [
         count: 1,
         timingNote: 'يقال تحديداً بعد السلام من صلاة الفجر',
         description: 'دعاء الاستفتاح في الصباح عقب الفجر',
-        reward: 'جمع الخير في العلم الحقيقي والرزق والعمل المتقبل.'
+        reward: 'جمع الخير في العلم الحقيقي والرزق والعمل المتقبل.',
+        applicablePrayers: ['fajr']
       }
     ]
   },
@@ -508,3 +512,21 @@ export const FREE_TASBEEH_PRESETS = [
   { text: 'اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ', description: 'اللَّهُمَّ صَلِّ وَسَلِّمْ وَبَارِكْ عَلَى نَبِيِّنَا مُحَمَّدٍ' },
   { text: 'لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللهِ', description: 'كَنْزٌ مِنْ كُنُوزِ الْجَنَّةِ' }
 ];
+
+export function isDhikrItemVisible(item: DhikrItem, prayerKey?: string): boolean {
+  if (!item.applicablePrayers || item.applicablePrayers.length === 0) {
+    return true;
+  }
+  if (!prayerKey) return true;
+  return item.applicablePrayers.includes(prayerKey as any);
+}
+
+export function getDhikrItemRequiredCount(item: DhikrItem, prayerKey?: string): number {
+  if (item.id === 'p_muawwidhat') {
+    if (prayerKey === 'fajr' || prayerKey === 'maghrib') {
+      return 3;
+    }
+    return 1;
+  }
+  return item.count;
+}

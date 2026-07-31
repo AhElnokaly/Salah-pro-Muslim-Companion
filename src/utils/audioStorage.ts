@@ -1,3 +1,8 @@
+export const LOCAL_FALLBACK_AUDIO = {
+  fajr: '/audio/fajr-default.mp3',
+  general: '/audio/prayer-default.mp3',
+};
+
 const DB_NAME = 'salah_audio_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'audio_tracks';
@@ -257,45 +262,30 @@ export function getAudioUrlSync(url: string): string {
  * If offline and track is missing, falls back to any available offline track in IndexedDB.
  */
 export async function getAudioUrl(url: string, trackId?: string, isFajr = false): Promise<string> {
+  // 1. لو فيه نسخة محمّلة بالفعل في IndexedDB (مؤكدة تشتغل offline)، استخدمها
   if (url && url.startsWith('db://')) {
     const id = url.replace('db://', '');
     try {
       const blobUrl = await getBlobUrlFromDb(id);
       if (blobUrl) return blobUrl;
-    } catch {
-      // Fall through if blob missing
-    }
+    } catch { /* fall through */ }
   }
 
   if (trackId) {
     const dbKey = `downloaded_${trackId}`;
     try {
       const blobUrl = await getBlobUrlFromDb(dbKey);
-      if (blobUrl) {
-        return blobUrl;
-      }
-    } catch {
-      // Not stored in IndexedDB yet
-    }
-
-    // Auto-cache silently if online
-    if (url && url.startsWith('http') && typeof window !== 'undefined' && navigator.onLine) {
-      silentlyCacheAudio(trackId, url, isFajr).catch(() => {});
-    }
+      if (blobUrl) return blobUrl;
+    } catch { /* not cached yet */ }
   }
 
-  // Check if browser is offline and URL is an external web link
-  if (typeof window !== 'undefined' && !navigator.onLine && url && url.startsWith('http')) {
-    // Attempt fallback to any locally stored offline track in IndexedDB
-    try {
-      const fallbackBlobUrl = await getAnyOfflineTrackBlob(isFajr);
-      if (fallbackBlobUrl) {
-        console.warn('Network offline: falling back to cached offline audio track');
-        return fallbackBlobUrl;
-      }
-    } catch (err) {
-      console.error('Failed to get offline fallback audio track:', err);
+  // 2. مفيش نسخة محمّلة؟ رجّع الملف المحلي المضمون فورًا (مش الـ live stream)
+  //    وابدأ تحميل اختيار المستخدم الفعلي في الخلفية للمرة الجاية
+  if (trackId && url && url.startsWith('http')) {
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      silentlyCacheAudio(trackId, url, isFajr).catch(() => {});
     }
+    return isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
   }
 
   return url;
@@ -304,7 +294,7 @@ export async function getAudioUrl(url: string, trackId?: string, isFajr = false)
 /**
  * Background auto-caching when playing an audio track while online.
  */
-async function silentlyCacheAudio(trackId: string, url: string, isFajr: boolean) {
+export async function silentlyCacheAudio(trackId: string, url: string, isFajr: boolean) {
   try {
     const response = await fetch(url);
     if (!response.ok) return;

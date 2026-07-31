@@ -83,7 +83,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   return (
-    <div id="onboarding-root" className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center p-4 text-right" dir="rtl">
+    <div id="onboarding-root" className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center p-4 text-end" dir="rtl">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-6 border border-[#e2e8f0] transition-all duration-300">
         
         {/* Progress Bar */}
@@ -98,7 +98,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               />
             ))}
           </div>
-          <span className="text-xs font-semibold text-gray-400 mr-4 whitespace-nowrap">
+          <span className="text-xs font-semibold text-gray-400 me-4 whitespace-nowrap">
             خطوة {toArabicNumbers(step)} من {toArabicNumbers(3)}
           </span>
         </div>
@@ -137,12 +137,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <div className="flex-grow border-t border-gray-100"></div>
             </div>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1 no-scrollbar grid grid-cols-2 gap-2">
+            <div className="space-y-2 max-h-56 overflow-y-auto pe-1 no-scrollbar grid grid-cols-2 gap-2">
               {POPULAR_CITIES.map((city) => (
                 <button
                   key={city.name}
                   onClick={() => handleCitySelect(city)}
-                  className="p-3 text-right bg-[#faf7f0] hover:bg-indigo-50 hover:text-indigo-600 text-gray-700 font-semibold rounded-xl text-sm transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
+                  className="p-3 text-end bg-[#faf7f0] hover:bg-indigo-50 hover:text-indigo-600 text-gray-700 font-semibold rounded-xl text-sm transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
                 >
                   {city.arabicName}
                 </button>
@@ -162,7 +162,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <p className="text-sm text-gray-500">اختر طريقة الحساب المعتمدة في منطقتك لضمان تطابق الأذان.</p>
             </div>
 
-            <div className="space-y-4 text-right">
+            <div className="space-y-4 text-end">
               {/* Calc Method */}
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-gray-700">طريقة الحساب:</label>
@@ -234,7 +234,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               </div>
 
               {/* Gender Selection */}
-              <div className="space-y-1.5 text-right">
+              <div className="space-y-1.5 text-end">
                 <label className="text-sm font-bold text-gray-700">الجنس ومستند الرخصة الشرعية (👨/👩):</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -297,7 +297,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <p className="text-sm text-gray-500">نود معرفة آخر صلاة صليتها لنبدأ تتبع الفوائت بشكل صحيح بدون ملء خانات فارغة غير حقيقية.</p>
             </div>
 
-            <div className="space-y-4 text-right">
+            <div className="space-y-4 text-end">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700">ما هي آخر فريضة أديتها اليوم؟</label>
                 <div className="grid grid-cols-3 gap-2">

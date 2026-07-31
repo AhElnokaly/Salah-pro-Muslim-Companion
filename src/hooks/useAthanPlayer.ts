@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, MutableRefObject } from 'react';
 import { PrayerName, AppSettings } from '../types';
 import { getArabicPrayerName } from '../utils/prayerCalc';
-import { defaultMuezzins, archiveMuezzins, getAudioUrl, getCustomAudios } from '../utils/audioStorage';
+import { defaultMuezzins, archiveMuezzins, getAudioUrl, getCustomAudios, AudioTrack, LOCAL_FALLBACK_AUDIO } from '../utils/audioStorage';
+import { safeSetItem } from '../utils/storage';
 
 export const athanPhrases = [
   { text: 'الله أكبر، الله أكبر', duration: 10 },
@@ -47,7 +48,7 @@ export interface UseAthanPlayerReturn {
   setCurrentMuezzin: (muezzin: string) => void;
   fajrMuezzin: string;
   setFajrMuezzin: (muezzin: string) => void;
-  customMuezzins: any[];
+  customMuezzins: AudioTrack[];
   triggerAthan: (prayer: PrayerName, timeStr: string, settings: AppSettings, setToastMessage?: (msg: string) => void) => Promise<void>;
   stopAthanGlobal: () => void;
   togglePlayAthanGlobal: (muezzinId?: string, overridePrayer?: PrayerName) => void;
@@ -56,6 +57,7 @@ export interface UseAthanPlayerReturn {
 
 export function useAthanPlayer(): UseAthanPlayerReturn {
   const globalAudioRef = useRef<HTMLAudioElement | null>(null);
+  const prevListenersRef = useRef<{ play?: () => void; pause?: () => void; ended?: () => void; timeupdate?: () => void } | null>(null);
 
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
@@ -63,7 +65,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [pendingAthanPrayer, setPendingAthanPrayer] = useState<PrayerName | null>(null);
-  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+  const [customMuezzins, setCustomMuezzins] = useState<AudioTrack[]>([]);
 
   const [audioVolume, setAudioVolumeState] = useState<number>(() => {
     const saved = localStorage.getItem('salah_audio_volume');
@@ -80,7 +82,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
   const setAudioVolume = useCallback((vol: number) => {
     setAudioVolumeState(vol);
-    localStorage.setItem('salah_audio_volume', vol.toString());
+    safeSetItem('salah_audio_volume', vol.toString());
     if (globalAudioRef.current) {
       globalAudioRef.current.volume = vol;
     }
@@ -88,12 +90,12 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
   const setCurrentMuezzin = useCallback((muezzin: string) => {
     setCurrentMuezzinState(muezzin);
-    localStorage.setItem('salah_general_muezzin', muezzin);
+    safeSetItem('salah_general_muezzin', muezzin);
   }, []);
 
   const setFajrMuezzin = useCallback((muezzin: string) => {
     setFajrMuezzinState(muezzin);
-    localStorage.setItem('salah_fajr_muezzin', muezzin);
+    safeSetItem('salah_fajr_muezzin', muezzin);
   }, []);
 
   // Global Audio Unlocker on first user gesture
@@ -159,6 +161,13 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   useEffect(() => {
     return () => {
       if (globalAudioRef.current) {
+        if (prevListenersRef.current) {
+          if (prevListenersRef.current.play) globalAudioRef.current.removeEventListener('play', prevListenersRef.current.play);
+          if (prevListenersRef.current.pause) globalAudioRef.current.removeEventListener('pause', prevListenersRef.current.pause);
+          if (prevListenersRef.current.ended) globalAudioRef.current.removeEventListener('ended', prevListenersRef.current.ended);
+          if (prevListenersRef.current.timeupdate) globalAudioRef.current.removeEventListener('timeupdate', prevListenersRef.current.timeupdate);
+          prevListenersRef.current = null;
+        }
         try {
           globalAudioRef.current.pause();
           globalAudioRef.current = null;
@@ -177,6 +186,16 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     vol: number
   ) => {
     let audio = globalAudioRef.current;
+
+    // Remove previous listeners if audio and listener references exist
+    if (audio && prevListenersRef.current) {
+      if (prevListenersRef.current.play) audio.removeEventListener('play', prevListenersRef.current.play);
+      if (prevListenersRef.current.pause) audio.removeEventListener('pause', prevListenersRef.current.pause);
+      if (prevListenersRef.current.ended) audio.removeEventListener('ended', prevListenersRef.current.ended);
+      if (prevListenersRef.current.timeupdate) audio.removeEventListener('timeupdate', prevListenersRef.current.timeupdate);
+      prevListenersRef.current = null;
+    }
+
     if (audio) {
       try {
         audio.pause();
@@ -193,26 +212,38 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
     const phraseTimings = computePhraseTimings(isFajr);
 
-    audio.addEventListener('play', () => {
+    const handlePlay = () => {
       setIsAthanPlaying(true);
       setAudioError(null);
-    });
+    };
 
-    audio.addEventListener('pause', () => {
+    const handlePause = () => {
       setIsAthanPlaying(false);
       setCurrentPhraseIdx(-1);
-    });
+    };
 
-    audio.addEventListener('ended', () => {
+    const handleEnded = () => {
       setIsAthanPlaying(false);
       setCurrentPhraseIdx(-1);
-    });
+    };
 
-    audio.addEventListener('timeupdate', () => {
+    const handleTimeUpdate = () => {
       const time = audio.currentTime;
       const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
       setCurrentPhraseIdx(activeIdx);
-    });
+    };
+
+    prevListenersRef.current = {
+      play: handlePlay,
+      pause: handlePause,
+      ended: handleEnded,
+      timeupdate: handleTimeUpdate,
+    };
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
 
     const onlineFallback = isFajr
       ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
@@ -237,10 +268,24 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       setPendingAthanPrayer(null);
       try {
         const todayStr = new Date().toISOString().slice(0, 10);
-        localStorage.setItem(`salah_played_${todayStr}_${prayer}`, 'true');
+        safeSetItem(`salah_played_${todayStr}_${prayer}`, 'true');
       } catch (e) {
         console.warn('Error setting salah_played in localStorage:', e);
       }
+
+      // تأكيد إن الصوت فعلاً بيشتغل (مش بس الـ Promise نجح)، خلال 3 ثواني
+      const stallCheckTimeout = setTimeout(() => {
+        if (audio.currentTime === 0 && !audio.paused) {
+          console.warn('[Audio Stall] لا تقدم فعلي بعد 3 ثواني — تحويل للملف المحلي');
+          audio.pause();
+          const localFallback = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+          if (srcUrl !== localFallback) {
+            playAudioTrack(localFallback, isFajr, prayer, vol);
+          }
+        }
+      }, 3000);
+
+      audio.addEventListener('timeupdate', () => clearTimeout(stallCheckTimeout), { once: true });
     }).catch((e: Error) => {
       if (srcUrl !== onlineFallback && e.name !== 'NotAllowedError') {
         console.warn(`[Audio Play Catch Fallback]: Attempting online fallback:`, e);
@@ -323,6 +368,10 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     setToastMessage?: (msg: string) => void
   ) => {
     setAudioError(null);
+    // Open full screen Athan overlay immediately
+    setAthanOverlayPrayer(prayer);
+    setShowAthanOverlay(true);
+
     // 1. Native Browser Notification
     if ('Notification' in window && Notification.permission === 'granted') {
       try {

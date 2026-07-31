@@ -182,7 +182,7 @@ export default function FeatureDiscoveryWidget({ onSelectTab, onOpenTour }: Feat
   });
 
   return (
-    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-4 sm:p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 shadow-sm transition-all duration-300 text-right">
+    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-4 sm:p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 shadow-sm transition-all duration-300 text-end">
       {/* Widget Header Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-3">
         <div className="flex items-center gap-2.5">
@@ -254,13 +254,13 @@ export default function FeatureDiscoveryWidget({ onSelectTab, onOpenTour }: Feat
 
             {/* Quick Search Input */}
             <div className="relative shrink-0 sm:w-48">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute end-3 top-2.5" />
               <input
                 type="text"
                 placeholder="ابحث عن ميزة..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl pr-8 pl-3 py-1.5 text-[11px] font-bold outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-xl pe-8 ps-3 py-1.5 text-[11px] font-bold outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>

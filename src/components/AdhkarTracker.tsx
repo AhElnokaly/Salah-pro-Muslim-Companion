@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import type { PrayerTimes } from '../types';
 import { 
   Sparkles, 
   ChevronLeft, 
@@ -30,17 +31,18 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ADHKAR_DATA, FREE_TASBEEH_PRESETS, DhikrCategory, DhikrItem } from '../utils/adhkarData';
+import { ADHKAR_DATA, FREE_TASBEEH_PRESETS, DhikrCategory, DhikrItem, isDhikrItemVisible, getDhikrItemRequiredCount } from '../utils/adhkarData';
 import { getSevenStationsProgress, SEVEN_STATIONS, PrayerKey, AdhkarStation } from '../utils/adhkarCalc';
 import { toArabicNumbers } from '../utils/hijri';
 import SmartAdhkarSuggestions from './SmartAdhkarSuggestions';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
+import { safeSetItem } from '../utils/storage';
 
 interface AdhkarTrackerProps {
   dhikrLogs: Record<string, Record<string, number>>;
   setDhikrLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, number>>>>;
   currentPrayer?: string;
-  prayerTimes?: any;
+  prayerTimes?: PrayerTimes;
   onNavigateTab?: (tab: string) => void;
   onOpenNotificationsModal?: () => void;
 }
@@ -69,7 +71,7 @@ const SevenSegmentProgressBar: React.FC<{
   }, [dayLogs, activePrayerKey]);
 
   return (
-    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/90 dark:border-slate-800/80 shadow-xs space-y-4 text-right transition-all">
+    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/90 dark:border-slate-800/80 shadow-xs space-y-4 text-end transition-all">
       {/* Top Header & Daily Completion Badge */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
@@ -221,7 +223,7 @@ export default function AdhkarTracker({
   });
 
   useEffect(() => {
-    localStorage.setItem('mc_custom_tasbeehs', JSON.stringify(customTasbeehs));
+    safeSetItem('mc_custom_tasbeehs', JSON.stringify(customTasbeehs));
   }, [customTasbeehs]);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -239,6 +241,9 @@ export default function AdhkarTracker({
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         const ctx = new AudioContextClass();
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
@@ -295,6 +300,26 @@ export default function AdhkarTracker({
   };
 
   /**
+   * Helper to filter visible items for a category based on selected prayer
+   */
+  const getCategoryVisibleItems = (cat: DhikrCategory, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
+    if (cat.id === 'after_prayer') {
+      return cat.items.filter(it => isDhikrItemVisible(it, prayerKey));
+    }
+    return cat.items;
+  };
+
+  /**
+   * Helper to get target count for an item in a category
+   */
+  const getItemTargetCount = (catId: string, item: DhikrItem, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
+    if (catId === 'after_prayer') {
+      return getDhikrItemRequiredCount(item, prayerKey);
+    }
+    return item.count;
+  };
+
+  /**
    * Helper to resolve item key depending on category
    */
   const getItemStorageKey = (catId: string, itemId: string, prayerKey: PrayerKey = selectedPrayerForPostAdhkar) => {
@@ -317,6 +342,7 @@ export default function AdhkarTracker({
    */
   const updateItemCount = (cat: DhikrCategory, item: DhikrItem, delta: number = 1, setExact?: number) => {
     const storageKey = getItemStorageKey(cat.id, item.id, selectedPrayerForPostAdhkar);
+    const visibleItems = getCategoryVisibleItems(cat, selectedPrayerForPostAdhkar);
 
     setDhikrLogs(prev => {
       const currentDay = prev[todayStr] || {};
@@ -332,10 +358,11 @@ export default function AdhkarTracker({
 
       // Recalculate completed count for category
       let completedCount = 0;
-      cat.items.forEach(it => {
+      visibleItems.forEach(it => {
         const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
         const countVal = updatedDay[k] !== undefined ? updatedDay[k] : 0;
-        if (countVal >= it.count) {
+        const target = getItemTargetCount(cat.id, it, selectedPrayerForPostAdhkar);
+        if (countVal >= target) {
           completedCount++;
         }
       });
@@ -343,7 +370,7 @@ export default function AdhkarTracker({
       const catSummaryKey = cat.id === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : cat.id;
       updatedDay[catSummaryKey] = completedCount;
 
-      if (completedCount === cat.items.length && cat.items.length > 0) {
+      if (completedCount === visibleItems.length && visibleItems.length > 0) {
         trackFeatureCompletion('adhkar');
       }
 
@@ -358,10 +385,12 @@ export default function AdhkarTracker({
   const handleIncrementCategoryItem = (item: DhikrItem) => {
     if (!selectedCategory) return;
     const currentCount = getItemCurrentCount(selectedCategory.id, item.id);
+    const targetCount = getItemTargetCount(selectedCategory.id, item, selectedPrayerForPostAdhkar);
+    const visibleItems = getCategoryVisibleItems(selectedCategory, selectedPrayerForPostAdhkar);
     
     handleSpawnTapParticles();
 
-    if (currentCount + 1 < item.count) {
+    if (currentCount + 1 < targetCount) {
       triggerFeedback('tap');
       updateItemCount(selectedCategory, item, 1);
     } else {
@@ -369,28 +398,30 @@ export default function AdhkarTracker({
       triggerFeedback('completed_dhikr');
       updateItemCount(selectedCategory, item, 1);
 
-      // Check if all items in category for this prayer are now done
+      // Check if all visible items in category for this prayer are now done
       let allDone = true;
-      selectedCategory.items.forEach(it => {
-        const countVal = it.id === item.id ? item.count : getItemCurrentCount(selectedCategory.id, it.id);
-        if (countVal < it.count) allDone = false;
+      visibleItems.forEach(it => {
+        const req = getItemTargetCount(selectedCategory.id, it, selectedPrayerForPostAdhkar);
+        const countVal = it.id === item.id ? req : getItemCurrentCount(selectedCategory.id, it.id);
+        if (countVal < req) allDone = false;
       });
 
       if (allDone) {
         triggerFeedback('completed_category');
         setShowCelebration(true);
-      } else if (currentDhikrIdx + 1 < selectedCategory.items.length) {
+      } else if (currentDhikrIdx + 1 < visibleItems.length) {
         // Automatically advance to next unfinished item
         let nextIdx = currentDhikrIdx + 1;
-        while (nextIdx < selectedCategory.items.length) {
-          const nextItem = selectedCategory.items[nextIdx];
+        while (nextIdx < visibleItems.length) {
+          const nextItem = visibleItems[nextIdx];
+          const req = getItemTargetCount(selectedCategory.id, nextItem, selectedPrayerForPostAdhkar);
           const c = getItemCurrentCount(selectedCategory.id, nextItem.id);
-          if (c < nextItem.count) {
+          if (c < req) {
             break;
           }
           nextIdx++;
         }
-        if (nextIdx < selectedCategory.items.length) {
+        if (nextIdx < visibleItems.length) {
           setCurrentDhikrIdx(nextIdx);
         }
       }
@@ -399,13 +430,17 @@ export default function AdhkarTracker({
 
   // Mark an item as completely done
   const handleMarkItemDone = (cat: DhikrCategory, item: DhikrItem) => {
+    const targetCount = getItemTargetCount(cat.id, item, selectedPrayerForPostAdhkar);
+    const visibleItems = getCategoryVisibleItems(cat, selectedPrayerForPostAdhkar);
+
     triggerFeedback('completed_dhikr');
-    updateItemCount(cat, item, 0, item.count);
+    updateItemCount(cat, item, 0, targetCount);
 
     let allDone = true;
-    cat.items.forEach(it => {
-      const c = it.id === item.id ? item.count : getItemCurrentCount(cat.id, it.id);
-      if (c < it.count) allDone = false;
+    visibleItems.forEach(it => {
+      const req = getItemTargetCount(cat.id, it, selectedPrayerForPostAdhkar);
+      const c = it.id === item.id ? req : getItemCurrentCount(cat.id, it.id);
+      if (c < req) allDone = false;
     });
 
     if (allDone) {
@@ -414,11 +449,35 @@ export default function AdhkarTracker({
     }
   };
 
-  // Reset category items for current selection/prayer
-  const handleResetCategory = (cat: DhikrCategory) => {
+  // Mark all items in category as done
+  const handleMarkAllCategoryItemsDone = (cat: DhikrCategory) => {
+    const visibleItems = getCategoryVisibleItems(cat, selectedPrayerForPostAdhkar);
+
     setDhikrLogs(prev => {
       const currentDay = { ...(prev[todayStr] || {}) };
-      cat.items.forEach(it => {
+      visibleItems.forEach(it => {
+        const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
+        const target = getItemTargetCount(cat.id, it, selectedPrayerForPostAdhkar);
+        currentDay[k] = target;
+      });
+      const catSummaryKey = cat.id === 'after_prayer' ? `after_prayer_${selectedPrayerForPostAdhkar}` : cat.id;
+      currentDay[catSummaryKey] = visibleItems.length;
+      return {
+        ...prev,
+        [todayStr]: currentDay
+      };
+    });
+
+    triggerFeedback('completed_category');
+    setShowCelebration(true);
+  };
+
+  // Reset category items for current selection/prayer
+  const handleResetCategory = (cat: DhikrCategory) => {
+    const visibleItems = getCategoryVisibleItems(cat, selectedPrayerForPostAdhkar);
+    setDhikrLogs(prev => {
+      const currentDay = { ...(prev[todayStr] || {}) };
+      visibleItems.forEach(it => {
         const k = getItemStorageKey(cat.id, it.id, selectedPrayerForPostAdhkar);
         delete currentDay[k];
       });
@@ -463,7 +522,7 @@ export default function AdhkarTracker({
   };
 
   return (
-    <div id="adhkar-tracker-root" className="space-y-6 text-right" dir="rtl">
+    <div id="adhkar-tracker-root" className="space-y-6 text-end" dir="rtl">
       
       {/* Header Navigation Tabs */}
       {!selectedCategory && (
@@ -476,7 +535,7 @@ export default function AdhkarTracker({
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
-            محطات الأذكار السبع
+            🏰 حصن المسلم (الأذكار اليومية)
           </button>
           <button
             onClick={() => setActiveTab('smart_suggestions')}
@@ -525,7 +584,7 @@ export default function AdhkarTracker({
                   {activePrayerKey === 'fajr' && 'قد حان وقت أذكار صلاة الفجر المكتوبة وأذكار الصباح 🌅'}
                   {activePrayerKey === 'dhuhr' && 'قد حان وقت أذكار صلاة الظهر المكتوبة ☀️'}
                   {activePrayerKey === 'asr' && 'قد حان وقت أذكار صلاة العصر وأذكار المساء 🌆'}
-                  {activePrayerKey === 'maghrib' && 'قد حان وقت أذكار صلاة المغرب المكتوبة <ctrl42>'}
+                  {activePrayerKey === 'maghrib' && 'قد حان وقت أذكار صلاة المغرب المكتوبة 🌅'}
                   {activePrayerKey === 'isha' && 'قد حان وقت أذكار صلاة العشاء المكتوبة 🌌'}
                 </h4>
               </div>
@@ -545,13 +604,13 @@ export default function AdhkarTracker({
 
           {/* Header Bar */}
           <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 flex items-center justify-between transition-colors duration-300 shadow-xs">
-            <div className="space-y-1 text-right">
-              <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                <span>أقسام الأوراد والأذكار المكتوبة</span>
+            <div className="space-y-1 text-end">
+              <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span>قسم «حصن المسلم» — أذكار اليوم والليلة</span>
               </h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                اختر الفئة المطلوبة أو تصفح بطاقات الأذكار مع توضيح الفضل والتكرار.
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                قائمة بالأذكار اليومية الأساسية (الصباح، المساء، بعد الصلاة المكتوبة، والنوم) مع إمكانية تعليم الأذكار التي تم قراءتها.
               </p>
             </div>
             <button
@@ -570,19 +629,21 @@ export default function AdhkarTracker({
           {/* Categories Grid */}
           <div className="grid grid-cols-1 gap-4">
             {ADHKAR_DATA.map((cat) => {
-              // Calculate completed count
+              // Calculate completed count for visible items in this category
+              const visibleItems = getCategoryVisibleItems(cat, activePrayerKey);
               let completedItems = 0;
-              cat.items.forEach(it => {
+              visibleItems.forEach(it => {
                 const countVal = getItemCurrentCount(cat.id, it.id, activePrayerKey);
-                if (countVal >= it.count) completedItems++;
+                const target = getItemTargetCount(cat.id, it, activePrayerKey);
+                if (countVal >= target) completedItems++;
               });
 
-              const percent = Math.round((completedItems / cat.items.length) * 100);
+              const percent = visibleItems.length > 0 ? Math.round((completedItems / visibleItems.length) * 100) : 0;
 
               return (
                 <div
                   key={cat.id}
-                  className="p-5 bg-white dark:bg-[#161d26] rounded-3xl border border-[#e2e8f0] dark:border-slate-800/80 text-right flex flex-col gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs"
+                  className="p-5 bg-white dark:bg-[#161d26] rounded-3xl border border-[#e2e8f0] dark:border-slate-800/80 text-end flex flex-col gap-4 hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs"
                 >
                   {/* Category Header */}
                   <div className="flex items-start gap-4">
@@ -606,7 +667,7 @@ export default function AdhkarTracker({
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40' 
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                         }`}>
-                          {toArabicNumbers(completedItems)} / {toArabicNumbers(cat.items.length)} ذكر ({toArabicNumbers(percent)}%)
+                          {toArabicNumbers(completedItems)} / {toArabicNumbers(visibleItems.length)} ذكر ({toArabicNumbers(percent)}%)
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{cat.description}</p>
@@ -669,10 +730,20 @@ export default function AdhkarTracker({
             </button>
 
             <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-slate-800 dark:text-white text-base">{selectedCategory.arabicName}</h3>
+              <h3 className="font-extrabold text-slate-800 dark:text-white text-base">🏰 حصن المسلم: {selectedCategory.arabicName}</h3>
             </div>
             
             <div className="flex items-center gap-1.5">
+              {/* Mark All as Read button */}
+              <button
+                onClick={() => handleMarkAllCategoryItemsDone(selectedCategory)}
+                className="py-2 px-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-xl transition-colors cursor-pointer text-xs font-black flex items-center gap-1 border border-emerald-200 dark:border-emerald-900/40"
+                title="تعليم كافة أذكار هذا القسم كـ مقروءة"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="hidden sm:inline">تعليم الكل كـ مقروء</span>
+              </button>
+
               {/* View mode toggle */}
               <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button
@@ -727,11 +798,13 @@ export default function AdhkarTracker({
                   const isSelected = selectedPrayerForPostAdhkar === p.key;
                   const isCurrentActive = activePrayerKey === p.key;
                   
-                  // Calculate prayer completion
-                  let prayerDone = true;
-                  selectedCategory.items.forEach(it => {
+                  // Calculate prayer completion for visible items
+                  const prayerVisibleItems = getCategoryVisibleItems(selectedCategory, p.key);
+                  let prayerDone = prayerVisibleItems.length > 0;
+                  prayerVisibleItems.forEach(it => {
                     const c = getItemCurrentCount('after_prayer', it.id, p.key);
-                    if (c < it.count) prayerDone = false;
+                    const req = getItemTargetCount('after_prayer', it, p.key);
+                    if (c < req) prayerDone = false;
                   });
 
                   return (
@@ -766,224 +839,232 @@ export default function AdhkarTracker({
           {!showCelebration ? (
             <>
               {/* MODE 1: Interactive Step-by-Step Cards */}
-              {viewMode === 'cards' && (
-                <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 space-y-6 flex flex-col items-center transition-colors overflow-hidden">
-                  
-                  {/* Current Item Card */}
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={currentDhikrIdx}
-                      initial={{ opacity: 0, x: 50, scale: 0.98 }}
-                      animate={{ opacity: 1, x: 0, scale: 1 }}
-                      exit={{ opacity: 0, x: -50, scale: 0.98 }}
-                      transition={{ type: "spring", stiffness: 350, damping: 28 }}
-                      className="w-full space-y-6 flex flex-col items-center"
-                    >
-                      <div className="w-full relative bg-slate-50/70 dark:bg-[#111720]/90 rounded-3xl p-6 md:p-8 border border-slate-200/60 dark:border-slate-800/80 overflow-hidden shadow-inner flex flex-col items-center text-right">
-                        
-                        {/* Title & Timing Notes */}
-                        <div className="w-full flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-3 mb-4">
-                          <span className="text-xs font-black text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/30">
-                            {selectedCategory.items[currentDhikrIdx].title || `الذكر ${toArabicNumbers(currentDhikrIdx + 1)}`}
-                          </span>
+              {viewMode === 'cards' && (() => {
+                const visibleCategoryItems = getCategoryVisibleItems(selectedCategory, selectedPrayerForPostAdhkar);
+                const safeDhikrIdx = Math.min(currentDhikrIdx, visibleCategoryItems.length - 1);
+                const currentItem = visibleCategoryItems[safeDhikrIdx] || visibleCategoryItems[0];
+                if (!currentItem) return null;
 
-                          <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                            {toArabicNumbers(currentDhikrIdx + 1)} من {toArabicNumbers(selectedCategory.items.length)}
-                          </span>
-                        </div>
+                const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
+                const targetCount = getItemTargetCount(selectedCategory.id, currentItem, selectedPrayerForPostAdhkar);
+                const isCompleted = currentCount >= targetCount;
 
-                        {/* Special Timing Note Badge */}
-                        {(selectedCategory.items[currentDhikrIdx].timingNote || selectedCategory.items[currentDhikrIdx].description) && (
-                          <div className="w-full text-right mb-3">
-                            <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-1 rounded-lg border border-amber-100 dark:border-amber-900/30 inline-block">
-                              {selectedCategory.items[currentDhikrIdx].timingNote || selectedCategory.items[currentDhikrIdx].description}
+                return (
+                  <div className="bg-white dark:bg-[#161d26] rounded-3xl p-6 border border-[#e2e8f0] dark:border-slate-800/80 space-y-6 flex flex-col items-center transition-colors overflow-hidden">
+                    
+                    {/* Current Item Card */}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={safeDhikrIdx}
+                        initial={{ opacity: 0, x: 50, scale: 0.98 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -50, scale: 0.98 }}
+                        transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                        className="w-full space-y-6 flex flex-col items-center"
+                      >
+                        <div className="w-full relative bg-slate-50/70 dark:bg-[#111720]/90 rounded-3xl p-6 md:p-8 border border-slate-200/60 dark:border-slate-800/80 overflow-hidden shadow-inner flex flex-col items-center text-end">
+                          
+                          {/* Title & Timing Notes */}
+                          <div className="w-full flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-3 mb-4">
+                            <span className="text-xs font-black text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/30">
+                              {currentItem.title || `الذكر ${toArabicNumbers(safeDhikrIdx + 1)}`}
+                            </span>
+
+                            <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
+                              {toArabicNumbers(safeDhikrIdx + 1)} من {toArabicNumbers(visibleCategoryItems.length)}
                             </span>
                           </div>
-                        )}
 
-                        {/* Full Arabic Text */}
-                        <p className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 leading-relaxed text-center py-4 select-text max-w-xl w-full">
-                          {selectedCategory.items[currentDhikrIdx].text}
-                        </p>
-
-                        {/* Virtue / Reward Box */}
-                        {selectedCategory.items[currentDhikrIdx].reward && (
-                          <div className="mt-3 p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-xs text-emerald-800 dark:text-emerald-300 text-right w-full leading-relaxed flex items-start gap-2.5">
-                            <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-black block mb-0.5">الفضل والبركة:</span>
-                              <span>{selectedCategory.items[currentDhikrIdx].reward}</span>
+                          {/* Special Timing Note Badge */}
+                          {(currentItem.timingNote || currentItem.description) && (
+                            <div className="w-full text-end mb-3">
+                              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-1 rounded-lg border border-amber-100 dark:border-amber-900/30 inline-block">
+                                {currentItem.timingNote || currentItem.description}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  </AnimatePresence>
+                          )}
 
-                  {/* Interactive Counter Tap Button */}
-                  {(() => {
-                    const currentItem = selectedCategory.items[currentDhikrIdx];
-                    const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
-                    const isCompleted = currentCount >= currentItem.count;
+                          {/* Full Arabic Text */}
+                          <p className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 leading-relaxed text-center py-4 select-text max-w-xl w-full">
+                            {currentItem.text}
+                          </p>
 
-                    return (
-                      <div className="relative flex flex-col items-center gap-4 pt-2">
-                        {/* Particles overlay */}
-                        <div className="absolute pointer-events-none inset-0 flex items-center justify-center overflow-visible z-30">
-                          <AnimatePresence>
-                            {particles.map(p => (
-                              <motion.span
-                                key={p.id}
-                                initial={{ opacity: 0, scale: 0.5, y: 0, x: p.x }}
-                                animate={{ opacity: 1, scale: 1.25, y: p.y }}
-                                exit={{ opacity: 0, scale: 0.8, y: p.y - 15 }}
-                                transition={{ duration: 0.8, ease: "easeOut" }}
-                                className="absolute text-xs font-black px-2.5 py-1 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-md select-none pointer-events-none whitespace-nowrap"
-                              >
-                                {p.text}
-                              </motion.span>
-                            ))}
-                          </AnimatePresence>
+                          {/* Virtue / Reward Box */}
+                          {currentItem.reward && (
+                            <div className="mt-3 p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 text-xs text-emerald-800 dark:text-emerald-300 text-end w-full leading-relaxed flex items-start gap-2.5">
+                              <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-black block mb-0.5">الفضل والبركة:</span>
+                                <span>{currentItem.reward}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      </motion.div>
+                    </AnimatePresence>
 
-                        {/* Tap Button */}
-                        <button
-                          onClick={() => handleIncrementCategoryItem(currentItem)}
-                          className={`w-44 h-44 rounded-full text-white flex flex-col items-center justify-center shadow-xl transition-all cursor-pointer border-4 border-white dark:border-slate-800 relative overflow-hidden group select-none active:scale-95 ${
-                            isCompleted 
-                              ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-200/50 dark:shadow-none' 
-                              : 'bg-gradient-to-tr from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 shadow-indigo-200/50 dark:shadow-none'
-                          }`}
-                        >
-                          <div className="text-4xl font-black tracking-tight z-10 flex flex-col items-center">
-                            <span>{toArabicNumbers(currentCount)}</span>
-                            <span className="text-xs font-extrabold text-indigo-100 border-t border-white/20 mt-1.5 pt-1 w-16 text-center">
-                              من {toArabicNumbers(currentItem.count)}
-                            </span>
-                          </div>
-
-                          <span className="text-[11px] font-extrabold mt-2 tracking-wide z-10 bg-black/20 px-3 py-0.5 rounded-full">
-                            {isCompleted ? 'تم الذكر بنجاح ✓' : 'انقر للتسجيل 📿'}
-                          </span>
-                        </button>
-
-                        {/* Quick Navigation & Mark Done Controls */}
-                        <div className="flex items-center gap-3 w-full justify-between pt-2">
-                          <button
-                            onClick={() => setCurrentDhikrIdx(prev => Math.max(0, prev - 1))}
-                            disabled={currentDhikrIdx === 0}
-                            className="py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                            <span>السابق</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleMarkItemDone(selectedCategory, currentItem)}
-                            className="py-2 px-3 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1 border border-emerald-200 dark:border-emerald-900/40"
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>تسجيل كـ مكتمل</span>
-                          </button>
-
-                          <button
-                            onClick={() => setCurrentDhikrIdx(prev => Math.min(selectedCategory.items.length - 1, prev + 1))}
-                            disabled={currentDhikrIdx === selectedCategory.items.length - 1}
-                            className="py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                          >
-                            <span>التالي</span>
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-                        </div>
+                    {/* Interactive Counter Tap Button */}
+                    <div className="relative flex flex-col items-center gap-4 pt-2">
+                      {/* Particles overlay */}
+                      <div className="absolute pointer-events-none inset-0 flex items-center justify-center overflow-visible z-30">
+                        <AnimatePresence>
+                          {particles.map(p => (
+                            <motion.span
+                              key={p.id}
+                              initial={{ opacity: 0, scale: 0.5, y: 0, x: p.x }}
+                              animate={{ opacity: 1, scale: 1.25, y: p.y }}
+                              exit={{ opacity: 0, scale: 0.8, y: p.y - 15 }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                              className="absolute text-xs font-black px-2.5 py-1 bg-indigo-600 dark:bg-indigo-700 text-white rounded-full shadow-md select-none pointer-events-none whitespace-nowrap"
+                            >
+                              {p.text}
+                            </motion.span>
+                          ))}
+                        </AnimatePresence>
                       </div>
-                    );
-                  })()}
 
-                </div>
-              )}
-
-              {/* MODE 2: Full List Mode */}
-              {viewMode === 'list' && (
-                <div className="space-y-4">
-                  {selectedCategory.items.map((item, idx) => {
-                    const currentCount = getItemCurrentCount(selectedCategory.id, item.id);
-                    const isCompleted = currentCount >= item.count;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-5 rounded-3xl border transition-all space-y-3 text-right ${
-                          isCompleted
-                            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40'
-                            : 'bg-white dark:bg-[#161d26] border-slate-200/80 dark:border-slate-800/80'
+                      {/* Tap Button */}
+                      <button
+                        onClick={() => handleIncrementCategoryItem(currentItem)}
+                        className={`w-44 h-44 rounded-full text-white flex flex-col items-center justify-center shadow-xl transition-all cursor-pointer border-4 border-white dark:border-slate-800 relative overflow-hidden group select-none active:scale-95 ${
+                          isCompleted 
+                            ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-200/50 dark:shadow-none' 
+                            : 'bg-gradient-to-tr from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 shadow-indigo-200/50 dark:shadow-none'
                         }`}
                       >
-                        {/* Title bar */}
-                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/60 pb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
-                              {toArabicNumbers(idx + 1)}
-                            </span>
-                            <span className="font-extrabold text-sm text-slate-800 dark:text-white">
-                              {item.title || `الذكر ${toArabicNumbers(idx + 1)}`}
-                            </span>
-                          </div>
-
-                          <span className={`text-xs font-black px-3 py-1 rounded-full ${
-                            isCompleted
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                          }`}>
-                            {toArabicNumbers(currentCount)} / {toArabicNumbers(item.count)}
+                        <div className="text-4xl font-black tracking-tight z-10 flex flex-col items-center">
+                          <span>{toArabicNumbers(currentCount)}</span>
+                          <span className="text-xs font-extrabold text-indigo-100 border-t border-white/20 mt-1.5 pt-1 w-16 text-center">
+                            من {toArabicNumbers(targetCount)}
                           </span>
                         </div>
 
-                        {/* Timing note */}
-                        {(item.timingNote || item.description) && (
-                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-0.5 rounded-md inline-block">
-                            {item.timingNote || item.description}
-                          </span>
-                        )}
+                        <span className="text-[11px] font-extrabold mt-2 tracking-wide z-10 bg-black/20 px-3 py-0.5 rounded-full">
+                          {isCompleted ? 'تم الذكر بنجاح ✓' : 'انقر للتسجيل 📿'}
+                        </span>
+                      </button>
 
-                        {/* Arabic text */}
-                        <p className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed py-1">
-                          {item.text}
-                        </p>
+                      {/* Quick Navigation & Mark Done Controls */}
+                      <div className="flex items-center gap-3 w-full justify-between pt-2">
+                        <button
+                          onClick={() => setCurrentDhikrIdx(prev => Math.max(0, prev - 1))}
+                          disabled={safeDhikrIdx === 0}
+                          className="py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                          <span>السابق</span>
+                        </button>
 
-                        {/* Virtue */}
-                        {item.reward && (
-                          <div className="p-3 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-xl text-xs text-indigo-700 dark:text-indigo-300 flex items-start gap-2">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                            <span><strong>الفضل:</strong> {item.reward}</span>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => handleMarkItemDone(selectedCategory, currentItem)}
+                          className="py-2 px-3 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-400 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1 border border-emerald-200 dark:border-emerald-900/40"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>تسجيل كـ مكتمل</span>
+                        </button>
 
-                        {/* Action buttons */}
-                        <div className="flex items-center justify-between pt-2">
-                          <button
-                            onClick={() => handleIncrementCategoryItem(item)}
-                            className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5"
-                          >
-                            <span>تسبيح (+1)</span>
-                          </button>
+                        <button
+                          onClick={() => setCurrentDhikrIdx(prev => Math.min(visibleCategoryItems.length - 1, prev + 1))}
+                          disabled={safeDhikrIdx === visibleCategoryItems.length - 1}
+                          className="py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <span>التالي</span>
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
 
-                          <button
-                            onClick={() => handleMarkItemDone(selectedCategory, item)}
-                            className={`py-2 px-4 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  </div>
+                );
+              })()}
+
+              {/* MODE 2: Full List Mode */}
+              {viewMode === 'list' && (() => {
+                const visibleCategoryItems = getCategoryVisibleItems(selectedCategory, selectedPrayerForPostAdhkar);
+
+                return (
+                  <div className="space-y-4">
+                    {visibleCategoryItems.map((item, idx) => {
+                      const currentCount = getItemCurrentCount(selectedCategory.id, item.id);
+                      const targetCount = getItemTargetCount(selectedCategory.id, item, selectedPrayerForPostAdhkar);
+                      const isCompleted = currentCount >= targetCount;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-5 rounded-3xl border transition-all space-y-3 text-end ${
+                            isCompleted
+                              ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40'
+                              : 'bg-white dark:bg-[#161d26] border-slate-200/80 dark:border-slate-800/80'
+                          }`}
+                        >
+                          {/* Title bar */}
+                          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/60 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                {toArabicNumbers(idx + 1)}
+                              </span>
+                              <span className="font-extrabold text-sm text-slate-800 dark:text-white">
+                                {item.title || `الذكر ${toArabicNumbers(idx + 1)}`}
+                              </span>
+                            </div>
+
+                            <span className={`text-xs font-black px-3 py-1 rounded-full ${
                               isCompleted
                                 ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                            }`}
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>{isCompleted ? 'مكتمل ✓' : 'تسجيل كـ مكتمل'}</span>
-                          </button>
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}>
+                              {toArabicNumbers(currentCount)} / {toArabicNumbers(targetCount)}
+                            </span>
+                          </div>
+
+                          {/* Timing note */}
+                          {(item.timingNote || item.description) && (
+                            <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-0.5 rounded-md inline-block">
+                              {item.timingNote || item.description}
+                            </span>
+                          )}
+
+                          {/* Arabic text */}
+                          <p className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed py-1">
+                            {item.text}
+                          </p>
+
+                          {/* Virtue */}
+                          {item.reward && (
+                            <div className="p-3 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-xl text-xs text-indigo-700 dark:text-indigo-300 flex items-start gap-2">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                              <span><strong>الفضل:</strong> {item.reward}</span>
+                            </div>
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex items-center justify-between pt-2">
+                            <button
+                              onClick={() => handleIncrementCategoryItem(item)}
+                              className="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <span>تسبيح (+1)</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleMarkItemDone(selectedCategory, item)}
+                              className={`py-2 px-4 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                                isCompleted
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                              }`}
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>{isCompleted ? 'مقروء ومكتمل ✓' : 'تعليم كـ مقروء'}</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <motion.div
@@ -1078,7 +1159,7 @@ export default function AdhkarTracker({
 
             {/* Presets vs Custom input */}
             {!isCustomTasbeeh ? (
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto no-scrollbar pr-1">
+              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto no-scrollbar pe-1">
                 {FREE_TASBEEH_PRESETS.map((preset, i) => (
                   <button
                     key={preset.text}
@@ -1086,7 +1167,7 @@ export default function AdhkarTracker({
                       setTasbeehPresetIdx(i);
                       setTasbeehCount(0);
                     }}
-                    className={`p-2.5 rounded-xl border text-xs font-semibold text-right transition-all cursor-pointer ${
+                    className={`p-2.5 rounded-xl border text-xs font-semibold text-end transition-all cursor-pointer ${
                       tasbeehPresetIdx === i 
                         ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 font-extrabold' 
                         : 'border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -1200,84 +1281,87 @@ export default function AdhkarTracker({
       )}
 
       {/* Fullscreen Focus Mode Modal */}
-      {isFocusMode && selectedCategory && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-6 text-white text-right" dir="rtl">
-          {/* Header */}
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <button
-              onClick={() => setIsFocusMode(false)}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-2xl cursor-pointer text-white transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <div className="text-center">
-              <h3 className="font-black text-lg text-amber-300">{selectedCategory.arabicName}</h3>
-              <p className="text-xs text-slate-300">وضع التركيز بملء الشاشة</p>
+      {isFocusMode && selectedCategory && (() => {
+        const visibleCategoryItems = getCategoryVisibleItems(selectedCategory, selectedPrayerForPostAdhkar);
+        const safeDhikrIdx = Math.min(currentDhikrIdx, visibleCategoryItems.length - 1);
+        const currentItem = visibleCategoryItems[safeDhikrIdx] || visibleCategoryItems[0];
+        if (!currentItem) return null;
+
+        const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
+        const targetCount = getItemTargetCount(selectedCategory.id, currentItem, selectedPrayerForPostAdhkar);
+        const isCompleted = currentCount >= targetCount;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-6 text-white text-end" dir="rtl">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <button
+                onClick={() => setIsFocusMode(false)}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-2xl cursor-pointer text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <div className="text-center">
+                <h3 className="font-black text-lg text-amber-300">🏰 حصن المسلم: {selectedCategory.arabicName}</h3>
+                <p className="text-xs text-slate-300">وضع التركيز بملء الشاشة</p>
+              </div>
+              <span className="text-xs font-bold text-slate-300 bg-white/10 px-3 py-1 rounded-full">
+                {toArabicNumbers(safeDhikrIdx + 1)} / {toArabicNumbers(visibleCategoryItems.length)}
+              </span>
             </div>
-            <span className="text-xs font-bold text-slate-300 bg-white/10 px-3 py-1 rounded-full">
-              {toArabicNumbers(currentDhikrIdx + 1)} / {toArabicNumbers(selectedCategory.items.length)}
-            </span>
-          </div>
 
-          {/* Body content */}
-          <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-2xl mx-auto space-y-6">
-            <p className="text-2xl md:text-3xl font-black text-center leading-relaxed select-text">
-              {selectedCategory.items[currentDhikrIdx].text}
-            </p>
-
-            {selectedCategory.items[currentDhikrIdx].reward && (
-              <p className="text-xs text-emerald-300 bg-emerald-950/40 p-3 rounded-2xl border border-emerald-800/40 text-center max-w-md">
-                ✨ {selectedCategory.items[currentDhikrIdx].reward}
+            {/* Body content */}
+            <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-2xl mx-auto space-y-6">
+              <p className="text-2xl md:text-3xl font-black text-center leading-relaxed select-text">
+                {currentItem.text}
               </p>
-            )}
 
-            {/* Huge Tap Button */}
-            {(() => {
-              const currentItem = selectedCategory.items[currentDhikrIdx];
-              const currentCount = getItemCurrentCount(selectedCategory.id, currentItem.id);
-              const isCompleted = currentCount >= currentItem.count;
+              {currentItem.reward && (
+                <p className="text-xs text-emerald-300 bg-emerald-950/40 p-3 rounded-2xl border border-emerald-800/40 text-center max-w-md">
+                  ✨ {currentItem.reward}
+                </p>
+              )}
 
-              return (
-                <button
-                  onClick={() => handleIncrementCategoryItem(currentItem)}
-                  className={`w-48 h-48 rounded-full text-white flex flex-col items-center justify-center shadow-2xl transition-all cursor-pointer border-4 border-white/20 active:scale-95 ${
-                    isCompleted ? 'bg-emerald-600' : 'bg-indigo-600'
-                  }`}
-                >
-                  <span className="text-5xl font-black">{toArabicNumbers(currentCount)}</span>
-                  <span className="text-xs font-extrabold mt-1 text-indigo-100">
-                    من {toArabicNumbers(currentItem.count)}
-                  </span>
-                  <span className="text-[11px] font-extrabold mt-2 bg-black/30 px-3 py-0.5 rounded-full">
-                    {isCompleted ? 'مكتمل ✓' : 'انقر للتسجيل'}
-                  </span>
-                </button>
-              );
-            })()}
+              {/* Huge Tap Button */}
+              <button
+                onClick={() => handleIncrementCategoryItem(currentItem)}
+                className={`w-48 h-48 rounded-full text-white flex flex-col items-center justify-center shadow-2xl transition-all cursor-pointer border-4 border-white/20 active:scale-95 ${
+                  isCompleted ? 'bg-emerald-600' : 'bg-indigo-600'
+                }`}
+              >
+                <span className="text-5xl font-black">{toArabicNumbers(currentCount)}</span>
+                <span className="text-xs font-extrabold mt-1 text-indigo-100">
+                  من {toArabicNumbers(targetCount)}
+                </span>
+                <span className="text-[11px] font-extrabold mt-2 bg-black/30 px-3 py-0.5 rounded-full">
+                  {isCompleted ? 'مكتمل ✓' : 'انقر للتسجيل'}
+                </span>
+              </button>
+            </div>
+
+            {/* Footer Controls */}
+            <div className="flex justify-between items-center border-t border-white/10 pt-4 max-w-2xl mx-auto w-full">
+              <button
+                onClick={() => setCurrentDhikrIdx(prev => Math.max(0, prev - 1))}
+                disabled={safeDhikrIdx === 0}
+                className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
+              >
+                <ChevronRight className="w-4 h-4" />
+                <span>السابق</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentDhikrIdx(prev => Math.min(visibleCategoryItems.length - 1, prev + 1))}
+                disabled={safeDhikrIdx === visibleCategoryItems.length - 1}
+                className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
+              >
+                <span>التالي</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-
-          {/* Footer Controls */}
-          <div className="flex justify-between items-center border-t border-white/10 pt-4 max-w-2xl mx-auto w-full">
-            <button
-              onClick={() => setCurrentDhikrIdx(prev => Math.max(0, prev - 1))}
-              disabled={currentDhikrIdx === 0}
-              className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
-            >
-              <ChevronRight className="w-4 h-4" />
-              <span>السابق</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentDhikrIdx(prev => Math.min(selectedCategory.items.length - 1, prev + 1))}
-              disabled={currentDhikrIdx === selectedCategory.items.length - 1}
-              className="py-2.5 px-4 bg-white/10 hover:bg-white/20 disabled:opacity-30 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-1"
-            >
-              <span>التالي</span>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

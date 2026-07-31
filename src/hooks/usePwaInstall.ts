@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
+export interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
 export interface UsePwaInstallReturn {
-  deferredPrompt: any;
+  deferredPrompt: BeforeInstallPromptEvent | null;
   isInstalled: boolean;
   showPwaInstallGuide: boolean;
   setShowPwaInstallGuide: (show: boolean) => void;
@@ -12,7 +17,7 @@ export interface UsePwaInstallReturn {
 }
 
 export function usePwaInstall(): UsePwaInstallReturn {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [showPwaInstallGuide, setShowPwaInstallGuide] = useState<boolean>(false);
   const [showManualSteps, setShowManualSteps] = useState<boolean>(false);

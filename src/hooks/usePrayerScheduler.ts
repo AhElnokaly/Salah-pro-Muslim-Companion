@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Dispatch, SetStateAction, MutableRefO
 import { PrayerName, AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
+import { safeSetItem } from '../utils/storage';
 
 export const getLocalDateStr = (d: Date): string => {
   const year = d.getFullYear();
@@ -103,11 +104,11 @@ export function usePrayerScheduler({
   const [activeRingingAlarm, setActiveRingingAlarm] = useState<AlarmConfig | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('salah_custom_alarms', JSON.stringify(customAlarms));
+    safeSetItem('salah_custom_alarms', JSON.stringify(customAlarms));
   }, [customAlarms]);
 
   useEffect(() => {
-    localStorage.setItem('salah_alerts', JSON.stringify(alerts));
+    safeSetItem('salah_alerts', JSON.stringify(alerts));
   }, [alerts]);
 
   const triggerCustomAlarm = useCallback((alarm: AlarmConfig) => {
@@ -208,24 +209,8 @@ export function usePrayerScheduler({
           const attemptedKey = `salah_attempted_${todayStr}_${prayer}`;
           if (!localStorage.getItem(playedKey) && !sessionStorage.getItem(attemptedKey)) {
             sessionStorage.setItem(attemptedKey, 'true');
-            if (autoPlayAthanEnabled) {
-              triggerAthan(prayer, currentTimes[prayer], settings, setToastMessage);
-            } else {
-              if ('Notification' in window && Notification.permission === 'granted') {
-                try {
-                  new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)} 🕌`, {
-                    body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
-                    icon: '/favicon.ico',
-                    dir: 'rtl'
-                  });
-                } catch (e) {
-                  console.error(e);
-                }
-              }
-              if (setToastMessage) {
-                setToastMessage(`🕌 حان الآن موعد صلاة ${getArabicPrayerName(prayer)} حسب توقيت ${settings.cityName || 'القاهرة'}`);
-              }
-            }
+            // Always trigger athan, which opens the full AthanOverlay screen and plays sound
+            triggerAthan(prayer, currentTimes[prayer], settings, setToastMessage);
             break;
           }
         }
@@ -248,7 +233,7 @@ export function usePrayerScheduler({
         if (isMatch) {
           const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
           if (!localStorage.getItem(triggeredKey)) {
-            localStorage.setItem(triggeredKey, 'true');
+            safeSetItem(triggeredKey, 'true');
             triggerCustomAlarm(alarm);
           }
         }
@@ -274,7 +259,7 @@ export function usePrayerScheduler({
           if (isMatch) {
             const triggeredKey = `alert_before_${prayer}_${todayStr}`;
             if (!localStorage.getItem(triggeredKey)) {
-              localStorage.setItem(triggeredKey, 'true');
+              safeSetItem(triggeredKey, 'true');
               triggerSpiritualAlert(
                 `الاستعداد لصلاة ${getArabicPrayerName(prayer)}`, 
                 `حان موعد الاستعداد لصلاة ${getArabicPrayerName(prayer)} خلال ${alerts.before.minutes} دقائق.`
@@ -303,7 +288,7 @@ export function usePrayerScheduler({
           if (isMatch) {
             const triggeredKey = `alert_after_${prayer}_${todayStr}`;
             if (!localStorage.getItem(triggeredKey)) {
-              localStorage.setItem(triggeredKey, 'true');
+              safeSetItem(triggeredKey, 'true');
               triggerSpiritualAlert(
                 `أذكار صلاة ${getArabicPrayerName(prayer)}`, 
                 `تذكير مبارك بقراءة الأذكار والسنن البعدية لصلاة ${getArabicPrayerName(prayer)}.`
@@ -331,7 +316,7 @@ export function usePrayerScheduler({
         if (isMatch) {
           const triggeredKey = `alert_duha_${todayStr}`;
           if (!localStorage.getItem(triggeredKey)) {
-            localStorage.setItem(triggeredKey, 'true');
+            safeSetItem(triggeredKey, 'true');
             triggerSpiritualAlert("صلاة الضحى (صلاة الأوابين) ☀️", `صلاة الضحى تجزئ عن صدقة كل سلامى من جسدك. حان الآن موعدها المبارك.`);
           }
         }

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles, RotateCcw } from 'lucide-react';
-import companionIcon from '../assets/images/muslim_companion_icon_1784362373898.jpg';
+import companionIcon from '../assets/images/app_icon_refaiq_1785232801939.jpg';
 
 export const SPIRITUAL_CAPSULES = [
   {
@@ -145,7 +145,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 350 }}
-          className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-right flex flex-col items-center gap-5 text-white overflow-hidden"
+          className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-end flex flex-col items-center gap-5 text-white overflow-hidden"
         >
           {/* Background Glow */}
           <div className="absolute top-0 inset-x-0 h-40 bg-radial-[at_top] from-emerald-500/20 via-transparent to-transparent pointer-events-none" />
@@ -266,7 +266,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
 
           {/* 2. Daily Spiritual Capsule (النفحة الإيمانية) */}
           <div className="w-full bg-emerald-500/[0.03] border border-emerald-500/15 rounded-3xl p-4 relative text-center z-10">
-            <span className="text-emerald-500/20 text-4xl font-serif absolute top-1 right-3 leading-none">“</span>
+            <span className="text-emerald-500/20 text-4xl font-serif absolute top-1 end-3 leading-none">“</span>
             <span className="text-[10px] font-black text-emerald-400/80 block mb-2">{SPIRITUAL_CAPSULES[currentCapsuleIndex].category}</span>
             <p className="text-xs font-black text-emerald-100/90 leading-relaxed px-2 py-1 select-text">
               {SPIRITUAL_CAPSULES[currentCapsuleIndex].text}
