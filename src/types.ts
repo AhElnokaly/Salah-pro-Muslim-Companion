@@ -76,6 +76,27 @@ export interface CustomDua {
   order: number;
 }
 
+export type BackdropType = 
+  | 'gold' 
+  | 'classic' 
+  | 'banner' 
+  | 'emerald' 
+  | 'night_sky' 
+  | 'kaaba' 
+  | 'andulas' 
+  | 'minimal' 
+  | 'ramadan' 
+  | 'eid_fitr' 
+  | 'eid_adha' 
+  | 'friday' 
+  | 'madinah'
+  | 'aqsa'
+  | 'glass_crystal'
+  | 'glass_emerald'
+  | 'glass_blue'
+  | 'glass_dark'
+  | 'auto';
+
 export type BackdropRenderMode = 'lineArt' | 'illustrated' | 'auto';
 
 export interface AppSettings {

@@ -185,6 +185,10 @@ export interface ProgressItemData {
   isCappedAt100: boolean; // Fard prayers cap at 100%
   tier: ProgressTierInfo;
   detailText: string;
+  onTimeValue?: number;
+  lateValue?: number;
+  onTimePercentage?: number;
+  latePercentage?: number;
 }
 
 export interface UnifiedPeriodProgress {
@@ -237,18 +241,38 @@ export function calculateUnifiedProgress({
   const fiveDailyPrayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
   // --- 1. SALAH (Obligatory Prayers - 5/day) ---
-  const countFardPrayersForDate = (dateStr: string): number => {
-    if (isWomenExcuse) return 5;
+  const countFardPrayersDetailedForDate = (dateStr: string): { onTime: number; late: number; total: number } => {
+    if (isWomenExcuse) return { onTime: 5, late: 0, total: 5 };
     const dateLogs = prayerLogs[dateStr] || {};
-    return fiveDailyPrayers.filter(p => {
+    let onTime = 0;
+    let late = 0;
+    fiveDailyPrayers.forEach(p => {
       const st = dateLogs[p]?.status;
-      return st === 'A' || st === 'B' || st === 'E';
-    }).length;
+      if (st === 'A' || st === 'E') onTime++;
+      else if (st === 'B') late++;
+    });
+    return { onTime, late, total: onTime + late };
   };
 
-  const dailyFardCount = countFardPrayersForDate(todayStr);
-  const weeklyFardCount = past7Days.reduce((sum, d) => sum + countFardPrayersForDate(d), 0);
-  const monthlyFardCount = past30Days.reduce((sum, d) => sum + countFardPrayersForDate(d), 0);
+  const dailyFardDetailed = countFardPrayersDetailedForDate(todayStr);
+  const weeklyFardDetailed = past7Days.reduce(
+    (acc, d) => {
+      const res = countFardPrayersDetailedForDate(d);
+      return { onTime: acc.onTime + res.onTime, late: acc.late + res.late, total: acc.total + res.total };
+    },
+    { onTime: 0, late: 0, total: 0 }
+  );
+  const monthlyFardDetailed = past30Days.reduce(
+    (acc, d) => {
+      const res = countFardPrayersDetailedForDate(d);
+      return { onTime: acc.onTime + res.onTime, late: acc.late + res.late, total: acc.total + res.total };
+    },
+    { onTime: 0, late: 0, total: 0 }
+  );
+
+  const dailyFardCount = dailyFardDetailed.total;
+  const weeklyFardCount = weeklyFardDetailed.total;
+  const monthlyFardCount = monthlyFardDetailed.total;
 
   // --- 2. SUNNAH & NAWAFIL (12 rak'ahs target/day) ---
   const countSunnahRakahsForDate = (dateStr: string): number => {
@@ -309,7 +333,7 @@ export function calculateUnifiedProgress({
   const buildPeriod = (
     periodKey: 'daily' | 'weekly' | 'monthly',
     multiplier: number, // 1 for daily, 7 for weekly, 30 for monthly
-    salahVal: number,
+    salahDetailed: { onTime: number; late: number; total: number },
     sunnahVal: number,
     adhkarVal: number,
     fastingVal: number,
@@ -322,14 +346,25 @@ export function calculateUnifiedProgress({
     const fastingTarget = Math.max(1, Math.round(2 * (multiplier / 7))); // 1 day for daily (if fasting), 2 days for weekly, 8 for monthly
     const quranTarget = dailyQuranGoal * multiplier;
 
+    const salahVal = salahDetailed.total;
+    const salahOnTimeVal = salahDetailed.onTime;
+    const salahLateVal = salahDetailed.late;
+
     // Percentages
     const salahPct = Math.min(100, Math.round((salahVal / salahTarget) * 100)); // Capped at 100%
+    const salahOnTimePct = Math.min(100, Math.round((salahOnTimeVal / salahTarget) * 100));
+    const salahLatePct = Math.min(100, Math.round((salahLateVal / salahTarget) * 100));
+
     const sunnahPct = Math.round((sunnahVal / sunnahTarget) * 100); // Uncapped!
     const adhkarPct = Math.round((adhkarVal / adhkarTarget) * 100); // Uncapped!
     const fastingPct = periodKey === 'daily' 
       ? (salahVal > 0 && fastingVal > 0 ? 100 : fastingVal > 0 ? 100 : 0)
       : Math.round((fastingVal / fastingTarget) * 100); // Uncapped!
     const quranPct = Math.round((quranVal / quranTarget) * 100); // Uncapped!
+
+    const salahDetailText = salahLateVal > 0 
+      ? `${salahVal}/${salahTarget} (${salahOnTimeVal} حاضر • ${salahLateVal} متأخر)`
+      : `${salahVal} من ${salahTarget} صلاة`;
 
     const items: ProgressItemData[] = [
       {
@@ -344,7 +379,11 @@ export function calculateUnifiedProgress({
         displayPercentage: Math.min(100, salahPct),
         isCappedAt100: true,
         tier: getProgressTier(salahPct),
-        detailText: `${salahVal} من ${salahTarget} صلاة`
+        detailText: salahDetailText,
+        onTimeValue: salahOnTimeVal,
+        lateValue: salahLateVal,
+        onTimePercentage: salahOnTimePct,
+        latePercentage: salahLatePct
       },
       {
         id: 'sunnah',
@@ -417,8 +456,8 @@ export function calculateUnifiedProgress({
   };
 
   return {
-    daily: buildPeriod('daily', 1, dailyFardCount, dailySunnahRakahs, dailyAdhkarCount, dailyFastingCount, dailyQuranPages),
-    weekly: buildPeriod('weekly', 7, weeklyFardCount, weeklySunnahRakahs, weeklyAdhkarCount, weeklyFastingCount, weeklyQuranPages),
-    monthly: buildPeriod('monthly', 30, monthlyFardCount, monthlySunnahRakahs, monthlyAdhkarCount, monthlyFastingCount, monthlyQuranPages)
+    daily: buildPeriod('daily', 1, dailyFardDetailed, dailySunnahRakahs, dailyAdhkarCount, dailyFastingCount, dailyQuranPages),
+    weekly: buildPeriod('weekly', 7, weeklyFardDetailed, weeklySunnahRakahs, weeklyAdhkarCount, weeklyFastingCount, weeklyQuranPages),
+    monthly: buildPeriod('monthly', 30, monthlyFardDetailed, monthlySunnahRakahs, monthlyAdhkarCount, monthlyFastingCount, monthlyQuranPages)
   };
 }

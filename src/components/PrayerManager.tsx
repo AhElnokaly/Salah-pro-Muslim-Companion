@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus, ClockFace, AlarmSoundType } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes } from '../utils/prayerCalc';
-import { toArabicNumbers, getHijriDate } from '../utils/hijri';
+import { toArabicNumbers, getHijriDate, formatGregorianFullDateArabic } from '../utils/hijri';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
 import { safeSetItem } from '../utils/storage';
 import { 
@@ -101,6 +101,7 @@ export default function PrayerManager({
 }: PrayerManagerProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('times');
   const [worshipTab, setWorshipTab] = useState<'today' | 'qada'>('today');
+  const [qadaPace, setQadaPace] = useState<number>(5);
   
   // Day selection for logging today or yesterday
   const [selectedDateOffset, setSelectedDateOffset] = useState<0 | -1>(0); // 0 = Today, -1 = Yesterday
@@ -1939,6 +1940,74 @@ export default function PrayerManager({
               </div>
             </div>
           </div>
+
+          {/* Interactive Qada Projection Card */}
+          {totalQadaCount > 0 && (() => {
+            const daysNeeded = Math.ceil(totalQadaCount / qadaPace);
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() + daysNeeded);
+            const formattedTargetDate = formatGregorianFullDateArabic(targetDate);
+
+            return (
+              <div className="p-4 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-indigo-500/10 border border-amber-500/20 dark:border-amber-500/30 rounded-3xl space-y-3 shadow-xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📊</span>
+                    <div className="text-end">
+                      <h4 className="text-xs font-black text-slate-800 dark:text-white">خطة قضاء الفوائت الحية</h4>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">توقع موعد إتمام كافة الفوائت حسب معدل إنجازك اليومي</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-3 py-1 rounded-xl border border-emerald-500/30">
+                    إتمام متوقع: {formattedTargetDate}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold block text-end">اختر معدل القضاء اليومي:</span>
+                  <div className="grid grid-cols-3 gap-2 text-[11px] font-extrabold">
+                    <button
+                      type="button"
+                      onClick={() => setQadaPace(1)}
+                      className={`py-2 rounded-xl border transition-all cursor-pointer ${
+                        qadaPace === 1
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      صلاة يومياً (١)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQadaPace(5)}
+                      className={`py-2 rounded-xl border transition-all cursor-pointer ${
+                        qadaPace === 5
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      مع كل فريضة (٥)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQadaPace(10)}
+                      className={`py-2 rounded-xl border transition-all cursor-pointer ${
+                        qadaPace === 10
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      صلاتان مع الفريضة (١٠)
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[10px] font-extrabold text-amber-900 dark:text-amber-300 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20 text-center">
+                  ✨ بمعدل {toArabicNumbers(qadaPace)} صلاة يومياً، ستنهي قضاء جميع الفوائت ({toArabicNumbers(totalQadaCount)} صلاة) خلال {toArabicNumbers(daysNeeded)} يوماً بإذن الله تعالى.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Missed Counter Cards */}
           <div className="space-y-4">

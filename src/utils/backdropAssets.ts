@@ -1,5 +1,4 @@
-import { BackdropType } from '../components/MosqueBackdrop';
-import { BackdropRenderMode } from '../types';
+import { BackdropType, BackdropRenderMode } from '../types';
 
 import fridayBackdrop from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
@@ -14,6 +13,12 @@ export const BACKDROP_IMAGE_MAP: Record<string, string> = {
   ramadan: classicBackdrop,
   eid_fitr: goldBackdrop,
   eid_adha: bannerBackdrop,
+  night_sky: classicBackdrop,
+  emerald: classicBackdrop,
+  madinah: classicBackdrop,
+  kaaba: goldBackdrop,
+  aqsa: goldBackdrop,
+  andulas: classicBackdrop,
 };
 
 /**
@@ -26,7 +31,13 @@ export const AVAILABLE_PNG_BACKDROPS: Set<string> = new Set([
   'banner',
   'ramadan',
   'eid_fitr',
-  'eid_adha'
+  'eid_adha',
+  'night_sky',
+  'emerald',
+  'madinah',
+  'kaaba',
+  'aqsa',
+  'andulas',
 ]);
 
 /**
@@ -42,11 +53,8 @@ export function resolveRenderMode(
   if (preference === 'illustrated') {
     return AVAILABLE_PNG_BACKDROPS.has(backdropKey) ? 'illustrated' : 'lineArt';
   }
-  if (preference === 'lineArt') {
-    return 'lineArt';
-  }
-  // 'auto': prefers illustrated if available, otherwise lineArt
-  return AVAILABLE_PNG_BACKDROPS.has(backdropKey) ? 'illustrated' : 'lineArt';
+  // Default to 'lineArt' vector SVG for crisp vector graphics over card gradients
+  return 'lineArt';
 }
 
 /**

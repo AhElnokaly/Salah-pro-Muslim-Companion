@@ -66,6 +66,7 @@ import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
 import FeatureDiscoveryWidget from './FeatureDiscoveryWidget';
 import { PinnedFavoriteWidget } from './PinnedFavoriteWidget';
 import UnifiedProgressCard from './UnifiedProgressCard';
+import SacredHoursBanner from './SacredHoursBanner';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
@@ -97,7 +98,13 @@ export const BACKDROP_IMAGES = {
   ramadan: classicBackdrop,
   eid_fitr: goldBackdrop,
   eid_adha: bannerBackdrop,
-  friday: fridayBackdrop
+  friday: fridayBackdrop,
+  night_sky: classicBackdrop,
+  emerald: classicBackdrop,
+  madinah: classicBackdrop,
+  kaaba: goldBackdrop,
+  aqsa: goldBackdrop,
+  andulas: classicBackdrop,
 };
 
 interface DashboardProps {
@@ -1465,7 +1472,7 @@ export default function Dashboard({
         className={`w-full bg-gradient-to-b ${activeCardGradient} text-white rounded-3xl p-4 sm:p-5 gap-3 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
         {/* High-Precision Islamic Mosque Vector Backdrop (Offline, Sharp, No Checkerboard, No Broken Alt Text) */}
-        <div className={`absolute inset-0 pointer-events-none select-none overflow-hidden ${currentBackdropKey === 'friday' ? 'opacity-55 sm:opacity-65' : 'opacity-45'}`}>
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden opacity-85 sm:opacity-95">
           <MosqueBackdrop type={currentBackdropKey} renderMode={settings.backdropRenderMode} />
         </div>
 
@@ -1655,6 +1662,14 @@ export default function Dashboard({
         </div>
       </div>
 
+      {/* Sacred Hours & Response Times Smart Banner */}
+      <SacredHoursBanner
+        prayerTimes={times}
+        now={now}
+        onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
+        appStyle={currentStyle}
+      />
+
       {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons) */}
       <UnifiedProgressCard
         prayerLogs={prayerLogs}
@@ -1723,7 +1738,9 @@ export default function Dashboard({
             const duhaLog = todayLogs['Duha'] || { status: 'not_yet', extraRakahs: 0 };
             const currentDuhaRakahs = duhaLog.status === 'A' ? (duhaLog.extraRakahs || 0) : 0;
             return (
-              <div className={`p-3 rounded-2xl border transition-all ${
+              <div 
+                id="duha-card-section"
+                className={`p-3 rounded-2xl border transition-all duration-300 ${
                 currentStyle === 'glass-dark' 
                   ? 'bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]' 
                   : 'bg-slate-50/50 border-slate-100 hover:bg-slate-100/50'
@@ -1955,10 +1972,31 @@ export default function Dashboard({
             <button
               type="button"
               onClick={() => {
+                setShowSunriseModal(false);
+                setTimeout(() => {
+                  const duhaElem = document.getElementById('duha-card-section');
+                  if (duhaElem) {
+                    duhaElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    duhaElem.classList.add('ring-2', 'ring-amber-400', 'bg-amber-50/80', 'dark:bg-amber-950/40');
+                    setTimeout(() => {
+                      duhaElem.classList.remove('ring-2', 'ring-amber-400', 'bg-amber-50/80', 'dark:bg-amber-950/40');
+                    }, 2500);
+                  }
+                }, 150);
+              }}
+              className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm active:scale-95"
+            >
+              <Sun className="w-4 h-4 text-amber-100" />
+              <span>اذهب لتسجيل صلاة الضحى ☀️</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
                 const sunriseMuezzin = localStorage.getItem('salah_muezzin_Sunrise') || currentMuezzin;
                 togglePlayAthan(sunriseMuezzin);
               }}
-              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-extrabold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
             >
               <Volume2 className="w-4 h-4" />
               <span>تجربة سماع صوت تنبيه الشروق</span>
@@ -2356,6 +2394,71 @@ export default function Dashboard({
                   </div>
                 </div>
               )}
+
+              {/* Contextual Adhkar & Fast Qada Gateway */}
+              {(() => {
+                const pendingForThisPrayer = pendingQadaPrayers.filter(q => q.prayerName === selectedPrayerToLog);
+                const qadaCount = pendingForThisPrayer.length;
+                const isLoggedDone = status === 'A' || status === 'B';
+
+                if (!isLoggedDone && qadaCount === 0) return null;
+
+                return (
+                  <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    {/* 1. Contextual Adhkar Gateway Prompt */}
+                    {isLoggedDone && (
+                      <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">📿</span>
+                          <div className="text-end">
+                            <span className="font-extrabold text-emerald-900 dark:text-emerald-300 block">
+                              {selectedPrayerToLog === 'Fajr' ? 'أذكار الصباح وأذكار الصلاة' : selectedPrayerToLog === 'Asr' || selectedPrayerToLog === 'Maghrib' ? 'أذكار المساء وأذكار الصلاة' : 'أذكار ما بعد الصلاة'}
+                            </span>
+                            <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-bold">هل أتممت أذكارك المباركة؟</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPrayerToLog(null);
+                            if (setActiveTab) setActiveTab('adhkar');
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-[11px] cursor-pointer transition-all shrink-0 active:scale-95 shadow-2xs"
+                        >
+                          اذهب للأذكار ✨
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 2. Fast Qada Offset Gateway */}
+                    {qadaCount > 0 && (
+                      <div className="p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-500/20 rounded-2xl flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">⚡</span>
+                          <div className="text-end">
+                            <span className="font-extrabold text-amber-900 dark:text-amber-300 block">
+                              لديك {toArabicNumbers(qadaCount)} صلاة {getArabicPrayerName(selectedPrayerToLog, now)} فائتة
+                            </span>
+                            <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-bold">هل قضيت صلاة سابقة مع هذه الفريضة؟</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const firstMatch = pendingForThisPrayer[0];
+                            if (firstMatch) {
+                              setPendingQadaPrayers(prev => prev.filter(q => q.id !== firstMatch.id));
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl text-[11px] cursor-pointer transition-all shrink-0 active:scale-95 shadow-2xs"
+                        >
+                          سجل قضاء (-١)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Buttons */}
               <div className="flex gap-2.5 pt-2">

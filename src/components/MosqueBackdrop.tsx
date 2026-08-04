@@ -1,27 +1,8 @@
 import React, { memo } from 'react';
-import { BackdropRenderMode } from '../types';
+import { BackdropType, BackdropRenderMode } from '../types';
 import { resolveRenderMode, getBackdropImagePath } from '../utils/backdropAssets';
 
-export type BackdropType = 
-  | 'gold' 
-  | 'classic' 
-  | 'banner' 
-  | 'emerald' 
-  | 'night_sky' 
-  | 'kaaba' 
-  | 'andulas' 
-  | 'minimal' 
-  | 'ramadan' 
-  | 'eid_fitr' 
-  | 'eid_adha' 
-  | 'friday' 
-  | 'madinah'
-  | 'aqsa'
-  | 'glass_crystal'
-  | 'glass_emerald'
-  | 'glass_blue'
-  | 'glass_dark'
-  | 'auto';
+export type { BackdropType };
 
 export interface MosqueBackdropProps {
   type: BackdropType | string;
@@ -43,8 +24,9 @@ export const OccasionOverlay = memo(function OccasionOverlay({
   const isEidFitr = backdropKey === 'eid_fitr';
   const isEidAdha = backdropKey === 'eid_adha';
   const isFriday = backdropKey === 'friday';
+  const isNight = backdropKey === 'night_sky';
 
-  if (!isRamadan && !isEidFitr && !isEidAdha && !isFriday) {
+  if (!isRamadan && !isEidFitr && !isEidAdha && !isFriday && !isNight) {
     return null;
   }
 
@@ -62,34 +44,34 @@ export const OccasionOverlay = memo(function OccasionOverlay({
         </filter>
       </defs>
 
-      {/* Ramadan / Eid Hanging Fanoos Lanterns */}
-      {(isRamadan || isEidFitr || isEidAdha) && (
+      {/* Ramadan / Eid / Night Sky Hanging Fanoos Lanterns */}
+      {(isRamadan || isEidFitr || isEidAdha || isNight) && (
         <g id="occasion-lanterns">
           {/* Main Left Lantern */}
           <g className="lineart-flicker" transform="translate(140, 0)">
-            <line x1="40" y1="0" x2="40" y2="70" stroke="#f59e0b" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.8" />
-            <path d="M 28,70 L 52,70 L 58,86 L 22,86 Z" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
-            <path d="M 22,86 L 58,86 L 50,118 L 30,118 Z" fill="#fbbf24" fillOpacity="0.25" stroke="#f59e0b" strokeWidth="1.5" filter="url(#overlay-lantern-glow)" />
-            <path d="M 30,118 L 50,118 L 40,132 Z" fill="none" stroke="#d97706" strokeWidth="1.5" />
-            <circle cx="40" cy="102" r="4" fill="#fef08a" className="lineart-pulse-slow" />
+            <line x1="40" y1="0" x2="40" y2="70" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.9" />
+            <path d="M 28,70 L 52,70 L 58,86 L 22,86 Z" fill="none" stroke="#fbbf24" strokeWidth="1.8" />
+            <path d="M 22,86 L 58,86 L 50,118 L 30,118 Z" fill="#fbbf24" fillOpacity="0.3" stroke="#f59e0b" strokeWidth="1.8" filter="url(#overlay-lantern-glow)" />
+            <path d="M 30,118 L 50,118 L 40,132 Z" fill="none" stroke="#d97706" strokeWidth="1.8" />
+            <circle cx="40" cy="102" r="4.5" fill="#fef08a" className="lineart-pulse-slow" />
           </g>
 
           {/* Secondary Center Lantern */}
           <g className="lineart-flicker" transform="translate(600, 0)">
-            <line x1="30" y1="0" x2="30" y2="45" stroke="#f59e0b" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
-            <path d="M 20,45 L 40,45 L 45,58 L 15,58 Z" fill="none" stroke="#fef08a" strokeWidth="1.2" />
-            <path d="M 15,58 L 45,58 L 38,82 L 22,82 Z" fill="#fef08a" fillOpacity="0.2" stroke="#f59e0b" strokeWidth="1.2" />
-            <path d="M 22,82 L 38,82 L 30,92 Z" fill="none" stroke="#d97706" strokeWidth="1.2" />
-            <circle cx="30" cy="70" r="3" fill="#fef08a" className="lineart-pulse-slow" />
+            <line x1="30" y1="0" x2="30" y2="45" stroke="#f59e0b" strokeWidth="1.2" strokeDasharray="2 2" opacity="0.85" />
+            <path d="M 20,45 L 40,45 L 45,58 L 15,58 Z" fill="none" stroke="#fef08a" strokeWidth="1.5" />
+            <path d="M 15,58 L 45,58 L 38,82 L 22,82 Z" fill="#fef08a" fillOpacity="0.25" stroke="#f59e0b" strokeWidth="1.5" />
+            <path d="M 22,82 L 38,82 L 30,92 Z" fill="none" stroke="#d97706" strokeWidth="1.5" />
+            <circle cx="30" cy="70" r="3.5" fill="#fef08a" className="lineart-pulse-slow" />
           </g>
 
           {/* Right Lantern */}
           <g className="lineart-flicker" transform="translate(1020, 0)">
-            <line x1="35" y1="0" x2="35" y2="60" stroke="#f59e0b" strokeWidth="1.2" strokeDasharray="3 2" opacity="0.8" />
-            <path d="M 24,60 L 46,60 L 51,74 L 19,74 Z" fill="none" stroke="#fbbf24" strokeWidth="1.2" />
-            <path d="M 19,74 L 51,74 L 44,102 L 26,102 Z" fill="#fbbf24" fillOpacity="0.2" stroke="#f59e0b" strokeWidth="1.2" filter="url(#overlay-lantern-glow)" />
-            <path d="M 26,102 L 44,102 L 35,114 Z" fill="none" stroke="#d97706" strokeWidth="1.2" />
-            <circle cx="35" cy="88" r="3.5" fill="#fef08a" className="lineart-pulse-slow" />
+            <line x1="35" y1="0" x2="35" y2="60" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 2" opacity="0.9" />
+            <path d="M 24,60 L 46,60 L 51,74 L 19,74 Z" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+            <path d="M 19,74 L 51,74 L 44,102 L 26,102 Z" fill="#fbbf24" fillOpacity="0.25" stroke="#f59e0b" strokeWidth="1.5" filter="url(#overlay-lantern-glow)" />
+            <path d="M 26,102 L 44,102 L 35,114 Z" fill="none" stroke="#d97706" strokeWidth="1.5" />
+            <circle cx="35" cy="88" r="4" fill="#fef08a" className="lineart-pulse-slow" />
           </g>
         </g>
       )}
@@ -135,26 +117,26 @@ export const LineArtBackdrop = memo(function LineArtBackdrop({
   const isGlass = backdropKey.startsWith('glass_');
 
   // Determine primary stroke color scheme based on theme
-  let strokeColor = '#f59e0b'; // Gold default
+  let strokeColor = '#fcd34d'; // Gold default
   let glowColor = '#fef08a';
   let accentColor = '#fbbf24';
 
   if (backdropKey === 'emerald' || backdropKey === 'madinah' || backdropKey === 'glass_emerald') {
-    strokeColor = '#10b981';
-    glowColor = '#a7f3d0';
+    strokeColor = '#a7f3d0';
+    glowColor = '#ffffff';
     accentColor = '#34d399';
   } else if (backdropKey === 'classic' || backdropKey === 'glass_blue' || backdropKey === 'night_sky') {
-    strokeColor = '#38bdf8';
-    glowColor = '#bae6fd';
-    accentColor = '#60a5fa';
+    strokeColor = '#e0f2fe';
+    glowColor = '#ffffff';
+    accentColor = '#38bdf8';
   } else if (backdropKey === 'banner') {
-    strokeColor = '#f43f5e';
-    glowColor = '#fecdd3';
+    strokeColor = '#fecdd3';
+    glowColor = '#ffffff';
     accentColor = '#fb7185';
   } else if (backdropKey === 'andulas') {
-    strokeColor = '#c084fc';
-    glowColor = '#f3e8ff';
-    accentColor = '#a855f7';
+    strokeColor = '#f3e8ff';
+    glowColor = '#ffffff';
+    accentColor = '#c084fc';
   }
 
   return (
@@ -167,13 +149,12 @@ export const LineArtBackdrop = memo(function LineArtBackdrop({
       >
         <defs>
           <filter id="lineart-glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feGaussianBlur stdDeviation="4" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
 
           <linearGradient id="lineart-sky-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#0b0f19" stopOpacity={isGlass ? "0.2" : "0.65"} />
-            <stop offset="70%" stopColor="#1e293b" stopOpacity={isGlass ? "0.1" : "0.35"} />
+            <stop offset="0%" stopColor="#0f172a" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
           </linearGradient>
 

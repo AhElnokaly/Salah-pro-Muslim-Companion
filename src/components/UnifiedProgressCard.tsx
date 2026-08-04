@@ -123,8 +123,8 @@ export default function UnifiedProgressCard({
         </div>
 
         {/* Period Selector Tabs (Daily, Weekly, Monthly, Show All) */}
-        <div className="flex items-center justify-between gap-1 pt-3 pb-1 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 pb-1">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 w-full sm:w-auto overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActivePeriod('daily')}
@@ -175,9 +175,24 @@ export default function UnifiedProgressCard({
             </button>
           </div>
 
-          <span className="hidden md:inline-block text-[11px] font-mono font-black text-emerald-600 dark:text-emerald-400 shrink-0">
-            معدل اليوم: {toArabicNumbers(dailyProgress.overallPercentage)}%
-          </span>
+          <div className="flex items-center justify-between sm:justify-end gap-2 text-[9.5px] font-bold">
+            {/* Prayer Status Dual Legend */}
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-300">
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                حاضر
+              </span>
+              <span className="text-slate-300 dark:text-slate-600">•</span>
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-extrabold">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                صليتها متأخر ⏱️
+              </span>
+            </div>
+
+            <span className="hidden md:inline-block text-[11px] font-mono font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+              معدل اليوم: {toArabicNumbers(dailyProgress.overallPercentage)}%
+            </span>
+          </div>
         </div>
 
         {/* PROGRESS SECTIONS */}
@@ -286,16 +301,30 @@ interface ProgressCircularItemProps {
 function CircularProgressRing({
   percentage,
   tier,
-  icon
+  icon,
+  onTimePercentage,
+  latePercentage
 }: {
   percentage: number;
   tier: ProgressTierInfo;
   icon: string;
+  onTimePercentage?: number;
+  latePercentage?: number;
 }) {
   const radius = 15;
   const circumference = 2 * Math.PI * radius; // 94.24778
+
+  const hasDualBreakdown = onTimePercentage !== undefined && latePercentage !== undefined && latePercentage > 0;
+
   const clampedPct = Math.min(100, Math.max(0, percentage));
   const strokeDashoffset = circumference - (clampedPct / 100) * circumference;
+
+  const onTimePct = onTimePercentage !== undefined ? Math.min(100, Math.max(0, onTimePercentage)) : clampedPct;
+  const latePct = latePercentage !== undefined ? Math.min(100, Math.max(0, latePercentage)) : 0;
+  const totalPct = Math.min(100, onTimePct + latePct);
+
+  const onTimeOffset = circumference - (onTimePct / 100) * circumference;
+  const totalOffset = circumference - (totalPct / 100) * circumference;
 
   const strokeColorMap: Record<number, string> = {
     0: 'stroke-slate-300 dark:stroke-slate-700',
@@ -321,19 +350,50 @@ function CircularProgressRing({
           strokeWidth="3"
           fill="transparent"
         />
-        {/* Animated Progress Circle */}
-        <circle
-          cx="18"
-          cy="18"
-          r={radius}
-          className={`${strokeClass} transition-all duration-1000 ease-out`}
-          strokeWidth="3"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          fill="transparent"
-        />
+
+        {hasDualBreakdown ? (
+          <>
+            {/* Total Completion Arc (Amber / Gold for Late Segment) */}
+            <circle
+              cx="18"
+              cy="18"
+              r={radius}
+              className="stroke-amber-400 dark:stroke-amber-400 transition-all duration-1000 ease-out"
+              strokeWidth="3"
+              strokeDasharray={circumference}
+              strokeDashoffset={totalOffset}
+              strokeLinecap="round"
+              fill="transparent"
+            />
+            {/* On Time Arc (Emerald Green on Top) */}
+            <circle
+              cx="18"
+              cy="18"
+              r={radius}
+              className="stroke-emerald-500 dark:stroke-emerald-400 transition-all duration-1000 ease-out"
+              strokeWidth="3"
+              strokeDasharray={circumference}
+              strokeDashoffset={onTimeOffset}
+              strokeLinecap="round"
+              fill="transparent"
+            />
+          </>
+        ) : (
+          /* Standard Single Arc */
+          <circle
+            cx="18"
+            cy="18"
+            r={radius}
+            className={`${strokeClass} transition-all duration-1000 ease-out`}
+            strokeWidth="3"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            fill="transparent"
+          />
+        )}
       </svg>
+
       {/* Icon and percentage in center */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-0.5 pointer-events-none">
         <span className="text-[11px] xs:text-xs sm:text-base leading-none drop-shadow-xs">{icon}</span>
@@ -356,6 +416,8 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
     else if (item.id === 'quran') onNavigateTab('quran');
   };
 
+  const hasLatePrayers = item.id === 'salah' && (item.lateValue || 0) > 0;
+
   return (
     <button
       type="button"
@@ -375,6 +437,8 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
         percentage={item.percentage}
         tier={tier}
         icon={item.icon}
+        onTimePercentage={item.onTimePercentage}
+        latePercentage={item.latePercentage}
       />
 
       {/* Titles & Details */}
@@ -385,6 +449,19 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
         <p className="text-[8.5px] xs:text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-tight whitespace-nowrap">
           {item.detailText}
         </p>
+
+        {hasLatePrayers && (
+          <div className="flex items-center justify-center gap-1 mt-0.5">
+            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[8px] font-black">
+              <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+              {toArabicNumbers(item.onTimeValue || 0)} حاضراً
+            </span>
+            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded-md bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-[8px] font-black">
+              <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />
+              {toArabicNumbers(item.lateValue || 0)} متأخر
+            </span>
+          </div>
+        )}
       </div>
     </button>
   );

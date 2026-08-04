@@ -27,7 +27,14 @@ import {
   Sliders,
   HelpCircle,
   Zap,
-  RotateCcw
+  RotateCcw,
+  Play,
+  Pause,
+  X,
+  Maximize2,
+  Bookmark,
+  Share2,
+  Filter
 } from 'lucide-react';
 import { AppSettings, PrayerLog } from '../types';
 import { calculatePrayerTimes, parseTimeToMinutes } from '../utils/prayerCalc';
@@ -42,12 +49,13 @@ interface KhushuQiyamTrackerProps {
   onNavigateTab?: (tab: string) => void;
 }
 
-interface QiyamLogEntry {
+interface QiyamJournalEntry {
   date: string;
+  hijriDate: string;
   rakahs: number;
   witrRakahs: number;
-  khushuRating: number; // 1 to 5
-  surahsRead: string;
+  rating: number;
+  surahs: string;
   notes: string;
 }
 
@@ -55,44 +63,89 @@ const KHUSHU_STEPS = [
   {
     id: 'wudu',
     title: 'إسباغ الوضوء والدعاء بعده',
-    desc: 'الوضوء بتمهل مع استحضار تساقط الذنوب مع قطرات الماء.',
-    category: 'preparation'
+    desc: 'الوضوء بتمهل مع استحضار تساقط الذنوب مع قطرات الماء، وقراءة الذكر المأثور بعده.',
+    category: 'preparation',
+    tip: 'عن النبي ﷺ: «من توضأ فأحسن الوضوء خرجت خطايا جَسَدِهِ حَتَّى تَخْرُجَ مِنْ تَحْتِ أَظْفَارِهِ».'
   },
   {
     id: 'mindset',
-    title: 'تفريغ الذهن وقطع الشواغل',
-    desc: 'إغلاق المشتتات والتركيز على الوقوف بين يدي جلال الله.',
-    category: 'preparation'
+    title: 'تفريغ الذهن وقطع المشتتات',
+    desc: 'إغلاق الهاتف والشواغل، واستحضار عظمة الوقوف بين يدي الخالق جل وعلا.',
+    category: 'preparation',
+    tip: 'تذكر أن الصلاة مناجاة خاصة بينك وبين الله، فاستحضر حياء القرب وطمأنينة الإقبال.'
   },
   {
     id: 'gaze',
-    title: 'النظر إلى موضع السجود',
-    desc: 'تجنب الالتفات بالبصر أو العقل، وحصر النظر في مكان سجودك.',
-    category: 'during'
+    title: 'حصر النظر في موضع السجود',
+    desc: 'تجنب الالتفات بالبصر أو الذهن، وتركيز العينين على مكان سجودك فقط.',
+    category: 'during',
+    tip: 'الالتفات في الصلاة اختلاس يختلسه الشيطان من صلاة العبد، فحافظ على جمع بصرك.'
   },
   {
     id: 'tranquility',
-    title: 'الطمأنينة الكاملة في الأركان',
-    desc: 'أن يرجع كل عظم إلى موضعه في الركوع والسجود دون عجلة.',
-    category: 'during'
+    title: 'الطَّمَأْنِينَة الكاملة في الأركان',
+    desc: 'أن يرجع كل عظم إلى موضعه في الركوع والرفع والسجود دون عجلة أو نقر.',
+    category: 'during',
+    tip: 'قال ﷺ للمسيء صلاته: «ارْجِعْ فَصَلِّ فَإِنَّكَ لَمْ تُصَلِّ»، فالطمأنينة ركن أساسي لصحة الصلاة.'
   },
   {
     id: 'tadabbur',
-    title: 'ترتيل الفاتحة والآيات وتدبرها',
-    desc: 'القراءة بتمهل مع الوقوف على رؤوس الآيات واستشعار الخطاب.',
-    category: 'during'
+    title: 'ترتيل القرآن وتدبُّر معانيه',
+    desc: 'القراءة بتمهل (ورادداً مع الآيات) والاستعاذة عند آيات العذاب والمسألة عند الرحمة.',
+    category: 'during',
+    tip: 'كان النبي ﷺ إذا مر بآية فيها تسبيح سبَّح، وإذا مر بسؤال سأل، وإذا مر بتعوذ تعوَّذ.'
   },
   {
     id: 'shaitan_refuge',
-    title: 'الاستعاذة عند وسواس الصلاة',
-    desc: 'الاستعاذة بالله والتفل عن اليسار ثلاثاً عند هجوم وسواس (خنزب).',
-    category: 'during'
+    title: 'الاستعاذة عند هجوم الوسواس',
+    desc: 'إذا هاجمك وسواس الصلاة (خنزب)، اتفل عن يسارك ثلاثاً واستعذ بالله بثبات.',
+    category: 'during',
+    tip: 'عثمان بن أبي العاص شكا للشيطان بالصلاة، فقال ﷺ: «ذاك شيطان يقال له خنزب، فإذا أحسسته فتعوذ بالله منه واتفل عن يسارك ثلاثاً».'
   },
   {
     id: 'sujood_munajat',
     title: 'الإطالة في السجود والمناجاة',
-    desc: 'أقرب ما يكون العبد من ربه وهو ساجد؛ فأكثروا فيه من الدعاء.',
-    category: 'post'
+    desc: 'أقرب ما يكون العبد من ربه وهو ساجد؛ فأكثروا فيه من الدعاء والابتهال.',
+    category: 'post',
+    tip: 'سل الله حاجتك في سجودك وأنت موقن بالإجابة، واستشعر قُربه القريب منك.'
+  }
+];
+
+const QIYAM_RECOMMENDED_SURAHS = [
+  {
+    id: 'mulk',
+    name: 'سورة الملك',
+    verses: 30,
+    virtue: 'المنجية من عذاب القبر، تُشفع لصاحبها حتى يُغفر له.',
+    recommendation: 'يُستحب قراءتها قبل النوم وفي ركعات القيام.'
+  },
+  {
+    id: 'waqiah',
+    name: 'سورة الواقعة',
+    verses: 96,
+    virtue: 'سورة الغنى والبركة، تنفي الفقر وتذكر بيوم القيامة.',
+    recommendation: 'تمنح القلب يقين الخشوع وتكتب بها من القانتين عند ضمها لأخرى.'
+  },
+  {
+    id: 'yasin',
+    name: 'سورة يٰس',
+    verses: 83,
+    virtue: 'قلب القرآن الكريـم، يقرأ بها لغفران الذنوب وتيسير الأمور.',
+    recommendation: 'ممتازة لركعات القيام الطويلة بتدبر وتأنٍّ.'
+  },
+  {
+    id: 'muzzammil',
+    name: 'سورة المزمل',
+    verses: 20,
+    virtue: 'سورة قيام الليل والتبتل، فيها أمر الله لنبيه بالقيام: ﴿قُمِ اللَّيْلَ إِلَّا قَلِيلًا﴾.',
+    recommendation: 'توقظ في الروح محبة الخلوة بالله ومناجاته.'
+  },
+  {
+    id: 'sajdah',
+    name: 'سورة السجدة',
+    verses: 30,
+    virtue: 'كان النبي ﷺ لا ينام حتى يقرأ ألم تنزيل السجدة وتبارك.',
+    recommendation: 'تتضمن سجَدة تلاوة تزيد العبد خضوعاً وخشوعاً.'
   }
 ];
 
@@ -100,26 +153,37 @@ const QIYAM_DUAS = [
   {
     id: 'istiftah_qiyam',
     title: 'دعاء الاستفتاح في قيام الليل',
+    category: 'istiftah',
     arabic: 'اللَّهُمَّ لَكَ الْحَمْدُ أَنْتَ نُورُ السَّمَاوَاتِ وَالأَرْضِ وَمَنْ فِيهِنَّ، وَلَكَ الْحَمْدُ أَنْتَ قَيِّمُ السَّمَاوَاتِ وَالأَرْضِ وَمَنْ فِيهِنَّ، وَلَكَ الْحَمْدُ أَنْتَ الْحَقُّ وَوَعْدُكَ الْحَقُّ، وَلِقَاؤُكَ حَقٌّ، وَالْجَنَّةُ حَقٌّ، وَالنَّارُ حَقٌّ، وَالنَّبِيُّونَ حَقٌّ، وَمُحَمَّدٌ ﷺ حَقٌّ، وَالسَّاعَةُ حَقٌّ...',
     source: 'صحيح البخاري ومسلم - عن ابن عباس رضي الله عنهما'
   },
   {
     id: 'qunut_witr',
-    title: 'دعاء القنوت في صلاة الوتر',
+    title: 'دعاء القنوت المأثور في صلاة الوتر',
+    category: 'qunut',
     arabic: 'اللَّهُمَّ اهْدِنِي فِيمَنْ هَدَيْتَ، وَعَافِنِي فِيمَنْ عَافَيْتَ، وَتَوَلَّنِي فِيمَنْ تَوَلَّيْتَ، وَبَارِكْ لِي فِيمَا أَعْطَيْتَ، وَقِنِي شَرَّ مَا قَضَيْتَ، فَإِنَّكَ تَقْضِي وَلا يُقْضَى عَلَيْكَ، إِنَّهُ لا يَذِلُّ مَنْ وَالَيْتَ، وَلا يَعِزُّ مَنْ عَادَيْتَ، تَبَارَكْتَ رَبَّنَا وَتَعَالَيْتَ.',
     source: 'سنن أَبِي داود والترمذي - تعليم النبي ﷺ للحسن بن علي'
   },
   {
     id: 'suhoor_istighfar',
     title: 'أذكار واستغفار الأسحار (قبل الفجر)',
+    category: 'istighfar',
     arabic: 'أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ الَّذِي لاَ إِلَهَ إِلاَّ هُوَ الْحَيُّ الْقَيُّومُ وَأَتُوبُ إِلَيْهِ (وَبِالأَسْحَارِ هُمْ يَسْتَغْفِرُونَ).',
     source: 'القرآن الكريم - سورة الذاريات'
   },
   {
     id: 'sayyid_istighfar',
-    title: 'سيد الاستغفار',
-    arabic: 'اللَّهُمَّ أَنْتَ رَبِّي لاَ إِلَهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لاَ يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ.',
+    title: 'سيد الاستغفار المبارك',
+    category: 'istighfar',
+    arabic: 'اللَّهُمَّ أَنْتَ رَبِّي لاَ إِلَهَ إِلاَّ أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي فَإِنَّهُ لاَ يَغْفِرُ الذُّنُوبَ إِلاَّ أَنْتَ.',
     source: 'صحيح البخاري'
+  },
+  {
+    id: 'munajat_night',
+    title: 'مناجاة الثلث الأخير من الليل',
+    category: 'munajat',
+    arabic: 'يَا رَبِّ، هَا أَنَا ذَا بَيْنَ يَدَيْكَ، عَبْدُكَ الْفَقِيرُ إِلَى رَحْمَتِكَ، أَتَيْتُكَ فِي ظُلْمَةِ اللَّيْلِ أَرْجُو نُورَ هِدَايَتِكَ، اللَّهُمَّ هَبْ لِي قَلْبًا خَاشِعًا، وَلِسَانًا ذَاكِرًا، وَيَقِينًا صَادِقًا، وَتَوْبَةً نَصُوحًا قَبْلَ الْمَوْتِ.',
+    source: 'من دعاء الصالحين في خلوة الليل'
   }
 ];
 
@@ -185,16 +249,24 @@ export default function KhushuQiyamTracker({
   setPrayerLogs,
   onNavigateTab
 }: KhushuQiyamTrackerProps) {
-  const isDarkTheme = settings.theme === 'dark' || 
-    ((!settings.theme || settings.theme === 'system') && 
-     window.matchMedia('(prefers-color-scheme: dark)').matches);
-
   const [currentTime, setCurrentTime] = useState(new Date());
   const [copiedDuaId, setCopiedDuaId] = useState<string | null>(null);
   const [logSuccessMsg, setLogSuccessMsg] = useState<string>('');
 
-  // Ambient background audio generator state (rain / breeze)
-  const [activeAmbient, setActiveAmbient] = useState<'none' | 'rain' | 'breeze'>('none');
+  // Live Focus Mode State (وضع الخلوة الحية)
+  const [isFocusModeActive, setIsFocusModeActive] = useState<boolean>(false);
+  const [liveRakahCounter, setLiveRakahCounter] = useState<number>(2);
+  const [selectedFocusDua, setSelectedFocusDua] = useState<string>(QIYAM_DUAS[1].arabic);
+
+  // Khushu Step Category Filter
+  const [stepCategoryFilter, setStepCategoryFilter] = useState<'all' | 'preparation' | 'during' | 'post'>('all');
+  const [selectedStepDetail, setSelectedStepDetail] = useState<typeof KHUSHU_STEPS[0] | null>(null);
+
+  // Supplication Category Filter
+  const [duaCategoryFilter, setDuaCategoryFilter] = useState<'all' | 'istiftah' | 'qunut' | 'istighfar' | 'munajat'>('all');
+
+  // Ambient background audio generator state
+  const [activeAmbient, setActiveAmbient] = useState<'none' | 'rain' | 'breeze' | 'stream'>('none');
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const stopAmbientAudio = () => {
@@ -205,7 +277,7 @@ export default function KhushuQiyamTracker({
     setActiveAmbient('none');
   };
 
-  const playAmbientAudio = (type: 'rain' | 'breeze') => {
+  const playAmbientAudio = (type: 'rain' | 'breeze' | 'stream') => {
     if (activeAmbient === type) {
       stopAmbientAudio();
       return;
@@ -219,29 +291,35 @@ export default function KhushuQiyamTracker({
       audioCtxRef.current = ctx;
 
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.08;
+      masterGain.gain.value = type === 'stream' ? 0.05 : 0.08;
       masterGain.connect(ctx.destination);
 
-      if (type === 'rain' || type === 'breeze') {
-        const bufferSize = ctx.sampleRate * 2;
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          output[i] = Math.random() * 2 - 1;
-        }
-
-        const whiteNoise = ctx.createBufferSource();
-        whiteNoise.buffer = noiseBuffer;
-        whiteNoise.loop = true;
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = type === 'rain' ? 'lowpass' : 'bandpass';
-        filter.frequency.value = type === 'rain' ? 700 : 350;
-
-        whiteNoise.connect(filter);
-        filter.connect(masterGain);
-        whiteNoise.start();
+      const bufferSize = ctx.sampleRate * 2;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
       }
+
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const filter = ctx.createBiquadFilter();
+      if (type === 'rain') {
+        filter.type = 'lowpass';
+        filter.frequency.value = 700;
+      } else if (type === 'breeze') {
+        filter.type = 'bandpass';
+        filter.frequency.value = 350;
+      } else {
+        filter.type = 'lowpass';
+        filter.frequency.value = 450;
+      }
+
+      whiteNoise.connect(filter);
+      filter.connect(masterGain);
+      whiteNoise.start();
 
       setActiveAmbient(type);
     } catch (e) {
@@ -295,13 +373,10 @@ export default function KhushuQiyamTracker({
     const maghribMins = parseTimeToMinutes(todayTimes.Maghrib || '18:00');
     const fajrMins = parseTimeToMinutes(tomorrowTimes.Fajr || '04:30');
     
-    // Total night minutes: from Maghrib (e.g. 18:00 = 1080) to Fajr tomorrow (e.g. 04:30 = 270)
-    // 1440 - 1080 + 270 = 630 mins (10.5 hours)
     const nightDurationMins = (1440 - maghribMins) + fajrMins;
     const thirdMins = Math.floor(nightDurationMins / 3);
     const halfMins = Math.floor(nightDurationMins / 2);
 
-    // Start of last third = Maghrib + (2 * thirdMins)
     const lastThirdStartMinsFromMaghrib = (maghribMins + 2 * thirdMins) % 1440;
     const midnightMinsFromMaghrib = (maghribMins + halfMins) % 1440;
 
@@ -317,22 +392,15 @@ export default function KhushuQiyamTracker({
     const lastThirdStartStr = formatMinsToTimeString(lastThirdStartMinsFromMaghrib);
     const midnightStr = formatMinsToTimeString(midnightMinsFromMaghrib);
 
-    // Current time in minutes of day
     const currentMinsNow = currentTime.getHours() * 60 + currentTime.getMinutes();
     
-    // Check if we are currently inside the Last Third of the Night
-    // Night spans from maghribMins -> 1440 and 0 -> fajrMins
     let isCurrentlyInLastThird = false;
-    let minsUntilLastThird = 0;
-
-    const lastThirdAbsMins = lastThirdStartMinsFromMaghrib; // Absolute minute in 24h
+    const lastThirdAbsMins = lastThirdStartMinsFromMaghrib;
     if (lastThirdAbsMins > maghribMins) {
-      // Last third starts before midnight 00:00
       if (currentMinsNow >= lastThirdAbsMins || currentMinsNow < fajrMins) {
         isCurrentlyInLastThird = true;
       }
     } else {
-      // Last third starts after midnight 00:00 (e.g., 01:30 AM)
       if (currentMinsNow >= lastThirdAbsMins && currentMinsNow < fajrMins) {
         isCurrentlyInLastThird = true;
       }
@@ -368,7 +436,16 @@ export default function KhushuQiyamTracker({
     return localStorage.getItem(`qiyam_notes_${todayStr}`) || '';
   });
 
-  // Helper to determine current prayer name for per-prayer resetting
+  // Saved Qiyam Journal History
+  const [qiyamJournalHistory, setQiyamJournalHistory] = useState<QiyamJournalEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('qiyam_journal_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const getCurrentPrayerName = () => {
     const currentMins = currentTime.getHours() * 60 + currentTime.getMinutes();
     const fajr = parseTimeToMinutes(todayTimes.Fajr || '04:30');
@@ -398,17 +475,16 @@ export default function KhushuQiyamTracker({
     try {
       const saved = localStorage.getItem(currentKhushuKey);
       return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch (e) {
+    } catch {
       return new Set();
     }
   });
 
-  // Re-sync steps when key changes (date or prayer or reset mode change)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(currentKhushuKey);
       setCompletedKhushuSteps(saved ? new Set(JSON.parse(saved)) : new Set());
-    } catch (e) {
+    } catch {
       setCompletedKhushuSteps(new Set());
     }
   }, [currentKhushuKey]);
@@ -473,17 +549,32 @@ export default function KhushuQiyamTracker({
     safeSetItem(`qiyam_surahs_${todayStr}`, surahsRead);
     safeSetItem(`qiyam_notes_${todayStr}`, personalNotes);
 
+    // Save to journal history
+    if (qRakahs > 0 || wRakahs > 0 || personalNotes.trim()) {
+      const newEntry: QiyamJournalEntry = {
+        date: todayStr,
+        hijriDate: hijri.fullString,
+        rakahs: qRakahs,
+        witrRakahs: wRakahs,
+        rating: khushuRating,
+        surahs: surahsRead,
+        notes: personalNotes
+      };
+      const updatedHistory = [newEntry, ...qiyamJournalHistory.filter(e => e.date !== todayStr)].slice(0, 30);
+      setQiyamJournalHistory(updatedHistory);
+      safeSetItem('qiyam_journal_history', JSON.stringify(updatedHistory));
+    }
+
     setLogSuccessMsg(`تم حفظ صلاة قيام الليل (${toArabicNumbers(qRakahs)} ركعات) والوتر (${toArabicNumbers(wRakahs)} ركعات) بنجاح! تقبل الله.`);
+    setTimeout(() => setLogSuccessMsg(''), 4000);
   };
 
-  // Copy Dua helper
   const handleCopyDua = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedDuaId(id);
     setTimeout(() => setCopiedDuaId(null), 2500);
   };
 
-  // Helper to add quick Tahajjud custom alarm
   const handleAddTahajjudAlarm = (minsBeforeFajr: number, label: string) => {
     try {
       const fajrMins = parseTimeToMinutes(todayTimes.Fajr || '04:30');
@@ -518,7 +609,6 @@ export default function KhushuQiyamTracker({
     }
   };
 
-  // Past 30 days Qiyam statistics
   const getQiyamStats = () => {
     let qiyamDaysCount = 0;
     let totalRakahsSum = 0;
@@ -539,35 +629,55 @@ export default function KhushuQiyamTracker({
 
   const { qiyamDaysCount, totalRakahsSum } = getQiyamStats();
 
+  const filteredSteps = stepCategoryFilter === 'all' 
+    ? KHUSHU_STEPS 
+    : KHUSHU_STEPS.filter(s => s.category === stepCategoryFilter);
+
+  const filteredDuas = duaCategoryFilter === 'all'
+    ? QIYAM_DUAS
+    : QIYAM_DUAS.filter(d => d.category === duaCategoryFilter);
+
   return (
-    <div className="space-y-6 text-end pb-12 animate-fade-in">
-      {/* 1. HERO BANNER */}
+    <div className="space-y-6 text-end pb-12 animate-fade-in" dir="rtl">
+      
+      {/* 1. HERO BANNER & LIVE FOCUS MODE TRIGGER */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c121e] via-[#151c2d] to-[#1f1636] p-6 text-white border border-indigo-500/30 shadow-xl">
         <div className="absolute top-0 end-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 start-0 w-48 h-48 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                <Moon className="w-6 h-6 text-indigo-400" />
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner">
+                <Moon className="w-7 h-7 text-indigo-400" />
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                   <span>الخشوع وقيام الليل والتهجد</span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
                     شرف المؤمن 🌙
                   </span>
                 </h2>
                 <p className="text-[11px] text-slate-300 font-medium">
-                  حاسبة ثلث الليل الآخر، دليل الخشوع في الصلاة، وأدعية ومناجاة التهجد
+                  حاسبة ثلث الليل الآخر، وضع الخلوة والتركيز المباشر، ودليل الخشوع والمناجاة
                 </p>
               </div>
             </div>
 
-            <div className="text-start font-mono">
-              <span className="text-xs text-indigo-300 font-bold block">{hijri.fullString}</span>
-              <span className="text-[10px] text-slate-400 font-bold">{toArabicNumbers(todayStr)}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsFocusModeActive(true)}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg transition-all cursor-pointer flex items-center gap-2 active:scale-95 border border-amber-400/30"
+              >
+                <Maximize2 className="w-4 h-4 text-amber-200" />
+                <span>وضع الخلوة والتهجد الحية ✨</span>
+              </button>
+
+              <div className="text-start font-mono bg-white/5 px-3 py-1.5 rounded-2xl border border-white/10 hidden sm:block">
+                <span className="text-xs text-indigo-300 font-bold block">{hijri.fullString}</span>
+                <span className="text-[10px] text-slate-400 font-bold">{toArabicNumbers(todayStr)}</span>
+              </div>
             </div>
           </div>
 
@@ -582,6 +692,132 @@ export default function KhushuQiyamTracker({
           </div>
         </div>
       </div>
+
+      {/* FULLSCREEN LIVE FOCUS MODE MODAL (وضع الخلوة الحية والمناجاة) */}
+      {isFocusModeActive && (
+        <div className="fixed inset-0 z-50 bg-[#080d1a]/95 backdrop-blur-xl text-white p-4 sm:p-8 flex flex-col justify-between overflow-y-auto animate-fade-in" dir="rtl">
+          {/* Focus Mode Top Bar */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+              <h3 className="text-base font-black text-amber-200">وضع الخلوة المتبتلة والتهجد المباشر</h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsFocusModeActive(false)}
+              className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all cursor-pointer"
+              title="إغلاق وضع الخلوة"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Focus Mode Central Content */}
+          <div className="my-auto max-w-2xl mx-auto w-full space-y-6 py-6 text-center">
+            {/* Pulsing Breathing Circle */}
+            <div className="relative w-40 h-40 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 bg-indigo-500/20 rounded-full animate-ping duration-1000 pointer-events-none" />
+              <div className="absolute inset-2 bg-purple-500/30 rounded-full blur-md pointer-events-none" />
+              <div className="relative z-10 w-32 h-32 rounded-full bg-gradient-to-tr from-indigo-900 to-purple-800 border-2 border-indigo-400/50 flex flex-col items-center justify-center space-y-1 shadow-2xl">
+                <Moon className="w-8 h-8 text-amber-300" />
+                <span className="text-xs font-black text-indigo-100">بَيْنَ يَدَيِ اللَّهِ</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-lg font-black text-amber-100">«واستشعر قرب السميع العليم في خلوتك»</h4>
+              <p className="text-xs text-slate-300 font-medium max-w-md mx-auto leading-relaxed">
+                فرّغ قلبك من الشواغل، وصَلِّ ركعتين خفيفتين افتتاحاً ثم تبتل في محرابك مثنى مثنى.
+              </p>
+            </div>
+
+            {/* Live Rakah Counter */}
+            <div className="p-4 bg-white/5 border border-white/10 rounded-3xl max-w-md mx-auto space-y-3">
+              <span className="text-xs font-extrabold text-indigo-300 block">عدّاد ركعات التهجد الحالية:</span>
+              <div className="flex items-center justify-center gap-6">
+                <button
+                  type="button"
+                  onClick={() => setLiveRakahCounter(prev => Math.max(0, prev - 2))}
+                  className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl text-white font-black transition-all active:scale-95 cursor-pointer"
+                >
+                  <Minus className="w-5 h-5" />
+                </button>
+                <span className="text-3xl font-black text-amber-300 font-mono">
+                  {toArabicNumbers(liveRakahCounter)} ركعة
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLiveRakahCounter(prev => prev + 2)}
+                  className="p-3 bg-amber-500 hover:bg-amber-600 rounded-2xl text-white font-black transition-all active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold">صلاة الليل مثنى مثنى (ركعتان ركعتان)</p>
+            </div>
+
+            {/* Live Supplication Selection Box */}
+            <div className="p-4 bg-indigo-950/60 border border-indigo-500/30 rounded-3xl text-end space-y-2">
+              <span className="text-xs font-black text-indigo-300 block text-center">دعاء ومناجاة حية للمحراب:</span>
+              <p className="text-sm font-black text-amber-100 leading-relaxed font-serif text-center py-2">
+                «{selectedFocusDua}»
+              </p>
+              <div className="flex justify-center gap-2 flex-wrap pt-2">
+                {QIYAM_DUAS.map(d => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setSelectedFocusDua(d.arabic)}
+                    className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-[10px] font-bold rounded-xl border border-white/10 text-slate-200 transition-all cursor-pointer"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Ambient Sound Toggles in Focus Mode */}
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => playAmbientAudio('rain')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  activeAmbient === 'rain' ? 'bg-blue-600 text-white' : 'bg-white/10 text-slate-300'
+                }`}
+              >
+                🌧️ مطر خفيف
+              </button>
+              <button
+                type="button"
+                onClick={() => playAmbientAudio('breeze')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  activeAmbient === 'breeze' ? 'bg-indigo-600 text-white' : 'bg-white/10 text-slate-300'
+                }`}
+              >
+                🍃 نسيم السحر
+              </button>
+            </div>
+          </div>
+
+          {/* Focus Mode Bottom Bar */}
+          <div className="border-t border-white/10 pt-4 flex items-center justify-between text-xs">
+            <span className="text-slate-400 font-bold">
+              تقبل الله طاعتك وقيامك 🌿
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                handleSaveQiyam(liveRakahCounter, witrRakahs || 1);
+                setIsFocusModeActive(false);
+              }}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl cursor-pointer transition-all active:scale-95"
+            >
+              حفظ ونقل لركعات اليوم ({toArabicNumbers(liveRakahCounter)} ركعة)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* SUCCESS TOAST NOTIFICATION */}
       {logSuccessMsg && (
@@ -720,11 +956,11 @@ export default function KhushuQiyamTracker({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => playAmbientAudio('rain')}
-              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
+              className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
                 activeAmbient === 'rain'
                   ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                   : 'bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-blue-400'
@@ -736,13 +972,25 @@ export default function KhushuQiyamTracker({
             <button
               type="button"
               onClick={() => playAmbientAudio('breeze')}
-              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
+              className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
                 activeAmbient === 'breeze'
                   ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                   : 'bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-indigo-400'
               }`}
             >
               <span>🍃 نسيم السحر</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => playAmbientAudio('stream')}
+              className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-1 ${
+                activeAmbient === 'stream'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-teal-400'
+              }`}
+            >
+              <span>جداول الماء</span>
             </button>
           </div>
         </div>
@@ -954,64 +1202,243 @@ export default function KhushuQiyamTracker({
           </div>
         </div>
 
+        {/* Step Categories Filter Buttons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] font-bold">
+          <button
+            type="button"
+            onClick={() => setStepCategoryFilter('all')}
+            className={`px-3 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+              stepCategoryFilter === 'all'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            جميع الخطوات ({toArabicNumbers(KHUSHU_STEPS.length)})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStepCategoryFilter('preparation')}
+            className={`px-3 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+              stepCategoryFilter === 'preparation'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            قبل الصلاة (التهيئة)
+          </button>
+          <button
+            type="button"
+            onClick={() => setStepCategoryFilter('during')}
+            className={`px-3 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+              stepCategoryFilter === 'during'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            أثناء الصلاة (الحضور)
+          </button>
+          <button
+            type="button"
+            onClick={() => setStepCategoryFilter('post')}
+            className={`px-3 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+              stepCategoryFilter === 'post'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            بعد الصلاة (المناجاة)
+          </button>
+        </div>
+
         {/* Khushu Steps Checklist */}
         <div className="space-y-2">
-          {KHUSHU_STEPS.map((step, idx) => {
+          {filteredSteps.map((step) => {
             const isDone = completedKhushuSteps.has(step.id);
             return (
-              <button
+              <div
                 key={step.id}
-                type="button"
-                onClick={() => toggleKhushuStep(step.id)}
-                className={`w-full p-3 rounded-2xl border text-end transition-all cursor-pointer flex items-start gap-3 ${
+                className={`p-3.5 rounded-2xl border text-end transition-all space-y-2 ${
                   isDone
                     ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-slate-800 dark:text-slate-200'
                     : 'bg-slate-50/60 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/40'
                 }`}
               >
-                <div className="mt-0.5 shrink-0">
-                  {isDone ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <Circle className="w-4 h-4 text-slate-400" />
-                  )}
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleKhushuStep(step.id)}
+                    className="flex items-start gap-2.5 flex-1 cursor-pointer text-end"
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {isDone ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-slate-400" />
+                      )}
+                    </div>
+
+                    <div className="space-y-0.5 min-w-0">
+                      <h4 className={`text-xs font-black ${isDone ? 'line-through opacity-80 text-emerald-900 dark:text-emerald-300' : 'text-slate-800 dark:text-white'}`}>
+                        {step.title}
+                      </h4>
+                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium leading-normal">
+                        {step.desc}
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStepDetail(selectedStepDetail?.id === step.id ? null : step)}
+                    className="p-1 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-lg text-[10px] font-extrabold shrink-0 cursor-pointer"
+                  >
+                    {selectedStepDetail?.id === step.id ? 'إخفاء الفائدة' : 'فائدة نبوية 💡'}
+                  </button>
                 </div>
 
-                <div className="space-y-0.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-black text-slate-400 font-mono">
-                      {toArabicNumbers(idx + 1)}.
-                    </span>
-                    <h4 className={`text-xs font-black ${isDone ? 'line-through opacity-80 text-emerald-900 dark:text-emerald-300' : 'text-slate-800 dark:text-white'}`}>
-                      {step.title}
-                    </h4>
+                {selectedStepDetail?.id === step.id && (
+                  <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs text-indigo-950 dark:text-indigo-200 font-medium leading-relaxed animate-fade-in">
+                    <span className="font-black block text-indigo-700 dark:text-indigo-300 mb-0.5">💡 أصل السنة والدليل:</span>
+                    {step.tip}
                   </div>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium leading-normal">
-                    {step.desc}
-                  </p>
-                </div>
-              </button>
+                )}
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* 5. QIYAM & TAHAJJUD SUPPLICATIONS (أدعية ومناجاة التهجد) */}
+      {/* 5. RECOMMENDED SURAHS FOR QIYAM (سور مستحبة لقيام الليل) */}
       <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
           <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
           <div>
             <h3 className="text-sm font-black text-slate-800 dark:text-white">
-              أدعية ومناجاة قيام الليل والوتر والأسحار
+              سور وآيات كريمة لقيام الليل وتلاوة المحراب
             </h3>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
-              الأدعية المأثورة للتهجد والقنوت والاستغفار في السحر
+              مقترحات للسور المباركة التي يورث تدبرها الخشوع والطمأنينة في القيام
             </p>
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {QIYAM_RECOMMENDED_SURAHS.map((surah) => (
+            <div
+              key={surah.id}
+              className="p-4 bg-gradient-to-br from-indigo-50/60 via-purple-50/30 to-slate-50/80 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-slate-900/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 space-y-2 flex flex-col justify-between"
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                    {surah.name}
+                  </span>
+                  <span className="text-[10px] font-mono font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 px-2 py-0.5 rounded-lg">
+                    {toArabicNumbers(surah.verses)} آية
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-700 dark:text-slate-300 font-bold leading-relaxed">
+                  {surah.virtue}
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-indigo-100/60 dark:border-indigo-900/30 flex items-center justify-between">
+                <span className="text-[9.5px] text-slate-500 dark:text-slate-400 font-medium">
+                  {surah.recommendation}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSurahsRead(prev => prev ? `${prev}، ${surah.name}` : surah.name);
+                    setLogSuccessMsg(`تم إدراج ${surah.name} في قائمة تلاوتك لليوم!`);
+                  }}
+                  className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black cursor-pointer transition-all shrink-0 active:scale-95"
+                >
+                  إضافة للتلاوة +
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 6. QIYAM & TAHAJJUD SUPPLICATIONS (أدعية ومناجاة التهجد) */}
+      <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Bookmark className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <div>
+              <h3 className="text-sm font-black text-slate-800 dark:text-white">
+                أدعية ومناجاة قيام الليل والوتر والأسحار
+              </h3>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                الأدعية المأثورة للتهجد والقنوت والاستغفار في السحر
+              </p>
+            </div>
+          </div>
+
+          {/* Category Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-bold">
+            <button
+              type="button"
+              onClick={() => setDuaCategoryFilter('all')}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+                duaCategoryFilter === 'all'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              الكل
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuaCategoryFilter('istiftah')}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+                duaCategoryFilter === 'istiftah'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              الاستفتاح
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuaCategoryFilter('qunut')}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+                duaCategoryFilter === 'qunut'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              القنوت
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuaCategoryFilter('istighfar')}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+                duaCategoryFilter === 'istighfar'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              الاستغفار
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuaCategoryFilter('munajat')}
+              className={`px-2.5 py-1 rounded-xl transition-all cursor-pointer shrink-0 ${
+                duaCategoryFilter === 'munajat'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              المناجاة
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-3">
-          {QIYAM_DUAS.map((dua) => {
+          {filteredDuas.map((dua) => {
             const isCopied = copiedDuaId === dua.id;
             return (
               <div 
@@ -1026,7 +1453,7 @@ export default function KhushuQiyamTracker({
                   <button
                     type="button"
                     onClick={() => handleCopyDua(dua.id, dua.arabic)}
-                    className="py-1 px-2 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 transition-all cursor-pointer flex items-center gap-1"
+                    className="py-1 px-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 transition-all cursor-pointer flex items-center gap-1 active:scale-95"
                   >
                     {isCopied ? (
                       <>
@@ -1055,7 +1482,7 @@ export default function KhushuQiyamTracker({
         </div>
       </div>
 
-      {/* 6. TAHAJJUD PLAN GENERATOR & ROUTINE SELECTOR */}
+      {/* 7. TAHAJJUD PLAN GENERATOR & ROUTINE SELECTOR */}
       <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
           <Sliders className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -1098,7 +1525,7 @@ export default function KhushuQiyamTracker({
                 onClick={() => {
                   setLogSuccessMsg(`تم اختيار ${plan.title}! استعن بالله وتبتل في محرابك.`);
                 }}
-                className="w-full mt-3 py-1.5 px-3 bg-purple-600/10 hover:bg-purple-600/20 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-black transition-all cursor-pointer border border-purple-500/20 text-center"
+                className="w-full mt-3 py-1.5 px-3 bg-purple-600/10 hover:bg-purple-600/20 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-black transition-all cursor-pointer border border-purple-500/20 text-center active:scale-95"
               >
                 اعتماد هذه الخطة ⚡
               </button>
@@ -1107,7 +1534,61 @@ export default function KhushuQiyamTracker({
         </div>
       </div>
 
-      {/* 7. QIYAM HADITHS & VIRTUES */}
+      {/* 8. QIYAM JOURNAL HISTORY (سجل وخواطر القيام السابقة) */}
+      {qiyamJournalHistory.length > 0 && (
+        <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <div>
+                <h3 className="text-sm font-black text-slate-800 dark:text-white">
+                  سجل الخواطر والمناجاة في قيام الليل
+                </h3>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                  مراجعة سجلك وخواطرك الإيمانية في الخلوات السابقة
+                </p>
+              </div>
+            </div>
+
+            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-xl">
+              {toArabicNumbers(qiyamJournalHistory.length)} ليلة موثقة
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {qiyamJournalHistory.slice(0, 6).map((entry, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-1.5">
+                  <span className="font-extrabold text-slate-700 dark:text-slate-300">{toArabicNumbers(entry.date)}</span>
+                  <span className="text-amber-500 font-black">{'⭐'.repeat(entry.rating)}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                  <span>قيام: {toArabicNumbers(entry.rakahs)} ركعة</span>
+                  <span>وتر: {toArabicNumbers(entry.witrRakahs)} ركعة</span>
+                </div>
+
+                {entry.surahs && (
+                  <p className="text-[10.5px] font-bold text-indigo-700 dark:text-indigo-300">
+                    التلاوة: {entry.surahs}
+                  </p>
+                )}
+
+                {entry.notes && (
+                  <p className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
+                    «{entry.notes}»
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 9. QIYAM HADITHS & VIRTUES */}
       <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
           <Award className="w-5 h-5 text-amber-500" />
@@ -1144,7 +1625,7 @@ export default function KhushuQiyamTracker({
         </div>
       </div>
 
-      {/* 8. QURAN VERSES TARGETS (10, 100, 1000 VERSES) */}
+      {/* 10. QURAN VERSES TARGETS (10, 100, 1000 VERSES) */}
       <div className="bg-gradient-to-br from-[#111827] via-[#1a2234] to-[#251b3a] rounded-3xl p-5 text-white border border-indigo-500/30 shadow-xl space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-700/60 pb-3">
           <Zap className="w-5 h-5 text-amber-400" />
