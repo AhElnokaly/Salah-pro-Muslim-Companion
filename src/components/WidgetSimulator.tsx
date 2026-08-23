@@ -15,6 +15,7 @@ import {
   Maximize2 
 } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
+import { parseTimeToMinutes } from '../utils/prayerCalc';
 
 interface WidgetSimulatorProps {
   prayerTimes: any;
@@ -35,11 +36,24 @@ interface WidgetSimulatorProps {
 }
 
 const WALLPAPERS = [
-  { id: 'slate', name: 'رمادي', style: 'bg-slate-900 border-slate-750' },
+  { id: 'starry', name: 'نجوم', style: 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-950 via-slate-950 to-black border-sky-950' },
   { id: 'desert', name: 'صحراء', style: 'bg-gradient-to-tr from-[#1f1235] via-[#481d3d] to-[#99413b] border-pink-900/30' },
   { id: 'forest', name: 'غابة', style: 'bg-gradient-to-b from-[#061f18] via-[#0c2e26] to-[#143d34] border-emerald-950' },
-  { id: 'starry', name: 'نجوم', style: 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-sky-950 via-slate-950 to-black border-sky-950' }
+  { id: 'slate', name: 'رمادي', style: 'bg-slate-900 border-slate-750' },
+  { id: 'light', name: 'نهار', style: 'bg-gradient-to-br from-amber-50 via-sky-50 to-emerald-50 border-amber-200' }
 ];
+
+export function getMoonPhaseInfo(hijriDay: number) {
+  const day = hijriDay || 15;
+  if (day >= 1 && day <= 3) return { icon: '🌙', name: 'هلال أول الشهر', phase: 'Waxing Crescent' };
+  if (day >= 4 && day <= 7) return { icon: '🌓', name: 'تربيع أول', phase: 'First Quarter' };
+  if (day >= 8 && day <= 12) return { icon: '🌔', name: 'أحدب متزايد', phase: 'Waxing Gibbous' };
+  if (day >= 13 && day <= 16) return { icon: '🌕', name: 'بدر كامل', phase: 'Full Moon' };
+  if (day >= 17 && day <= 21) return { icon: '🌖', name: 'أحدب متناقص', phase: 'Waning Gibbous' };
+  if (day >= 22 && day <= 25) return { icon: '🌗', name: 'تربيع ثاني', phase: 'Last Quarter' };
+  if (day >= 26 && day <= 28) return { icon: '🌘', name: 'هلال آخر الشهر', phase: 'Waning Crescent' };
+  return { icon: '🌑', name: 'محاق', phase: 'New Moon' };
+}
 
 export default function WidgetSimulator({
   prayerTimes,
@@ -52,13 +66,50 @@ export default function WidgetSimulator({
   dayNameArabic = 'الجمعة',
   gregorianStr = '١٧ يوليو ٢٠٢٦'
 }: WidgetSimulatorProps) {
-  const [widgetType, setWidgetType] = useState<'timeline' | 'grid' | 'teal' | 'analog' | 'compact'>('timeline');
-  const [widgetTheme, setWidgetTheme] = useState<'green' | 'gold' | 'glass' | 'dark-blue'>('dark-blue');
-  const [activeWallpaper, setActiveWallpaper] = useState('starry');
+  const [widgetType, setWidgetType] = useState<
+    'custom' | 'timeline' | 'grid' | 'teal' | 'analog' | 'compact' | 'dhikr' | 'qibla' | 'calendar'
+  >((settings?.pinnedWidget?.type as any) || 'custom');
+  const [widgetTheme, setWidgetTheme] = useState<'green' | 'gold' | 'glass' | 'dark-blue' | 'amber' | 'onyx'>(
+    (settings?.pinnedWidget?.theme as any) || 'dark-blue'
+  );
+  const [activeWallpaper, setActiveWallpaper] = useState(settings?.pinnedWidget?.wallpaper || 'starry');
   const [internalTime, setInternalTime] = useState<Date>(new Date());
+  const [subhaCount, setSubhaCount] = useState<number>(0);
   const [isPinned, setIsPinned] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Modular Custom Widget Toggles
+  const [clockStyle, setClockStyle] = useState<'none' | 'digital' | 'analog'>(
+    settings?.pinnedWidget?.clockStyle || 'digital'
+  );
+  const [showMoonPhase, setShowMoonPhase] = useState<boolean>(
+    settings?.pinnedWidget?.showMoonPhase ?? true
+  );
+  const [prayerDisplay, setPrayerDisplay] = useState<'none' | 'next_only' | 'all_prayers'>(
+    settings?.pinnedWidget?.prayerDisplay || 'next_only'
+  );
+  const [showDate, setShowDate] = useState<boolean>(
+    settings?.pinnedWidget?.showDate ?? true
+  );
+  const [showDhikr, setShowDhikr] = useState<boolean>(
+    settings?.pinnedWidget?.showDhikr ?? true
+  );
+  const [showAyah, setShowAyah] = useState<boolean>(
+    settings?.pinnedWidget?.showAyah ?? false
+  );
+  const [showQibla, setShowQibla] = useState<boolean>(
+    settings?.pinnedWidget?.showQibla ?? false
+  );
+  const [showSubhaBtn, setShowSubhaBtn] = useState<boolean>(
+    settings?.pinnedWidget?.showSubhaBtn ?? true
+  );
+  const [showProgressBar, setShowProgressBar] = useState<boolean>(
+    settings?.pinnedWidget?.showProgressBar ?? true
+  );
+  const [cardSize, setCardSize] = useState<'compact' | 'medium' | 'large'>(
+    settings?.pinnedWidget?.cardSize || 'medium'
+  );
 
   // Local timer for mock clock hands and updates
   useEffect(() => {
@@ -68,17 +119,25 @@ export default function WidgetSimulator({
     return () => clearInterval(timer);
   }, []);
 
-  const currentWallpaper = WALLPAPERS.find(w => w.id === activeWallpaper) || WALLPAPERS[3];
+  const currentWallpaper = WALLPAPERS.find(w => w.id === activeWallpaper) || WALLPAPERS[0];
 
   const getWidgetThemeClass = () => {
+    if (widgetType === 'teal') {
+      return 'bg-gradient-to-tr from-[#029587] via-[#05ab95] to-[#0ea185] text-white border border-teal-400/30 shadow-xl';
+    }
     switch (widgetTheme) {
       case 'green':
-        return 'bg-gradient-to-b from-emerald-950/95 to-teal-900/95 border border-emerald-500/30 text-white shadow-xl';
+        return 'bg-gradient-to-b from-emerald-950/95 via-emerald-900/95 to-teal-950/95 border border-emerald-500/30 text-white shadow-xl';
       case 'gold':
-        return 'bg-gradient-to-b from-[#1c1b18]/95 via-[#23201a]/95 to-[#2b2720]/95 border border-amber-500/20 text-amber-100 shadow-xl';
+        return 'bg-gradient-to-b from-[#1c1b18]/95 via-[#23201a]/95 to-[#2b2720]/95 border border-amber-500/30 text-amber-100 shadow-xl';
       case 'glass':
         return 'bg-white/10 backdrop-blur-xl border border-white/20 text-white shadow-xl';
+      case 'amber':
+        return 'bg-gradient-to-tr from-[#2d1706]/95 via-[#452309]/95 to-[#1c0f04]/95 border border-amber-600/30 text-amber-100 shadow-xl';
+      case 'onyx':
+        return 'bg-gradient-to-b from-[#090d12]/95 via-[#111823]/95 to-[#080b0f]/95 border border-slate-700/40 text-slate-100 shadow-xl';
       case 'dark-blue':
+      default:
         return 'bg-gradient-to-b from-[#0c1826]/95 to-[#112236]/95 border border-blue-900/40 text-white shadow-2xl';
     }
   };
@@ -96,12 +155,41 @@ export default function WidgetSimulator({
     return names[p] || p;
   };
 
+  const getFormattedTimeRemaining = (tStr: string) => {
+    if (!tStr) return '';
+    const clean = tStr.replace('-', '').trim();
+    const parts = clean.split(':');
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (h > 0) {
+        return `${toArabicNumbers(h)} س و ${toArabicNumbers(m)} د`;
+      }
+      return `${toArabicNumbers(m)} دقيقة`;
+    }
+    return toArabicNumbers(clean);
+  };
+
+  const getPrayerProgressPercent = () => {
+    if (!prayerTimes || !currentPrayer || !nextPrayer) return 50;
+    const currMin = parseTimeToMinutes(prayerTimes[currentPrayer] || '');
+    let nextMin = parseTimeToMinutes(prayerTimes[nextPrayer] || '');
+    const nowMin = internalTime.getHours() * 60 + internalTime.getMinutes();
+    if (nextMin <= currMin) nextMin += 24 * 60;
+    let currentAdjusted = nowMin;
+    if (currentAdjusted < currMin && nextMin > 24 * 60) currentAdjusted += 24 * 60;
+    const total = nextMin - currMin;
+    if (total <= 0) return 50;
+    const elapsed = currentAdjusted - currMin;
+    return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+  };
+
   const getCompactCountdown = () => {
     const parts = timeRemainingStr.split(':');
     if (parts.length < 3) return timeRemainingStr;
     const h = parseInt(parts[0]);
     const m = parseInt(parts[1]);
-    return `-${toArabicNumbers(h)}س ${toArabicNumbers(m)}د`;
+    return `${toArabicNumbers(h)} س ${toArabicNumbers(m)} د`;
   };
 
   // Clock calculations
@@ -125,11 +213,21 @@ export default function WidgetSimulator({
         pinnedWidget: {
           type: widgetType,
           theme: widgetTheme,
-          wallpaper: activeWallpaper
+          wallpaper: activeWallpaper,
+          clockStyle,
+          showMoonPhase,
+          prayerDisplay,
+          showDate,
+          showDhikr,
+          showAyah,
+          showQibla,
+          showSubhaBtn,
+          showProgressBar,
+          cardSize
         }
       }));
       setIsPinned(true);
-      setToastMessage('📌 تم تثبيت هذا الـ Widget بنجاح! سيظهر الآن بشكل مخصص في شاشتك الرئيسية للتطبيق 🥳🤍');
+      setToastMessage('📌 تم تثبيت الـ Widget المخصص بنجاح! سيظهر الآن بجميع مكوناته على شاشتك الرئيسية 🥳🤍');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 5000);
     }
@@ -311,7 +409,7 @@ export default function WidgetSimulator({
         <text x="210" y="145" fill="#fbbf24" font-family="monospace, system-ui" font-size="28" font-weight="900" text-anchor="start">${toArabicNumbers(timeRemainingStr)}</text>
         
         <!-- Location details -->
-        <text x="210" y="185" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="start" opacity="0.4">📍 ${settings.cityName || 'الإسكندرية'} • رفيق المسلم</text>
+        <text x="210" y="185" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="start" opacity="0.4">📍 ${settings.cityName || 'الإسكندرية'} • هِمَّتِي</text>
       `;
     } else if (widgetType === 'grid') {
       const gTimes = [
@@ -357,6 +455,67 @@ export default function WidgetSimulator({
         
         <text x="345" y="114" fill="#fbbf24" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="end">📍 ${settings.cityName || 'مكة المكرمة'}</text>
       `;
+    } else if (widgetType === 'dhikr') {
+      svgContent = `
+        <!-- Dhikr Card layout -->
+        <text x="25" y="40" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="12" font-weight="900" text-anchor="start">✨ ذكر اليوم والبركة</text>
+        <text x="375" y="40" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="end" opacity="0.6">${dayNameArabic}</text>
+        <line x1="25" y1="55" x2="375" y2="55" stroke="${textPrimary}" stroke-width="1" opacity="0.1" />
+        
+        <text x="200" y="105" fill="#fef3c7" font-family="Traditional Arabic, serif" font-size="16" font-weight="bold" text-anchor="middle">«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»</text>
+        
+        <rect x="130" y="130" width="140" height="36" rx="18" fill="#f59e0b" />
+        <text x="200" y="152" fill="#0f172a" font-family="system-ui, sans-serif" font-size="12" font-weight="900" text-anchor="middle">📿 تسبيحة البركة</text>
+        
+        <text x="25" y="195" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="start" opacity="0.5">الصلاة القادمة: ${getArabicName(nextPrayer)}</text>
+        <text x="375" y="195" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="end" opacity="0.5">📍 ${settings.cityName || 'مكة المكرمة'}</text>
+      `;
+    } else if (widgetType === 'qibla') {
+      svgContent = `
+        <!-- Qibla Compass layout -->
+        <circle cx="80" cy="110" r="50" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+        <text x="80" y="108" fill="#f59e0b" font-family="system-ui" font-size="20" text-anchor="middle">🕌</text>
+        <text x="80" y="125" fill="#f59e0b" font-family="monospace" font-size="10" font-weight="900" text-anchor="middle">١٣٦°</text>
+        
+        <text x="150" y="80" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="11" font-weight="900" text-anchor="start">بوصلة القبلة المباشرة</text>
+        <text x="150" y="110" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="16" font-weight="900" text-anchor="start">اتجاه الكعبة المشرفة</text>
+        <text x="150" y="135" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="start" opacity="0.6">موقعك: ${settings.cityName || 'الإسكندرية'}</text>
+        
+        <rect x="150" y="155" width="225" height="35" rx="10" fill="#000000" fill-opacity="0.2" />
+        <text x="165" y="176" fill="${textPrimary}" font-family="system-ui" font-size="10" opacity="0.7">الأذان القادم:</text>
+        <text x="360" y="177" fill="#f59e0b" font-family="monospace" font-size="14" font-weight="900" text-anchor="end">${toArabicNumbers(timeRemainingStr)}</text>
+      `;
+    } else if (widgetType === 'calendar') {
+      svgContent = `
+        <!-- Calendar layout -->
+        <rect x="25" y="25" width="45" height="45" rx="10" fill="#10b981" />
+        <text x="47" y="48" fill="#ffffff" font-family="system-ui" font-size="16" font-weight="900" text-anchor="middle">${toArabicNumbers(currentDayDigit)}</text>
+        <text x="47" y="62" fill="#ffffff" font-family="system-ui" font-size="9" font-weight="bold" text-anchor="middle">${currentMonthName}</text>
+        
+        <text x="80" y="42" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="14" font-weight="900" text-anchor="start">${dayNameArabic}</text>
+        <text x="80" y="60" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="start">${toArabicNumbers(currentYear)} هجرية</text>
+        
+        <rect x="280" y="30" width="95" height="30" rx="8" fill="#ffffff" fill-opacity="0.1" />
+        <text x="327" y="49" fill="#ffffff" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="middle">مستحب الصيام 🌙</text>
+        
+        <line x1="25" y1="85" x2="375" y2="85" stroke="${textPrimary}" stroke-width="1" opacity="0.1" />
+        
+        <!-- Prayers strip -->
+        <text x="50" y="120" fill="${textPrimary}" font-family="system-ui" font-size="10" text-anchor="middle">الظهر</text>
+        <text x="50" y="140" fill="${textPrimary}" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Dhuhr || '١٢:١٥')}</text>
+        
+        <text x="150" y="120" fill="${textPrimary}" font-family="system-ui" font-size="10" text-anchor="middle">العصر</text>
+        <text x="150" y="140" fill="${textPrimary}" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Asr || '١٥:٤٥')}</text>
+        
+        <text x="250" y="120" fill="#f59e0b" font-family="system-ui" font-size="10" font-weight="bold" text-anchor="middle">المغرب</text>
+        <text x="250" y="140" fill="#f59e0b" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Maghrib || '١٩:٠٢')}</text>
+        
+        <text x="350" y="120" fill="${textPrimary}" font-family="system-ui" font-size="10" text-anchor="middle">العشاء</text>
+        <text x="350" y="140" fill="${textPrimary}" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">${toArabicNumbers(prayerTimes.Isha || '٢٠:٣٥')}</text>
+        
+        <text x="25" y="195" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="start" opacity="0.4">📍 ${settings.cityName || 'مصر'}</text>
+        <text x="375" y="195" fill="${textPrimary}" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" text-anchor="end" opacity="0.4">${toArabicNumbers(gregorianStr)}</text>
+      `;
     }
 
     const fullSvg = startSvg + svgContent + endSvg;
@@ -364,7 +523,7 @@ export default function WidgetSimulator({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `muslim_companion_${widgetType}_widget.svg`;
+    link.download = `hemmaty_${widgetType}_widget.svg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -450,7 +609,7 @@ export default function WidgetSimulator({
         <div className="md:col-span-7 space-y-3.5 flex flex-col justify-between">
           
           {/* Quick Choice Grid: Widget Type */}
-          <div className="space-y-1.5 text-end">
+          <div className="space-y-1.5 text-right">
             <label className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
               <Sparkles className="w-3 h-3 animate-pulse" />
               ١. اختر شكل وتخطيط الـ Widget:
@@ -458,35 +617,32 @@ export default function WidgetSimulator({
             
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {[
-                { id: 'timeline', label: 'الشريط الزمني 📊', size: 'medium', desc: 'Timeline Slider' },
-                { id: 'grid', label: 'شبكة الصلاة 🗂️', size: 'large', desc: 'Six Grid Cards' },
-                { id: 'teal', label: 'عداد الوقت المضيء 🕌', size: 'medium', desc: 'Modern Teal' },
-                { id: 'analog', label: 'الساعة الكلاسيكية 🕒', size: 'medium', desc: 'Analog Dial' },
-                { id: 'compact', label: 'الوجت الرياضي المصغر ⚡', size: 'small', desc: 'Compact Pill' }
+                { id: 'custom', label: 'وجت مخصص 🎨', desc: 'بطاقة قابلة للتحكم' },
+                { id: 'timeline', label: 'الشريط الزمني 📊', desc: 'Timeline' },
+                { id: 'grid', label: 'شبكة الصلاة 🗂️', desc: 'Grid' },
+                { id: 'teal', label: 'العداد المضيء 🕌', desc: 'Teal' },
+                { id: 'analog', label: 'الساعة التناظرية 🕒', desc: 'Analog' },
+                { id: 'compact', label: 'الكبسولة المصغرة ⚡', desc: 'Compact' },
+                { id: 'dhikr', label: 'الذكر والتسبيح 📿', desc: 'Dhikr' },
+                { id: 'qibla', label: 'بوصلة القبلة 🧭', desc: 'Qibla' },
+                { id: 'calendar', label: 'التقويم الهجري 📅', desc: 'Calendar' }
               ].map((type) => {
                 const isSel = widgetType === type.id;
                 return (
                   <button
                     key={type.id}
                     type="button"
-                    onClick={() => {
-                      setWidgetType(type.id as any);
-                      if (type.id === 'teal') {
-                        setWidgetTheme('glass');
-                      } else if (type.id === 'analog') {
-                        setWidgetTheme('dark-blue');
-                      }
-                    }}
-                    className={`p-2.5 rounded-xl border text-end transition-all duration-200 hover:scale-[1.01] cursor-pointer flex flex-col justify-between h-[54px] ${
+                    onClick={() => setWidgetType(type.id as any)}
+                    className={`p-2 rounded-xl border text-right transition-all duration-200 hover:scale-[1.01] cursor-pointer flex flex-col justify-between h-[52px] ${
                       isSel
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm font-black ring-2 ring-indigo-400'
                         : isFaithBright
                         ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                         : 'bg-slate-900/45 border-white/5 text-slate-300 hover:bg-slate-800/80'
                     }`}
                   >
-                    <span className="text-[10.5px] font-black leading-none block">{type.label}</span>
-                    <span className={`text-[8px] font-bold block mt-0.5 ${isSel ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
+                    <span className="text-[10px] font-black leading-none block">{type.label}</span>
+                    <span className={`text-[7.5px] font-bold block mt-0.5 ${isSel ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
                       {type.desc}
                     </span>
                   </button>
@@ -495,18 +651,168 @@ export default function WidgetSimulator({
             </div>
           </div>
 
-          {/* Color Themes & Palettes (Visible if not overridden by teal template) */}
+          {/* Modular Customization Panel for Custom Card */}
+          {widgetType === 'custom' && (
+            <div className={`p-3 rounded-2xl border space-y-2.5 ${
+              isFaithBright ? 'bg-amber-50/60 border-amber-200/80' : 'bg-slate-900/80 border-white/10'
+            }`}>
+              <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                <span className="text-[11px] font-black text-amber-500 flex items-center gap-1">
+                  🛠️ لوحة تخصيص المكونات:
+                </span>
+                <span className="text-[9px] font-bold text-slate-400">
+                  تحكم بجميع العناصر
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
+                {/* Clock style */}
+                <div className="space-y-1 col-span-1">
+                  <label className="font-black text-slate-400 dark:text-slate-300 block">🕒 نمط الساعة:</label>
+                  <div className="flex gap-1 bg-black/20 p-1 rounded-xl">
+                    {[
+                      { id: 'none', label: 'بدون' },
+                      { id: 'digital', label: 'رقمية' },
+                      { id: 'analog', label: 'عقارب' },
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setClockStyle(opt.id as any)}
+                        className={`flex-1 py-1 rounded-lg text-[9px] font-black cursor-pointer transition-all ${
+                          clockStyle === opt.id ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Prayer times display */}
+                <div className="space-y-1 col-span-1">
+                  <label className="font-black text-slate-400 dark:text-slate-300 block">🕌 عرض الصلوات:</label>
+                  <div className="flex gap-1 bg-black/20 p-1 rounded-xl">
+                    {[
+                      { id: 'none', label: 'بدون' },
+                      { id: 'next_only', label: 'القادمة' },
+                      { id: 'all_prayers', label: 'الكل' },
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPrayerDisplay(opt.id as any)}
+                        className={`flex-1 py-1 rounded-lg text-[9px] font-black cursor-pointer transition-all ${
+                          prayerDisplay === opt.id ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Moon Phase Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowMoonPhase(!showMoonPhase)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showMoonPhase ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>🌙 طور القمر الهجري</span>
+                  <span className="text-[10px] font-black">{showMoonPhase ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Date & Calendar Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowDate(!showDate)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showDate ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>📅 التاريخ والتقويم</span>
+                  <span className="text-[10px] font-black">{showDate ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Daily Dhikr Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowDhikr(!showDhikr)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showDhikr ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>✨ ذكر ودعاء اليوم</span>
+                  <span className="text-[10px] font-black">{showDhikr ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Quranic Ayah Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowAyah(!showAyah)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showAyah ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>📖 آية قرأنية مباركة</span>
+                  <span className="text-[10px] font-black">{showAyah ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Qibla Direction Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowQibla(!showQibla)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showQibla ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>🧭 اتجاه القبلة</span>
+                  <span className="text-[10px] font-black">{showQibla ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Subha Button Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowSubhaBtn(!showSubhaBtn)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showSubhaBtn ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>📿 زر التسبيح المباشر</span>
+                  <span className="text-[10px] font-black">{showSubhaBtn ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+
+                {/* Progress Bar Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowProgressBar(!showProgressBar)}
+                  className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    showProgressBar ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-black' : 'bg-black/10 border-white/5 text-slate-400'
+                  }`}
+                >
+                  <span>⏳ شريط تقدم الصلاة القادمة</span>
+                  <span className="text-[10px] font-black">{showProgressBar ? 'مفعل ✓' : 'معطل'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Color Themes & Palettes */}
           {widgetType !== 'teal' && widgetType !== 'compact' && (
-            <div className="space-y-1.5 text-end">
+            <div className="space-y-1.5 text-right">
               <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
                 ٢. النمط البصري والألوان:
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {[
                   { id: 'dark-blue', label: '🔵 كحلي إيماني', activeBg: 'bg-blue-900/10 border-blue-400 text-blue-600 dark:text-blue-400' },
                   { id: 'green', label: '🟢 أخضر مكة', activeBg: 'bg-emerald-950/20 border-emerald-500 text-emerald-600 dark:text-emerald-400' },
                   { id: 'gold', label: '🟡 ذهبي كلاسيك', activeBg: 'bg-amber-950/20 border-amber-500 text-amber-600 dark:text-amber-400' },
-                  { id: 'glass', label: '💎 زجاجي بلوري', activeBg: 'bg-white/10 border-slate-300 text-slate-700 dark:text-slate-200' }
+                  { id: 'glass', label: '💎 زجاج بلوري', activeBg: 'bg-white/10 border-slate-300 text-slate-700 dark:text-slate-200' },
+                  { id: 'amber', label: '🟠 غروب الشمس', activeBg: 'bg-amber-900/20 border-amber-600 text-amber-500' },
+                  { id: 'onyx', label: '⬛ ليلي داكن', activeBg: 'bg-slate-900/80 border-slate-500 text-slate-200' }
                 ].map(t => {
                   const isThemeSel = widgetTheme === t.id;
                   return (
@@ -581,7 +887,7 @@ export default function WidgetSimulator({
                 نظراً للقيود الأمنية والتقنية لأنظمة التشغيل (<span className="text-indigo-500">iOS</span> و <span className="text-indigo-500">Android</span>)، فإن تطبيقات الويب المضافة للشاشة الرئيسية (<span className="text-amber-500 font-extrabold">PWA</span>) لا يُسمح لها برمجياً بإضافة "مكونات تفاعلية" (Widgets) مباشرة في درج الأدوات الرسمي للهاتف. هذا الامتياز حكر فقط على التطبيقات التي يتم تحميلها من المتاجر الرسمية.
               </p>
               <div className="pt-1 border-t border-slate-200 dark:border-white/5 space-y-1">
-                <p className="text-slate-700 dark:text-slate-300 font-black">ولكن، يقدم لك رفيق المسلم البدائل المبتكرة التالية:</p>
+                <p className="text-slate-700 dark:text-slate-300 font-black">ولكن، يقدم لك تطبيق هِمَّتِي البدائل المبتكرة التالية:</p>
                 <p>• <strong className="text-indigo-500">١. التثبيت داخل التطبيق:</strong> انقر على زر <strong className="text-slate-700 dark:text-slate-300">"تثبيت باللوحة الرئيسية"</strong> بالأعلى، ليظهر الـ Widget المخصص لك داخل واجهة التطبيق الرئيسية مباشرة عند فتحه!</p>
                 <p>• <strong className="text-indigo-500">٢. تطبيق أدوات الصور المخصصة:</strong> يمكنك تحميل الـ Widget بصيغة <strong className="text-slate-700 dark:text-slate-300">SVG بدقة عالية</strong> ثم استخدام تطبيقات ودجات الصور المجانية مثل (<span className="text-amber-500">Widgetsmith</span> للآيفون أو <span className="text-amber-500">Simple Photo Widget</span> للأندرويد) لعرض الوجت كصورة جميلة على شاشتك!</p>
               </div>
@@ -618,6 +924,186 @@ export default function WidgetSimulator({
             {/* Centered Widget Area - Real-time reacting */}
             <div className="my-auto z-10 w-full flex items-center justify-center py-2 px-0.5 min-h-[120px]">
               
+              {/* STYLE 0: Custom Modular Card */}
+              {widgetType === 'custom' && (
+                <div className={`w-full rounded-[18px] p-3 flex flex-col justify-between transition-all duration-500 border text-right select-none space-y-2 ${getWidgetThemeClass()}`}>
+                  {/* Header: Date + Moon Phase */}
+                  {showDate && (
+                    <div className="flex justify-between items-center border-b border-white/10 pb-1.5 text-[8px] font-black">
+                      <span className="text-white flex items-center gap-1">
+                        {dayNameArabic} • {toArabicNumbers(currentDayDigit)} {currentMonthName} {toArabicNumbers(currentYear)} هـ
+                      </span>
+                      {showMoonPhase && (
+                        <span className="text-amber-300 bg-amber-400/10 px-1.5 py-0.5 rounded-full text-[7.5px] flex items-center gap-0.5 font-bold">
+                          {getMoonPhaseInfo(currentDayDigit).icon} {getMoonPhaseInfo(currentDayDigit).name}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Clock Block */}
+                  {clockStyle === 'digital' && (
+                    <div className="text-center py-1 bg-black/20 rounded-xl border border-white/5">
+                      <span className="text-[18px] font-black font-mono tracking-widest text-white leading-none block">
+                        {toArabicNumbers(internalTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}
+                      </span>
+                      <span className="text-[6.5px] font-bold text-amber-400 block mt-0.5">التوقيت المحلي لمدينتك</span>
+                    </div>
+                  )}
+
+                  {clockStyle === 'analog' && (
+                    <div className="flex items-center justify-center gap-3 py-1">
+                      <div className="w-[52px] h-[52px] rounded-full bg-[#0a1520] border-2 border-[#1e3448] relative flex items-center justify-center shrink-0 shadow-lg">
+                        <div className="absolute inset-0.5 rounded-full border border-dashed border-white/10 pointer-events-none" />
+                        <span className="absolute top-1 text-[6px] font-black text-amber-400/80 leading-none">١٢</span>
+                        <span className="absolute end-1 text-[6px] font-black text-white/40 leading-none">٣</span>
+                        <span className="absolute bottom-1 text-[6px] font-black text-white/40 leading-none">٦</span>
+                        <span className="absolute start-1 text-[6px] font-black text-white/40 leading-none">٩</span>
+
+                        {/* Hour Hand */}
+                        <div 
+                          className="absolute bg-gradient-to-t from-amber-400 to-amber-200 rounded-full shadow-xs"
+                          style={{
+                            width: '2.5px',
+                            height: '14px',
+                            left: '50%',
+                            bottom: '50%',
+                            transformOrigin: 'bottom center',
+                            transform: `translateX(-50%) rotate(${hrDeg}deg)`
+                          }}
+                        />
+
+                        {/* Minute Hand */}
+                        <div 
+                          className="absolute bg-white rounded-full shadow-xs"
+                          style={{
+                            width: '1.5px',
+                            height: '19px',
+                            left: '50%',
+                            bottom: '50%',
+                            transformOrigin: 'bottom center',
+                            transform: `translateX(-50%) rotate(${minDeg}deg)`
+                          }}
+                        />
+
+                        {/* Second Hand */}
+                        <div 
+                          className="absolute bg-red-500 rounded-full"
+                          style={{
+                            width: '1px',
+                            height: '21px',
+                            left: '50%',
+                            bottom: '50%',
+                            transformOrigin: 'bottom center',
+                            transform: `translateX(-50%) rotate(${secDeg}deg)`
+                          }}
+                        />
+
+                        {/* Center Pivot Dot */}
+                        <div className="w-2 h-2 rounded-full bg-red-500 border border-white z-10 shadow-xs" />
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[7.5px] font-black text-amber-400 block">الساعة التناظرية</span>
+                        <span className="text-[10px] font-mono font-bold text-white block">{toArabicNumbers(internalTime.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }))}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Prayer Display */}
+                  {prayerDisplay === 'next_only' && (
+                    <div className="bg-black/25 p-2 rounded-xl border border-white/10 space-y-1.5 overflow-hidden">
+                      <div className="flex justify-between items-center text-[8.5px] gap-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                          <span className="font-black text-white truncate">
+                            الصلاة القادمة: صلاة {getArabicName(nextPrayer)}
+                          </span>
+                        </div>
+                        <span className="text-[8px] font-mono font-black text-amber-300 bg-amber-400/10 px-1.5 py-0.5 rounded-md border border-amber-400/20 shrink-0">
+                          {toArabicNumbers(prayerTimes[nextPrayer] || '')}
+                        </span>
+                      </div>
+
+                      {showProgressBar && (
+                        <div className="space-y-1 pt-0.5 border-t border-white/5">
+                          <div className="flex justify-between items-center text-[7.5px] font-bold px-0.5">
+                            <span className="text-amber-200/90 flex items-center gap-1">
+                              <span>⏳ متبقي للأذان:</span>
+                              <span className="font-mono font-black text-amber-300">
+                                {getFormattedTimeRemaining(timeRemainingStr)}
+                              </span>
+                            </span>
+                            <span className="text-white/50 text-[7px] font-mono">
+                              ({toArabicNumbers(getPrayerProgressPercent())}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-black/40 h-2 rounded-full overflow-hidden p-0.5 border border-white/10 relative">
+                            <div 
+                              className="bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 h-full rounded-full transition-all duration-700 shadow-sm"
+                              style={{ width: `${getPrayerProgressPercent()}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {prayerDisplay === 'all_prayers' && (
+                    <div className="grid grid-cols-5 gap-0.5 text-center bg-black/25 rounded-xl p-1 border border-white/10">
+                      {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
+                        const isActive = currentPrayer === pName;
+                        const prayerTime = prayerTimes[pName] || '٠٠:٠٠';
+                        return (
+                          <div key={pName} className={`p-0.5 rounded transition-all ${isActive ? 'bg-amber-400 text-slate-950 font-black' : 'text-white/80'}`}>
+                            <span className="text-[6px] block font-bold leading-none">{getArabicName(pName)}</span>
+                            <span className="text-[7px] block font-black font-mono mt-0.5 leading-none">{toArabicNumbers(prayerTime)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Dhikr Quote */}
+                  {showDhikr && (
+                    <div className="text-center py-0.5">
+                      <p className="text-[8.5px] font-black text-amber-100 font-serif leading-snug">
+                        «سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Quranic Ayah */}
+                  {showAyah && (
+                    <div className="text-center py-0.5 bg-white/5 rounded-lg p-1 border border-white/5">
+                      <p className="text-[8px] font-black text-emerald-200 font-serif leading-snug">
+                        «أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ» [الرعد: ٢٨]
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Qibla Indicator */}
+                  {showQibla && (
+                    <div className="flex justify-between items-center bg-black/20 px-2 py-1 rounded-lg text-[7.5px]">
+                      <span className="font-bold text-amber-300">🕋 اتجاه القبلة: ١٣٦° جنوب شرق</span>
+                      <span className="text-white/60">موقعك: {settings.cityName || 'الإسكندرية'}</span>
+                    </div>
+                  )}
+
+                  {/* Subha Button */}
+                  {showSubhaBtn && (
+                    <div className="flex justify-center pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setSubhaCount(c => c + 1)}
+                        className="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 font-black text-[9px] px-3 py-1 rounded-full shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>📿 تسبيح مباشر ({toArabicNumbers(subhaCount)})</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* STYLE 1: Timeline widget */}
               {widgetType === 'timeline' && (
                 <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-end select-none scale-100 ${getWidgetThemeClass()}`}>
@@ -704,7 +1190,7 @@ export default function WidgetSimulator({
                   </div>
 
                   <div className="text-center text-[6px] text-white/30 border-t border-white/5 pt-1 leading-none font-bold">
-                    مواقيت الصلاة • رفيق المسلم المطور
+                    مواقيت الصلاة • تطبيق هِمَّتِي
                   </div>
                 </div>
               )}
@@ -744,29 +1230,66 @@ export default function WidgetSimulator({
 
               {/* STYLE 4: Analog style dial */}
               {widgetType === 'analog' && (
-                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-2 transition-all duration-500 border text-end select-none ${getWidgetThemeClass()}`}>
+                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-3 transition-all duration-500 border text-end select-none ${getWidgetThemeClass()}`}>
                   {/* Miniature Clock Face */}
-                  <div className="w-[60px] h-[60px] rounded-full bg-[#0a1520] border border-[#192f44] relative flex items-center justify-center shrink-0">
-                    <div className="absolute inset-0.5 rounded-full border border-dashed border-white/5 pointer-events-none" />
-                    <span className="absolute top-0.5 text-[6px] font-black text-white/30 font-sans">١٢</span>
-                    <span className="absolute end-0.5 text-[6px] font-black text-white/30 font-sans">٣</span>
-                    <span className="absolute bottom-0.5 text-[6px] font-black text-white/30 font-sans">٦</span>
-                    <span className="absolute start-0.5 text-[6px] font-black text-white/30 font-sans">٩</span>
+                  <div className="w-[56px] h-[56px] rounded-full bg-[#0a1520] border-2 border-[#1e3448] relative flex items-center justify-center shrink-0 shadow-md">
+                    <div className="absolute inset-0.5 rounded-full border border-dashed border-white/10 pointer-events-none" />
+                    <span className="absolute top-1 text-[6px] font-black text-amber-400/80 leading-none">١٢</span>
+                    <span className="absolute end-1 text-[6px] font-black text-white/40 leading-none">٣</span>
+                    <span className="absolute bottom-1 text-[6px] font-black text-white/40 leading-none">٦</span>
+                    <span className="absolute start-1 text-[6px] font-black text-white/40 leading-none">٩</span>
 
-                    {/* Clock Hands */}
-                    <div className="absolute w-[1.5px] h-4.5 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${hrDeg}deg)`, top: 'calc(50% - 4.5px)' }} />
-                    <div className="absolute w-[1px] h-6 bg-white rounded-full origin-bottom" style={{ transform: `rotate(${minDeg}deg)`, top: 'calc(50% - 6px)' }} />
-                    <div className="absolute w-[0.5px] h-6 bg-red-500 origin-bottom" style={{ transform: `rotate(${secDeg}deg)`, top: 'calc(50% - 6px)' }} />
-                    <div className="w-1 h-1 rounded-full bg-red-500 border border-white z-10" />
+                    {/* Hour Hand */}
+                    <div 
+                      className="absolute bg-gradient-to-t from-amber-400 to-amber-200 rounded-full shadow-xs"
+                      style={{
+                        width: '2.5px',
+                        height: '15px',
+                        left: '50%',
+                        bottom: '50%',
+                        transformOrigin: 'bottom center',
+                        transform: `translateX(-50%) rotate(${hrDeg}deg)`
+                      }}
+                    />
+
+                    {/* Minute Hand */}
+                    <div 
+                      className="absolute bg-white rounded-full shadow-xs"
+                      style={{
+                        width: '1.5px',
+                        height: '21px',
+                        left: '50%',
+                        bottom: '50%',
+                        transformOrigin: 'bottom center',
+                        transform: `translateX(-50%) rotate(${minDeg}deg)`
+                      }}
+                    />
+
+                    {/* Second Hand */}
+                    <div 
+                      className="absolute bg-red-500 rounded-full"
+                      style={{
+                        width: '1px',
+                        height: '23px',
+                        left: '50%',
+                        bottom: '50%',
+                        transformOrigin: 'bottom center',
+                        transform: `translateX(-50%) rotate(${secDeg}deg)`
+                      }}
+                    />
+
+                    <div className="w-2 h-2 rounded-full bg-red-500 border border-white z-10 shadow-xs" />
                   </div>
 
-                  <div className="flex-1 space-y-0.5 text-end">
-                    <span className="text-[6px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicName(nextPrayer)}</span>
-                    <h4 className="text-[8px] font-black text-white leading-none">متبقي للأذان</h4>
-                    <span className="text-[9px] font-black text-white block font-mono leading-none mt-0.5" dir="ltr">
-                      {toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}
-                    </span>
-                    <div className="text-[6px] font-bold text-white/30 pt-0.5 border-t border-white/5 leading-none">
+                  <div className="flex-1 space-y-1 text-right">
+                    <span className="text-[7.5px] font-black text-amber-400 block uppercase leading-none">صلاة {getArabicName(nextPrayer)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[8px] font-bold text-white/70">متبقي للأذان:</span>
+                      <span className="text-[10px] font-black text-amber-300 font-mono leading-none">
+                        {getFormattedTimeRemaining(timeRemainingStr)}
+                      </span>
+                    </div>
+                    <div className="text-[6.5px] font-bold text-white/30 pt-0.5 border-t border-white/5 leading-none">
                       📍 {settings.cityName || 'الإسكندرية'}
                     </div>
                   </div>
@@ -785,6 +1308,72 @@ export default function WidgetSimulator({
                   <span className="text-[6.5px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-0.5 leading-none">
                     📍 {settings.cityName || 'مكة'}
                   </span>
+                </div>
+              )}
+
+              {/* STYLE 6: Dhikr & Digital Subha */}
+              {widgetType === 'dhikr' && (
+                <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                  <div className="flex justify-between items-center border-b border-white/10 pb-1 text-[7.5px] font-black">
+                    <span className="text-amber-400">✨ ذكر اليوم والبركة</span>
+                    <span className="text-white/60">{dayNameArabic}</span>
+                  </div>
+                  <div className="py-1 text-center">
+                    <p className="text-[8.5px] font-extrabold text-amber-100 leading-snug">«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»</p>
+                    <button
+                      type="button"
+                      onClick={() => setSubhaCount(c => c + 1)}
+                      className="mt-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-[9px] rounded-full shadow-md transition-all cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <span>📿 تسبيح ({toArabicNumbers(subhaCount)})</span>
+                    </button>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-white/5 pt-1 text-[6.5px] text-white/50 font-bold">
+                    <span>الصلاة القادمة: {getArabicName(nextPrayer)}</span>
+                    <span>📍 {settings.cityName || 'مكة'}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* STYLE 7: Qibla Compass Widget */}
+              {widgetType === 'qibla' && (
+                <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-between gap-2 transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                  <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-amber-500/80 flex flex-col items-center justify-center shrink-0 shadow-inner relative">
+                    <span className="text-xs">🕌</span>
+                    <span className="text-[6.5px] font-black font-mono text-amber-400">١٣٦°</span>
+                  </div>
+                  <div className="flex-1 text-right space-y-0.5">
+                    <span className="text-[6.5px] font-black text-amber-400 block uppercase">بوصلة القبلة</span>
+                    <h4 className="text-[8.5px] font-black text-white leading-tight">اتجاه الكعبة المشرفة</h4>
+                    <span className="text-[6.5px] text-white/60 block font-bold">موقعك: {settings.cityName || 'الإسكندرية'}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* STYLE 8: Hijri Calendar Widget */}
+              {widgetType === 'calendar' && (
+                <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-right select-none ${getWidgetThemeClass()}`}>
+                  <div className="flex justify-between items-center border-b border-white/10 pb-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500 text-white flex flex-col items-center justify-center font-black">
+                        <span className="text-[9px] leading-none">{toArabicNumbers(currentDayDigit)}</span>
+                        <span className="text-[5.5px] leading-none font-bold">{currentMonthName}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[8px] font-black text-white block">{dayNameArabic}</span>
+                        <span className="text-[6.5px] font-bold text-amber-400 block">{toArabicNumbers(currentYear)} هجرية</span>
+                      </div>
+                    </div>
+                    <span className="text-[6.5px] font-bold text-white/40 bg-white/5 px-1.5 py-0.5 rounded">مستحب الصيام 🌙</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-0.5 py-1 text-center">
+                    {(['Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => (
+                      <div key={pName} className="p-0.5 rounded bg-white/5">
+                        <span className="text-[5.5px] text-white/60 block">{getArabicName(pName)}</span>
+                        <span className="text-[6.5px] font-black text-white font-mono">{toArabicNumbers(prayerTimes[pName] || '١٢:٠٠')}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

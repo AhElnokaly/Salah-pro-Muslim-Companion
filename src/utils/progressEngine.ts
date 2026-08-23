@@ -5,6 +5,7 @@
 
 import { PrayerLog, PrayerName, FastingLog, QuranSession, QuranKhatma } from '../types';
 import { getSevenStationsProgress, PrayerKey } from './adhkarCalc';
+import { getDateFromPrayerDay, formatDateKey } from './prayerDayBoundary';
 
 export interface ProgressTierInfo {
   tierLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -200,6 +201,9 @@ export interface UnifiedPeriodProgress {
 
 // Helper to format Arabic date YYYY-MM-DD
 export function getFormattedDateStr(d: Date = new Date()): string {
+  if (!d || isNaN(d.getTime())) {
+    d = new Date();
+  }
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -208,9 +212,10 @@ export function getFormattedDateStr(d: Date = new Date()): string {
 
 // Helper to get array of past N dates strings
 export function getPastNDates(n: number, endDate: Date = new Date()): string[] {
+  const safeEndDate = (endDate && !isNaN(endDate.getTime())) ? endDate : new Date();
   const list: string[] = [];
   for (let i = 0; i < n; i++) {
-    const d = new Date(endDate);
+    const d = new Date(safeEndDate);
     d.setDate(d.getDate() - i);
     list.push(getFormattedDateStr(d));
   }
@@ -221,9 +226,15 @@ interface CalculateProgressParams {
   prayerLogs: Record<string, Record<string, PrayerLog>>;
   fastingLogs: Record<string, { date: string; fasted: boolean; fastType: string }>;
   dhikrLogs: Record<string, Record<string, number>>;
-  quranSessions: QuranSession[];
-  khatmat: QuranKhatma[];
+  quranSessions?: QuranSession[];
+  khatmat?: QuranKhatma[];
   isWomenExcuse?: boolean;
+  effectiveDateStr?: string;
+  latitude?: number;
+  longitude?: number;
+  calcMethod?: string;
+  madhab?: 'standard' | 'hanafi';
+  prayerOffsets?: Record<string, number>;
 }
 
 export function calculateUnifiedProgress({
@@ -232,11 +243,18 @@ export function calculateUnifiedProgress({
   dhikrLogs,
   quranSessions = [],
   khatmat = [],
-  isWomenExcuse = false
+  isWomenExcuse = false,
+  effectiveDateStr,
+  latitude,
+  longitude,
+  calcMethod,
+  madhab,
+  prayerOffsets
 }: CalculateProgressParams): Record<'daily' | 'weekly' | 'monthly', UnifiedPeriodProgress> {
-  const todayStr = getFormattedDateStr();
-  const past7Days = getPastNDates(7);
-  const past30Days = getPastNDates(30);
+  const todayStr = effectiveDateStr || formatDateKey(new Date());
+  const targetDate = getDateFromPrayerDay(todayStr);
+  const past7Days = getPastNDates(7, targetDate);
+  const past30Days = getPastNDates(30, targetDate);
 
   const fiveDailyPrayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
@@ -311,23 +329,37 @@ export function calculateUnifiedProgress({
   const weeklyFastingCount = past7Days.filter(d => isFastedDate(d)).length;
   const monthlyFastingCount = past30Days.filter(d => isFastedDate(d)).length;
 
-  // --- 5. QURAN (Daily page target) ---
-  const activeKhatma = khatmat.find(k => k.status === 'active');
-  const dailyQuranGoal = activeKhatma ? Math.max(1, Math.ceil(604 / activeKhatma.durationDays)) : 4;
-
+  // --- 5. QURAN (Daily page target calculated as of 12 AM start-of-day, locking daily goal) ---
   const countQuranPagesForDate = (dateStr: string): number => {
     const daySessions = quranSessions.filter(s => s.date === dateStr);
-    return daySessions.reduce((sum, s) => {
+    const total = daySessions.reduce((sum, s) => {
       if (s.unitType === 'pages') return sum + (s.unitValue || 0);
       if (s.unitType === 'juz') return sum + ((s.unitValue || 0) * 20);
       if (s.unitType === 'surah') return sum + 5;
       return sum;
     }, 0);
+    return Math.max(0, total);
   };
 
   const dailyQuranPages = countQuranPagesForDate(todayStr);
   const weeklyQuranPages = past7Days.reduce((sum, d) => sum + countQuranPagesForDate(d), 0);
   const monthlyQuranPages = past30Days.reduce((sum, d) => sum + countQuranPagesForDate(d), 0);
+
+  const activeKhatma = khatmat.find(k => k.status === 'active');
+  let dailyQuranGoal = 4;
+  if (activeKhatma) {
+    const start = new Date(activeKhatma.startDate);
+    const now = new Date();
+    start.setHours(0,0,0,0);
+    now.setHours(0,0,0,0);
+    const diffTime = now.getTime() - start.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const daysRemaining = Math.max(1, activeKhatma.durationDays - diffDays);
+    // Page count at the start of today (before today's logged pages)
+    const currentPageAtStartOfDay = Math.max(0, activeKhatma.currentPage - dailyQuranPages);
+    const remainingPagesAtStartOfDay = Math.max(0, activeKhatma.totalPages - currentPageAtStartOfDay);
+    dailyQuranGoal = Math.max(1, Math.ceil(remainingPagesAtStartOfDay / daysRemaining));
+  }
 
   // Build structure for period
   const buildPeriod = (
@@ -362,9 +394,7 @@ export function calculateUnifiedProgress({
       : Math.round((fastingVal / fastingTarget) * 100); // Uncapped!
     const quranPct = Math.round((quranVal / quranTarget) * 100); // Uncapped!
 
-    const salahDetailText = salahLateVal > 0 
-      ? `${salahVal}/${salahTarget} (${salahOnTimeVal} حاضر • ${salahLateVal} متأخر)`
-      : `${salahVal} من ${salahTarget} صلاة`;
+    const salahDetailText = `${salahVal} من ${salahTarget} صلاة`;
 
     const items: ProgressItemData[] = [
       {

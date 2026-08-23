@@ -18,7 +18,7 @@ interface WeatherData {
 export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ lat, lng }) => {
   const [weather, setWeather] = useState<WeatherData | null>(() => {
     try {
-      const cached = localStorage.getItem('muslim_companion_weather_cache');
+      const cached = localStorage.getItem('hemmaty_weather_cache') || localStorage.getItem('muslim_companion_weather_cache');
       if (cached) {
         return JSON.parse(cached);
       }
@@ -58,7 +58,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ lat, lng }) => {
 
           if (isMounted) {
             setWeather(weatherObj);
-            safeSetItem('muslim_companion_weather_cache', JSON.stringify(weatherObj));
+            safeSetItem('hemmaty_weather_cache', JSON.stringify(weatherObj));
           }
         }
       } catch (err) {

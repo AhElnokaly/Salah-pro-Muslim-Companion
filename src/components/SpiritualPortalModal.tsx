@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles, RotateCcw } from 'lucide-react';
-import companionIcon from '../assets/images/app_icon_refaiq_1785232801939.jpg';
+import companionIcon from '../assets/images/hemmaty_app_logo_1786362094156.jpg';
 
 export const SPIRITUAL_CAPSULES = [
   {
@@ -175,9 +175,9 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
             <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400/40 bg-[#121d2a] shadow-lg relative">
               <img 
                 src={companionIcon} 
-                alt="رفيق المسلم" 
+                alt="هِمَّتِي" 
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/muslim_companion_icon.jpg';
+                  (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
                 }}
                 className="w-full h-full object-contain p-1 select-none"
                 referrerPolicy="no-referrer"

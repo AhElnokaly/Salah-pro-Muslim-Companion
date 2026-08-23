@@ -36,16 +36,18 @@ import {
   Share2,
   Filter
 } from 'lucide-react';
-import { AppSettings, PrayerLog } from '../types';
-import { calculatePrayerTimes, parseTimeToMinutes } from '../utils/prayerCalc';
+import { AppSettings, PrayerLog, AlarmConfig } from '../types';
+import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
 import { safeSetItem } from '../utils/storage';
+import { formatDateKey } from '../utils/prayerDayBoundary';
 
 interface KhushuQiyamTrackerProps {
   settings: AppSettings;
   prayerLogs: Record<string, Record<string, PrayerLog>>;
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
+  setCustomAlarms?: React.Dispatch<React.SetStateAction<AlarmConfig[]>>;
   onNavigateTab?: (tab: string) => void;
 }
 
@@ -247,6 +249,7 @@ export default function KhushuQiyamTracker({
   settings,
   prayerLogs,
   setPrayerLogs,
+  setCustomAlarms,
   onNavigateTab
 }: KhushuQiyamTrackerProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -342,15 +345,16 @@ export default function KhushuQiyamTracker({
     return () => clearInterval(timer);
   }, []);
 
-  const todayStr = currentTime.toISOString().split('T')[0];
+  const todayStr = formatDateKey(currentTime);
   const hijri = getHijriDate(currentTime, settings.hijriOffset);
 
   // Calculate prayer times for today and tomorrow to deduce exact night boundaries
+  const todayTzOffset = getTimezoneOffsetForLocation(currentTime, settings.timezoneId);
   const todayTimes = calculatePrayerTimes(
     currentTime,
     settings.latitude,
     settings.longitude,
-    -currentTime.getTimezoneOffset() / 60,
+    todayTzOffset,
     settings.calcMethod,
     settings.madhab,
     settings.prayerOffsets || {}
@@ -358,11 +362,12 @@ export default function KhushuQiyamTracker({
 
   const tomorrowDate = new Date(currentTime);
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowTzOffset = getTimezoneOffsetForLocation(tomorrowDate, settings.timezoneId);
   const tomorrowTimes = calculatePrayerTimes(
     tomorrowDate,
     settings.latitude,
     settings.longitude,
-    -tomorrowDate.getTimezoneOffset() / 60,
+    tomorrowTzOffset,
     settings.calcMethod,
     settings.madhab,
     settings.prayerOffsets || {}
@@ -585,10 +590,7 @@ export default function KhushuQiyamTracker({
       const m = alarmMins % 60;
       const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 
-      const saved = localStorage.getItem('salah_custom_alarms');
-      const existing = saved ? JSON.parse(saved) : [];
-
-      const newAlarm = {
+      const newAlarm: AlarmConfig = {
         id: `tahajjud_alarm_${Date.now()}`,
         title: `منبه التهجد: ${label}`,
         time: timeStr,
@@ -597,8 +599,14 @@ export default function KhushuQiyamTracker({
         soundType: 'adhan'
       };
 
-      const next = [...existing, newAlarm];
-      safeSetItem('salah_custom_alarms', JSON.stringify(next));
+      if (setCustomAlarms) {
+        setCustomAlarms(prev => [...prev, newAlarm]);
+      } else {
+        const saved = localStorage.getItem('salah_custom_alarms');
+        const existing = saved ? JSON.parse(saved) : [];
+        const next = [...existing, newAlarm];
+        safeSetItem('salah_custom_alarms', JSON.stringify(next));
+      }
 
       setLogSuccessMsg(`تم إضافة ${newAlarm.title} الساعة (${toArabicNumbers(timeStr)}) بنجاح! ⏰`);
       if (onNavigateTab) {

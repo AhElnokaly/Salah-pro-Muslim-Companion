@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AppModal, { AppModalVariant } from './shared/AppModal';
 import { 
   Bell, 
@@ -26,12 +26,16 @@ import {
   Volume2,
   Play,
   Pause,
-  VolumeX
+  VolumeX,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+import { getDashboardSectionsConfig, DashboardSectionId } from './dashboard/dashboardSections';
 import { 
   AppSettings, 
   PrayerLog, 
   PrayerName, 
+  PrayerTimes,
   PrayerStatus, 
   ActiveNudge, 
   PendingQadaPrayer, 
@@ -39,6 +43,7 @@ import {
   QuranSession,
   QuranKhatma,
   RamadanQadaTracker,
+  VoluntaryPrayerLog,
   DEFAULT_CARD_LAYOUT
 } from '../types';
 import { CARD_BLOCK_REGISTRY } from './dashboard/blocks';
@@ -47,8 +52,28 @@ import {
   calculatePrayerTimes, 
   getCurrentAndNextPrayer, 
   getArabicPrayerName,
-  parseTimeToMinutes
+  parseTimeToMinutes,
+  getTimezoneOffsetForLocation
 } from '../utils/prayerCalc';
+import { getLocalDateStr } from '../hooks/usePrayerScheduler';
+import { subtractDays, formatDateKey } from '../utils/prayerDayBoundary';
+
+function isPrayerInFuture(pName: PrayerName, now: Date, times: PrayerTimes): boolean {
+  if (pName === 'Sunrise') return false;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const fajrMins = times.Fajr ? parseTimeToMinutes(times.Fajr) : 270;
+  
+  // Late night / early morning before Fajr (between 00:00 and Fajr time):
+  // All daily prayers (Fajr, Dhuhr, Asr, Maghrib, Isha) from the night session are past and loggable.
+  if (nowMins < fajrMins) {
+    return false;
+  }
+
+  // Daytime / evening (after Fajr):
+  const timeStr = times[pName as keyof PrayerTimes];
+  const prayerMins = timeStr ? parseTimeToMinutes(timeStr) : 0;
+  return nowMins < prayerMins;
+}
 import { detectUserLocation } from '../utils/locationService';
 import { 
   getHijriDate, 
@@ -58,7 +83,9 @@ import {
 import { getMoonPhaseInfo } from '../utils/moonPhases';
 import { generateActiveNudge } from '../utils/nudgeRules';
 import { getSevenStationsProgress, PrayerKey } from '../utils/adhkarCalc';
-import CompanionInsights from './CompanionInsights';
+import { calculateStreaks } from './PrayerHeatmapStats';
+import { DuhaQuickLogModal } from './DuhaQuickLogModal';
+import { NightPrayersQuickLogModal } from './NightPrayersQuickLogModal';
 import FridayMode from './FridayMode';
 import AthanOverlay from './AthanOverlay';
 import PushNotificationManager from './PushNotificationManager';
@@ -67,6 +94,7 @@ import FeatureDiscoveryWidget from './FeatureDiscoveryWidget';
 import { PinnedFavoriteWidget } from './PinnedFavoriteWidget';
 import UnifiedProgressCard from './UnifiedProgressCard';
 import SacredHoursBanner from './SacredHoursBanner';
+import GettingStartedChecklist from './GettingStartedChecklist';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins } from '../utils/audioStorage';
 
 // Import transparent elegant mosque backdrop options
@@ -74,6 +102,8 @@ import fridayBackdrop from '../assets/images/friday_mosque_backdrop_178548809891
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
 import classicBackdrop from '../assets/images/mosque_backdrop_1784095267677.jpg';
 import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
+import lightMosqueBackdrop from '../assets/images/mosque_backdrop_light_1785869903259.jpg';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
 
 const formatDateToTimesStr = (date: Date): string => {
   const finalHour = date.getHours();
@@ -92,19 +122,21 @@ const formatDateToTimesStr = (date: Date): string => {
 
 // Import transparent elegant mosque backdrop options
 export const BACKDROP_IMAGES = {
-  gold: goldBackdrop,
-  classic: classicBackdrop,
+  gold: darkMosqueBackdrop,
+  classic: lightMosqueBackdrop,
   banner: bannerBackdrop,
-  ramadan: classicBackdrop,
-  eid_fitr: goldBackdrop,
+  ramadan: darkMosqueBackdrop,
+  eid_fitr: lightMosqueBackdrop,
   eid_adha: bannerBackdrop,
   friday: fridayBackdrop,
-  night_sky: classicBackdrop,
-  emerald: classicBackdrop,
-  madinah: classicBackdrop,
-  kaaba: goldBackdrop,
-  aqsa: goldBackdrop,
-  andulas: classicBackdrop,
+  night_sky: darkMosqueBackdrop,
+  emerald: darkMosqueBackdrop,
+  madinah: lightMosqueBackdrop,
+  kaaba: darkMosqueBackdrop,
+  aqsa: lightMosqueBackdrop,
+  andulas: darkMosqueBackdrop,
+  light_mosque: lightMosqueBackdrop,
+  dark_mosque: darkMosqueBackdrop,
 };
 
 interface DashboardProps {
@@ -119,11 +151,14 @@ interface DashboardProps {
   ramadanQada?: RamadanQadaTracker;
   setRamadanQada?: React.Dispatch<React.SetStateAction<RamadanQadaTracker>>;
   setActiveTab?: React.Dispatch<React.SetStateAction<'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'moon'>>;
+  onNavigateToAdhkarForPrayer?: (prayerName: string) => void;
   customDuas: CustomDua[];
   setCustomDuas: React.Dispatch<React.SetStateAction<CustomDua[]>>;
   quranSessions?: QuranSession[];
   khatmat?: QuranKhatma[];
   dhikrLogs?: Record<string, Record<string, number>>;
+  voluntaryPrayerLogs?: VoluntaryPrayerLog[];
+  setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<VoluntaryPrayerLog[]>>;
   onInstallApp?: () => void;
   isPwaInstalled?: boolean;
 }
@@ -140,25 +175,24 @@ export default function Dashboard({
   ramadanQada,
   setRamadanQada,
   setActiveTab,
+  onNavigateToAdhkarForPrayer,
   customDuas,
   setCustomDuas,
   quranSessions = [],
   khatmat = [],
   dhikrLogs = {},
+  voluntaryPrayerLogs = [],
+  setVoluntaryPrayerLogs,
   onInstallApp,
   isPwaInstalled = false
 }: DashboardProps) {
   const [selectedPrayerToLog, setSelectedPrayerToLog] = useState<PrayerName | null>(null);
+  const [showDuhaQuickLog, setShowDuhaQuickLog] = useState<boolean>(false);
+  const [showNightPrayersQuickLog, setShowNightPrayersQuickLog] = useState<boolean>(false);
+  const [dashboardSections, setDashboardSections] = useState<Record<DashboardSectionId, boolean>>(() => getDashboardSectionsConfig());
   const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
-  const [now, setNow] = useState<Date>(new Date());
+  const [now, setNow] = useState<Date>(() => new Date());
   const [homeDuaIdx, setHomeDuaIdx] = useState(0);
-  const showAnalogClock = (settings.clockStyle || 'digital') === 'analog';
-  const setShowAnalogClock = (val: boolean | ((p: boolean) => boolean)) => {
-    setSettings(prev => {
-      const nextVal = typeof val === 'function' ? val(prev.clockStyle === 'analog') : val;
-      return { ...prev, clockStyle: nextVal ? 'analog' : 'digital' };
-    });
-  };
   const [futurePrayerWarning, setFuturePrayerWarning] = useState<PrayerName | null>(null);
   const [clockFace, setClockFaceState] = useState<'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk'>(() => {
     const saved = localStorage.getItem('salah_clock_face');
@@ -167,11 +201,6 @@ export default function Dashboard({
     }
     return 'classic';
   });
-
-  const setClockFace = (val: 'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk') => {
-    setClockFaceState(val);
-    safeSetItem('salah_clock_face', val);
-  };
 
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
@@ -194,12 +223,80 @@ export default function Dashboard({
   const [autoPlayOnTime, setAutoPlayOnTime] = useState<boolean>(() => {
     return localStorage.getItem('salah_auto_play_athan') !== 'false';
   });
-  const [showSunriseModal, setShowSunriseModal] = useState<boolean>(false);
+  const [dismissedBackupBanner, setDismissedBackupBanner] = useState(false);
+  const [dismissedTravelBanner, setDismissedTravelBanner] = useState(() => {
+    const tStr = formatDateKey(new Date());
+    return localStorage.getItem('salah_dismissed_travel_banner') === tStr;
+  });
+  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationToast, setLocationToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const needsBackup = React.useMemo(() => {
+    const lastBackup = localStorage.getItem('salah_last_backup_time');
+    if (!lastBackup) return true;
+    const days = (Date.now() - parseInt(lastBackup, 10)) / (1000 * 60 * 60 * 24);
+    return days >= 14;
+  }, []);
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const lastTriggeredMin = React.useRef<string>('');
 
-  const [customMuezzins, setCustomMuezzins] = useState<any[]>([]);
+  const showAnalogClock = (settings.clockStyle || 'digital') === 'analog';
+  const setShowAnalogClock = (val: boolean | ((p: boolean) => boolean)) => {
+    setSettings(prev => {
+      const nextVal = typeof val === 'function' ? val(prev.clockStyle === 'analog') : val;
+      return { ...prev, clockStyle: nextVal ? 'analog' : 'digital' };
+    });
+  };
+
+  const setClockFace = (val: 'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk') => {
+    setClockFaceState(val);
+    safeSetItem('salah_clock_face', val);
+  };
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setDashboardSections(getDashboardSectionsConfig());
+    };
+    const handleQuickLogPrayerEvent = (e: Event) => {
+      const customEv = e as CustomEvent<{ prayerKey?: string }>;
+      const rawKey = customEv.detail?.prayerKey || 'Dhuhr';
+      const keyMap: Record<string, PrayerName> = {
+        fajr: 'Fajr',
+        dhuhr: 'Dhuhr',
+        asr: 'Asr',
+        maghrib: 'Maghrib',
+        isha: 'Isha',
+        sunrise: 'Sunrise',
+        Fajr: 'Fajr',
+        Dhuhr: 'Dhuhr',
+        Asr: 'Asr',
+        Maghrib: 'Maghrib',
+        Isha: 'Isha',
+        Sunrise: 'Sunrise',
+      };
+      const pKey: PrayerName = keyMap[rawKey] || keyMap[rawKey.toLowerCase()] || (rawKey.charAt(0).toUpperCase() + rawKey.slice(1).toLowerCase() as PrayerName);
+
+      if (pKey === 'Sunrise') {
+        setShowDuhaQuickLog(true);
+        return;
+      }
+
+      if (isPrayerInFuture(pKey, now, times)) {
+        setFuturePrayerWarning(pKey);
+      } else {
+        setSelectedPrayerToLog(pKey);
+      }
+    };
+
+    window.addEventListener('salah_dashboard_sections_updated', handleUpdate);
+    window.addEventListener('salah_quick_log_prayer', handleQuickLogPrayerEvent);
+    return () => {
+      window.removeEventListener('salah_dashboard_sections_updated', handleUpdate);
+      window.removeEventListener('salah_quick_log_prayer', handleQuickLogPrayerEvent);
+    };
+  }, [now, settings]);
 
   React.useEffect(() => {
     getCustomAudios().then(tracks => {
@@ -262,16 +359,17 @@ export default function Dashboard({
     return () => clearInterval(timer);
   }, []);
 
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = formatDateKey(now);
   const hijri = getHijriDate(now, settings.hijriOffset);
   const gregorianStr = formatGregorianFullDateArabic(now);
   const gregorianClean = gregorianStr.includes('،') ? gregorianStr.split('،')[1].trim() : gregorianStr;
 
+  const tzOffset = getTimezoneOffsetForLocation(now, settings.timezoneId);
   const times = calculatePrayerTimes(
     now,
     settings.latitude,
     settings.longitude,
-    -now.getTimezoneOffset() / 60,
+    tzOffset,
     settings.calcMethod,
     settings.madhab,
     settings.prayerOffsets || {}
@@ -385,12 +483,9 @@ export default function Dashboard({
   const getSpiritualNotifications = (): SpiritualNotification[] => {
     const list: SpiritualNotification[] = [];
 
-    // 1. Pending Qada Prayers
+    // 1. Pending Qada Prayers - Smart Contextual Reminder
     if (pendingQadaPrayers.length > 0) {
-      const breakdown: Record<string, number> = {};
-      pendingQadaPrayers.forEach(p => {
-        breakdown[p.prayerName] = (breakdown[p.prayerName] || 0) + 1;
-      });
+      const firstPending = pendingQadaPrayers[0];
       const namesArabic: Record<string, string> = {
         Fajr: 'الفجر',
         Dhuhr: 'الظهر',
@@ -398,19 +493,16 @@ export default function Dashboard({
         Maghrib: 'المغرب',
         Isha: 'العشاء'
       };
-      const breakdownStr = Object.entries(breakdown)
-        .map(([name, count]) => `${namesArabic[name]} (${toArabicNumbers(count)})`)
-        .join('، ');
+      const suggestedPrayerName = namesArabic[firstPending.prayerName] || 'الصلاة';
 
       list.push({
         id: 'qada-prayers',
         type: 'qada',
-        title: 'الصلوات الفوائت المتبقية (القضاء)',
-        description: `لديك صلوات فائتة مسجلة في ذمتك متبقي قضاؤها: ${breakdownStr}.`,
+        title: `اقتراح تذكرة: وقت مناسب لقضاء صلاة ${suggestedPrayerName}؟ 🤲`,
+        description: `لديك صلاة ${suggestedPrayerName} فائتة مسجلة. أسهل طريقة للقضاء هي قضاء صلاة مع كل صلاة حاضرة حتى تبرأ ذمتك.`,
         icon: '⏱️',
-        actionLabel: 'قضاء صلاة الآن',
+        actionLabel: `تسجيل قضاء صلاة ${suggestedPrayerName} الآن`,
         action: () => {
-          const firstPending = pendingQadaPrayers[0];
           if (firstPending) {
             setPendingQadaPrayers(prev => prev.filter(p => p.id !== firstPending.id));
           }
@@ -437,7 +529,7 @@ export default function Dashboard({
               daysCompleted: Math.min(prev.daysOwed, prev.daysCompleted + 1)
             }));
             
-            const dStr = new Date().toISOString().split('T')[0];
+            const dStr = formatDateKey(new Date());
             setFastingLogs(prev => ({
               ...prev,
               [dStr]: {
@@ -467,7 +559,7 @@ export default function Dashboard({
         icon: '✨',
         actionLabel: 'سجل صيام الغد تبرعاً',
         action: () => {
-          const dStr = new Date().toISOString().split('T')[0];
+          const dStr = formatDateKey(new Date());
           setFastingLogs(prev => ({
             ...prev,
             [dStr]: {
@@ -737,9 +829,6 @@ export default function Dashboard({
     }));
   };
 
-  const [isLocating, setIsLocating] = useState<boolean>(false);
-  const [locationToast, setLocationToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
   const handleGPSLocationSync = async () => {
     setIsLocating(true);
     setLocationToast(null);
@@ -941,13 +1030,13 @@ export default function Dashboard({
 
     switch (bKey) {
       case 'glass_crystal':
-        return 'from-slate-900/50 via-slate-800/30 to-slate-900/50 backdrop-blur-2xl border-white/25 shadow-2xl';
+        return 'from-slate-900/50 via-slate-800/30 to-slate-900/50 border-white/25 shadow-2xl';
       case 'glass_emerald':
-        return 'from-emerald-950/50 via-teal-900/30 to-emerald-950/50 backdrop-blur-2xl border-emerald-400/30 shadow-2xl';
+        return 'from-emerald-950/50 via-teal-900/30 to-emerald-950/50 border-emerald-400/30 shadow-2xl';
       case 'glass_blue':
-        return 'from-sky-950/50 via-blue-900/30 to-sky-950/50 backdrop-blur-2xl border-sky-400/30 shadow-2xl';
+        return 'from-sky-950/50 via-blue-900/30 to-sky-950/50 border-sky-400/30 shadow-2xl';
       case 'glass_dark':
-        return 'from-black/60 via-slate-900/40 to-black/60 backdrop-blur-2xl border-white/15 shadow-2xl';
+        return 'from-black/60 via-slate-900/40 to-black/60 border-white/15 shadow-2xl';
       case 'madinah':
         return 'from-[#022c22] via-[#064e3b] to-[#0f766e]';
       case 'aqsa':
@@ -1057,7 +1146,19 @@ export default function Dashboard({
     return sum;
   }, 0);
   const activeKhatma = khatmat?.find(k => k.status === 'active');
-  const rawDailyGoal = activeKhatma ? Math.ceil(604 / activeKhatma.durationDays) : 4;
+  let rawDailyGoal = 4;
+  if (activeKhatma) {
+    const start = new Date(activeKhatma.startDate);
+    const now = new Date();
+    start.setHours(0,0,0,0);
+    now.setHours(0,0,0,0);
+    const diffTime = now.getTime() - start.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const daysRemaining = Math.max(1, activeKhatma.durationDays - diffDays);
+    const currentPageAtStartOfDay = Math.max(0, activeKhatma.currentPage - pagesReadToday);
+    const remainingPagesAtStartOfDay = Math.max(0, activeKhatma.totalPages - currentPageAtStartOfDay);
+    rawDailyGoal = Math.max(1, Math.ceil(remainingPagesAtStartOfDay / daysRemaining));
+  }
   const quranDailyGoal = isNaN(rawDailyGoal) || rawDailyGoal <= 0 ? 4 : rawDailyGoal;
   const quranPercent = isNaN(pagesReadToday) || isNaN(quranDailyGoal) || quranDailyGoal <= 0
     ? 0
@@ -1417,6 +1518,31 @@ export default function Dashboard({
     );
   };
 
+  const handleExportBackup = () => {
+    const backupData = {
+      settings,
+      prayerLogs,
+      pendingQadaPrayers,
+      voluntaryPrayerLogs,
+      fastingLogs,
+      ramadanQada,
+      customDuas,
+      quranSessions,
+      khatmat,
+      dhikrLogs,
+      exportDate: new Date().toISOString()
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `refaiq_backup_${todayStr}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    safeSetItem('salah_last_backup_time', Date.now().toString());
+    setDismissedBackupBanner(true);
+  };
+
   const cardLayout = settings.mainCardLayout ?? DEFAULT_CARD_LAYOUT;
   const visibleBlocks = [...cardLayout.blocks]
     .filter(b => b.visible)
@@ -1427,6 +1553,14 @@ export default function Dashboard({
     gregorianClean,
     dayNameArabic,
     setActiveTab,
+    onNavigateTab: (tab: string, subTab?: string) => {
+      if (tab) setActiveTab(tab as any);
+      if (subTab) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('navigate-salah-subtab', { detail: subTab }));
+        }, 50);
+      }
+    },
     getMoonPhaseInfo,
     toArabicNumbers,
     getIslamicEventLabel,
@@ -1446,34 +1580,14 @@ export default function Dashboard({
 
   return (
     <div id="dashboard-root" className="space-y-6" dir="rtl">
-      {/* Location GPS Sync Toast Notification Banner */}
-      {locationToast && (
-        <div className={`p-3.5 rounded-2xl text-xs font-black shadow-lg flex items-center justify-between gap-3 border transition-all animate-in fade-in slide-in-from-top-2 duration-300 ${
-          locationToast.type === 'success'
-            ? 'bg-emerald-500/15 dark:bg-emerald-950/40 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
-            : 'bg-rose-500/15 dark:bg-rose-950/40 border-rose-500/30 text-rose-800 dark:text-rose-200'
-        }`}>
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 shrink-0" />
-            <span>{locationToast.msg}</span>
-          </div>
-          <button
-            onClick={() => setLocationToast(null)}
-            className="text-xs font-bold hover:opacity-80 p-1 cursor-pointer shrink-0"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* 1. High-Fidelity Main Prayer Card with Custom Gradient & Elegant Image Backdrop */}
       <div 
         id="main-prayer-card"
         className={`w-full bg-gradient-to-b ${activeCardGradient} text-white rounded-3xl p-4 sm:p-5 gap-3 min-h-[260px] sm:min-h-[280px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-500 ease-in-out`}
       >
         {/* High-Precision Islamic Mosque Vector Backdrop (Offline, Sharp, No Checkerboard, No Broken Alt Text) */}
-        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden opacity-85 sm:opacity-95">
-          <MosqueBackdrop type={currentBackdropKey} renderMode={settings.backdropRenderMode} />
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+          <MosqueBackdrop type={currentBackdropKey} renderMode={settings.backdropRenderMode} opacity={settings.backdropOpacity} />
         </div>
 
         {/* Dynamic Configurable Card Blocks System */}
@@ -1592,12 +1706,10 @@ export default function Dashboard({
                   type="button"
                   onClick={() => {
                     if (isSunrise) {
-                      setShowSunriseModal(true);
+                      setShowDuhaQuickLog(true);
                       return;
                     }
-                    const nowMins = now.getHours() * 60 + now.getMinutes();
-                    const prayerMins = parseTimeToMinutes(times[pName]);
-                    if (nowMins < prayerMins) {
+                    if (isPrayerInFuture(pName, now, times)) {
                       setFuturePrayerWarning(pName);
                     } else {
                       setSelectedPrayerToLog(pName);
@@ -1662,15 +1774,172 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Sacred Hours & Response Times Smart Banner */}
-      <SacredHoursBanner
-        prayerTimes={times}
-        now={now}
-        onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
-        appStyle={currentStyle}
-      />
+      {/* Yesterday's Unlogged Obligatory Prayers Notice Banner */}
+      {(() => {
+        const yesterdayDate = subtractDays(now, 1);
+        const yesterdayStr = formatDateKey(yesterdayDate);
+        const yesterdayLogs = prayerLogs[yesterdayStr] || {};
+        const fiveDaily: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
-      {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons) */}
+        // Count unlogged obligatory prayers for yesterday (strictly 5 daily fard prayers only, no sunnah/nawafil)
+        const missingPrayers = fiveDaily.filter(p => {
+          const status = yesterdayLogs[p]?.status;
+          return !status || status === 'not_yet' || status === 'future';
+        });
+
+        if (missingPrayers.length === 0) return null;
+
+        const bannerTitle = missingPrayers.length === 1
+          ? `هل نسيت تسجيل صلاة ${getArabicPrayerName(missingPrayers[0], yesterdayDate)}؟`
+          : 'هل نسيت تسجيل صلوات اليوم السابق؟';
+
+        return (
+          <div 
+            id="yesterday-unlogged-prayers-banner"
+            className="w-full bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300/50 dark:border-amber-700/40 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs text-end transition-all animate-fade-in"
+          >
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/20 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              </div>
+              <p className="text-xs sm:text-sm font-extrabold text-amber-950 dark:text-amber-200 leading-snug truncate">
+                {bannerTitle}
+              </p>
+            </div>
+            <button
+              type="button"
+              id="btn-log-yesterday-prayers"
+              onClick={() => {
+                if (setActiveTab) {
+                  setActiveTab('salah');
+                  window.dispatchEvent(new CustomEvent('open-prayer-worship-yesterday'));
+                }
+              }}
+              className="py-1.5 px-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-xs shrink-0 cursor-pointer transition-all flex items-center gap-1"
+            >
+              <span>سجّلها الآن</span>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Location GPS Sync Toast Notification Banner */}
+      {locationToast && (
+        <div className={`p-3.5 rounded-2xl text-xs font-black shadow-lg flex items-center justify-between gap-3 border transition-all animate-in fade-in slide-in-from-top-2 duration-300 ${
+          locationToast.type === 'success'
+            ? 'bg-emerald-500/15 dark:bg-emerald-950/40 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+            : 'bg-rose-500/15 dark:bg-rose-950/40 border-rose-500/30 text-rose-800 dark:text-rose-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 shrink-0" />
+            <span>{locationToast.msg}</span>
+          </div>
+          <button
+            onClick={() => setLocationToast(null)}
+            className="text-xs font-bold hover:opacity-80 p-1 cursor-pointer shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Progressive Onboarding Dashboard Checklist (Auto-hides after 7 days) */}
+      {(() => {
+        let installedAt = localStorage.getItem('salah_installed_at');
+        if (!installedAt) {
+          installedAt = Date.now().toString();
+          safeSetItem('salah_installed_at', installedAt);
+        }
+        const daysSinceInstalled = (Date.now() - Number(installedAt)) / (1000 * 60 * 60 * 24);
+        if (daysSinceInstalled > 7) return null;
+
+        return (
+          <GettingStartedChecklist
+            hasLoggedPrayer={Object.keys(prayerLogs).some(k => Object.values(prayerLogs[k] || {}).some((p: any) => p.status === 'A' || p.status === 'B'))}
+            hasUsedTasbih={Object.keys(dhikrLogs || {}).length > 0}
+            hasVisitedQibla={typeof window !== 'undefined' && localStorage.getItem('salah_visited_qibla') === 'true'}
+            hasStartedKhatma={(khatmat || []).length > 0}
+            onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
+          />
+        );
+      })()}
+
+      {/* Travel Mode Info Banner */}
+      {!dismissedTravelBanner && (
+        <div className="bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs font-bold text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">🧳</span>
+            <span>في سفر أو تنقل؟ يجوز لك قصر الصلاة الرباعية وجمعها رخصةً وتيسيراً.</span>
+          </div>
+          <button
+            onClick={() => {
+              safeSetItem('salah_dismissed_travel_banner', todayStr);
+              setDismissedTravelBanner(true);
+            }}
+            className="text-[11px] bg-amber-500/20 hover:bg-amber-500/30 px-3 py-1 rounded-xl transition-colors shrink-0 cursor-pointer"
+          >
+            لا تذكرني اليوم
+          </button>
+        </div>
+      )}
+
+      {/* Backup Reminder Banner */}
+      {needsBackup && !dismissedBackupBanner && (
+        <div className="bg-indigo-500/10 dark:bg-indigo-950/30 border border-indigo-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs font-bold text-indigo-900 dark:text-indigo-200">
+          <div className="flex items-center gap-2.5">
+            <span className="text-base">🛡️</span>
+            <span>لم تُنشئ نسخة احتياطية من سجل عباداتك منذ فترة — احمِ بياناتك.</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleExportBackup}
+              className="text-[11px] bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1 rounded-xl font-black transition-colors cursor-pointer"
+            >
+              نسخة احتياطية
+            </button>
+            <button
+              onClick={() => setDismissedBackupBanner(true)}
+              className="text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-400 p-1 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Last 10 Days of Ramadan Focus Card */}
+      {hijri.month === 9 && hijri.day >= 21 && (
+        <div className="bg-gradient-to-r from-amber-500/20 via-purple-500/15 to-indigo-500/20 p-4 rounded-3xl border border-amber-500/30 space-y-2 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🌙</span>
+              <h3 className="text-xs font-black text-amber-900 dark:text-amber-200">العشر الأواخر من رمضان المبارك</h3>
+            </div>
+            {hijri.day % 2 === 1 && (
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                ليلة مرجوة ✨
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-700 dark:text-slate-300 font-bold leading-relaxed">
+            {hijri.day % 2 === 1 
+              ? 'هذه الليلة من الليالي الوترية المرجوة لليلة القدر المباركة — أكثر من الدعاء "اللهم إنك عفو تحب العفو فاعف عني" والقيام.' 
+              : 'شمر واجتهد في قيام الليل والطاعات ففي هذه الليالي المباركة ليلة القدر خير من ألف شهر.'}
+          </p>
+        </div>
+      )}
+      {/* Sacred Hours Banner */}
+      {dashboardSections.sacredHours && (
+        <SacredHoursBanner
+          prayerTimes={times}
+          now={now}
+          onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
+          appStyle={currentStyle}
+        />
+      )}
+
+      {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons - Always Visible) */}
       <UnifiedProgressCard
         prayerLogs={prayerLogs}
         fastingLogs={fastingLogs}
@@ -1680,19 +1949,96 @@ export default function Dashboard({
         isWomenExcuse={settings?.isWomenExcuse}
         onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as any)}
         appStyle={currentStyle}
+        settings={settings}
       />
 
-      {/* 5. Smart Companion Insights & Friday Mode */}
-      <CompanionInsights 
-        prayerLogs={prayerLogs}
-        fastingLogs={fastingLogs}
-        dhikrLogs={dhikrLogs}
-        quranSessions={quranSessions}
-        khatmat={khatmat}
-        settings={settings}
-        isFridayWindow={isFridayWindow}
-        onNavigateTab={(tab) => setActiveTab(tab as any)}
-      />
+      {/* 1-Line Quran Summary Strip (Opt-out, default enabled) */}
+      {dashboardSections.quranSummary && (
+        <button
+          type="button"
+          onClick={() => setActiveTab && setActiveTab('quran')}
+          className="w-full p-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 border border-emerald-500/20 rounded-2xl flex items-center justify-between gap-2 text-xs font-black text-emerald-800 dark:text-emerald-200 hover:bg-emerald-500/15 transition-all cursor-pointer shadow-2xs"
+        >
+          <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+            <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-[11px] font-black truncate">
+              📖 القرآن الكريم: {khatmat && khatmat.length > 0 ? `الختمة الحالية قائمة • انقر للمتابعة والقراءة` : 'تابع وردك اليومي وتلاوة القرآن • انقر للبدء'}
+            </span>
+          </div>
+          <span className="text-[10px] bg-emerald-600/15 dark:bg-emerald-400/20 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-xl font-bold shrink-0 flex items-center gap-1">
+            متابعة ➔
+          </span>
+        </button>
+      )}
+
+      {/* 1-Line Khushu & Sunan Summary Strip (Opt-out, default enabled) */}
+      {dashboardSections.khushuSummary && (
+        <button
+          type="button"
+          onClick={() => setActiveTab && setActiveTab('khushu')}
+          className="w-full p-3.5 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-indigo-500/5 dark:from-indigo-950/30 dark:to-purple-950/20 border border-indigo-500/20 rounded-2xl flex items-center justify-between gap-2 text-xs font-black text-indigo-800 dark:text-indigo-200 hover:bg-indigo-500/15 transition-all cursor-pointer shadow-2xs"
+        >
+          <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+            <Moon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="text-[11px] font-black truncate">
+              🌙 السنن وقيام الليل والخشوع: سجّل صلاة الضحى، الوتر، والقيام • انقر للسجل
+            </span>
+          </div>
+          <span className="text-[10px] bg-indigo-600/15 dark:bg-indigo-400/20 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-xl font-bold shrink-0 flex items-center gap-1">
+            سجّل الآن ➔
+          </span>
+        </button>
+      )}
+
+      {/* 5. Streak Summary Line */}
+      {(() => {
+        const streaks = calculateStreaks(prayerLogs);
+        return (
+          <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-emerald-500/10 dark:from-emerald-950/40 dark:via-amber-950/30 dark:to-emerald-950/40 rounded-2xl border border-emerald-500/20 dark:border-emerald-500/30 shadow-xs flex items-center justify-between gap-3 text-xs text-right" dir="rtl">
+            <div className="flex items-center gap-2.5 text-right w-full">
+              <span className="text-base shrink-0">🔥</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-right leading-relaxed">
+                سلسلتك المستمرة: <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">{toArabicNumbers(streaks.current)}</span> يوماً متتالياً — واصل بثبات وزد من حسناتك!
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Feature Discovery Widget (Opt-in, default disabled) */}
+      {dashboardSections.featureDiscovery && (
+        <FeatureDiscoveryWidget
+          onSelectTab={(tab, subTab) => {
+            if (setActiveTab) {
+              setActiveTab(tab as any);
+              if (tab === 'settings' && subTab) {
+                window.dispatchEvent(new CustomEvent('change-settings-subtab', { detail: { subTab } }));
+              }
+            }
+          }}
+          onOpenTour={() => {
+            window.dispatchEvent(new CustomEvent('open-feature-tour'));
+          }}
+        />
+      )}
+
+      {/* Pinned Favorite Widget (Opt-in, default disabled) */}
+      {dashboardSections.pinnedFavorite && (
+        <PinnedFavoriteWidget
+          pinnedWidget={settings.pinnedWidget || { enabled: true, type: 'timeline', theme: 'dark-blue', wallpaper: 'slate' }}
+          cityName={settings.cityName}
+          now={now}
+          hijri={hijri}
+          times={times}
+          current={current}
+          next={next}
+          timeRemainingStr={timeRemainingStr}
+          dayNameArabic={dayNameArabic}
+          gregorianClean={gregorianClean}
+          toArabicNumbers={toArabicNumbers}
+          onNavigateWidgets={() => setActiveTab && setActiveTab('widgets')}
+        />
+      )}
 
       {isFridayWindow && (
         <FridayMode 
@@ -1702,7 +2048,7 @@ export default function Dashboard({
       )}
 
       {/* Nafilah & Optional Prayers Card (Home Quick Access) */}
-      <div className={`rounded-3xl p-5 border transition-all duration-300 space-y-4 ${
+      <div dir="rtl" className={`rounded-3xl p-5 border transition-all duration-300 space-y-4 text-right ${
         currentStyle === 'glass-dark'
           ? 'bg-[#111723]/80 backdrop-blur-md border-white/5 shadow-2xl text-slate-100'
           : 'bg-white border-[#e2e8f0] shadow-sm text-slate-800'
@@ -1710,9 +2056,9 @@ export default function Dashboard({
         <div className="flex justify-between items-center pb-2 border-b border-slate-200/40 dark:border-slate-800/50">
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
-            <div className="text-end">
-              <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none">السنن الإضافية والنوافل</h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1">سجل سنن الضحى، قيام الليل، والوتر مباشرة</p>
+            <div className="text-right">
+              <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none text-right">السنن الإضافية والنوافل</h3>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1 text-right">سجل سنن الضحى، قيام الليل، والوتر مباشرة</p>
             </div>
           </div>
         </div>
@@ -1748,9 +2094,9 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">☀️</span>
-                    <div className="text-end">
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">صلاة الضحى</span>
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">صلاة الضحى</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
                         {currentDuhaRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentDuhaRakahs)} ركعات` : 'الضحى (٢، ٤، ٦، ٨)'}
                       </span>
                     </div>
@@ -1818,9 +2164,9 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">🌃</span>
-                    <div className="text-end">
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">قيام الليل والتهجد</span>
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">قيام الليل والتهجد</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
                         {currentQiyamRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentQiyamRakahs)} ركعة` : 'التهجد (٢، ٤، ٦، ٨+)'}
                       </span>
                     </div>
@@ -1888,9 +2234,9 @@ export default function Dashboard({
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="text-base">🌟</span>
-                    <div className="text-end">
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block">الشفع والوتر</span>
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">الشفع والوتر</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
                         {currentWitrRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentWitrRakahs)} ركعة` : 'الوتر (١، ٣، ٥، ٧)'}
                       </span>
                     </div>
@@ -1947,72 +2293,6 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Sunrise (Shuruq) Educational Dialog */}
-      {showSunriseModal && (
-        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" dir="rtl">
-          <div className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-4">
-            <div className="w-14 h-14 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl animate-spin-slow">
-              ☀️
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-black text-slate-800 dark:text-white">
-                شروق الشمس (نهاية وقت الفجر)
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
-                يمثل شروق الشمس نهاية وقت صلاة الفجر وموعد شروقها، ولا يصح أداء صلاة الفجر بعد هذا الوقت كأداء بل تُصلى قضاءً.
-              </p>
-              <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl mt-2 text-end">
-                <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 block mb-1">💡 سنة الضحى (صلاة الأوابين):</span>
-                <p className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold leading-relaxed">
-                  يُستحب بعد شروق الشمس بثلث ساعة تقريباً صلاة الضحى، وهي سنة مؤكدة مباركة تُعادل صدقة عن كل سلامى (مفصل) في جسد الإنسان. أقلها ركعتان وأكثرها ثمان ركعات.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowSunriseModal(false);
-                setTimeout(() => {
-                  const duhaElem = document.getElementById('duha-card-section');
-                  if (duhaElem) {
-                    duhaElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    duhaElem.classList.add('ring-2', 'ring-amber-400', 'bg-amber-50/80', 'dark:bg-amber-950/40');
-                    setTimeout(() => {
-                      duhaElem.classList.remove('ring-2', 'ring-amber-400', 'bg-amber-50/80', 'dark:bg-amber-950/40');
-                    }, 2500);
-                  }
-                }, 150);
-              }}
-              className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm active:scale-95"
-            >
-              <Sun className="w-4 h-4 text-amber-100" />
-              <span>اذهب لتسجيل صلاة الضحى ☀️</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                const sunriseMuezzin = localStorage.getItem('salah_muezzin_Sunrise') || currentMuezzin;
-                togglePlayAthan(sunriseMuezzin);
-              }}
-              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-extrabold rounded-xl text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
-            >
-              <Volume2 className="w-4 h-4" />
-              <span>تجربة سماع صوت تنبيه الشروق</span>
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => setShowSunriseModal(false)}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold rounded-xl text-xs transition-all cursor-pointer"
-            >
-              حسناً، جزاكم الله خيراً
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 1.5. Custom Duas Home Widget */}
       {(() => {
         const homeDuas = customDuas.filter(d => d.showOnHome);
@@ -2042,7 +2322,7 @@ export default function Dashboard({
 
             {/* Content card */}
             <div className="relative z-10 space-y-4">
-              <p className="text-sm font-semibold leading-relaxed text-end text-indigo-50/90 whitespace-pre-line font-sans">
+              <p className="text-sm font-semibold leading-relaxed text-right text-indigo-50/90 whitespace-pre-line font-sans" dir="rtl">
                 {activeDua.text}
               </p>
               
@@ -2285,9 +2565,9 @@ export default function Dashboard({
                     {/* Sunnah Before */}
                     {hasSunnahBefore && (
                       <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
-                        <div className="text-end">
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans">سنة قبلية ({toArabicNumbers(sunnahBeforeMax)} ركعات)</span>
-                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans text-right block">سنة قبلية ({toArabicNumbers(sunnahBeforeMax)} ركعات)</span>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
                             {(log.sunnahBefore ?? 0) >= sunnahBeforeMax ? '✨ اكتملت السنة القبلية' : (log.sunnahBefore ?? 0) > 0 ? `تمت صلاة ${toArabicNumbers(log.sunnahBefore ?? 0)} ركعات` : 'لم تصلَّ بعد'}
                           </p>
                         </div>
@@ -2340,9 +2620,9 @@ export default function Dashboard({
                     {/* Sunnah After */}
                     {hasSunnahAfter && (
                       <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
-                        <div className="text-end">
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans">سنة بعدية ({toArabicNumbers(sunnahAfterMax)} ركعات)</span>
-                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans text-right block">سنة بعدية ({toArabicNumbers(sunnahAfterMax)} ركعات)</span>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
                             {(log.sunnahAfter ?? 0) >= sunnahAfterMax ? '✨ اكتملت السنة البعدية' : 'لم تصلَّ بعد'}
                           </p>
                         </div>
@@ -2395,6 +2675,87 @@ export default function Dashboard({
                 </div>
               )}
 
+              {/* 3. Integrated Night Prayers Section (الشفع والوتر وقيام الليل) for Isha */}
+              {selectedPrayerToLog === 'Isha' && (() => {
+                const witrLog = todayLogs['Witr'] || { status: 'not_yet', extraRakahs: 0 };
+                const currentWitrRakahs = witrLog.status === 'A' ? (witrLog.extraRakahs || 0) : 0;
+                const qiyamLog = todayLogs['Qiyam'] || { status: 'not_yet', extraRakahs: 0 };
+                const currentQiyamRakahs = qiyamLog.status === 'A' ? (qiyamLog.extraRakahs || 0) : 0;
+
+                return (
+                  <div className="space-y-2.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500">الصلوات الليلية المصاحبة</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPrayerToLog(null);
+                          setShowNightPrayersQuickLog(true);
+                        }}
+                        className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>توسيع نافذة صلاة الليل</span>
+                        <span>✨</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {/* Quick Witr Row */}
+                      <div className="flex items-center justify-between p-2.5 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl">
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block text-right">🌟 الشفع والوتر</span>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
+                            {currentWitrRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentWitrRakahs)} ركعة` : '١ أو ٣ ركعات'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {[1, 3].map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => handleUpdateNafilah('Witr', currentWitrRakahs === r ? 0 : r)}
+                              className={`px-2.5 py-1 text-[11px] font-black rounded-lg border transition-all cursor-pointer ${
+                                currentWitrRakahs === r
+                                  ? 'bg-amber-500 text-white border-amber-500 shadow-xs scale-105'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {toArabicNumbers(r)} {r === 1 ? 'ركعة' : 'ركعات'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Quick Qiyam Row */}
+                      <div className="flex items-center justify-between p-2.5 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl">
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block text-right">🌃 قيام الليل والتهجد</span>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
+                            {currentQiyamRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentQiyamRakahs)} ركعة` : '٢، ٤، ٨ ركعات'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {[2, 4, 8].map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => handleUpdateNafilah('Qiyam', currentQiyamRakahs === r ? 0 : r)}
+                              className={`px-2 py-1 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                                currentQiyamRakahs === r
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs scale-105'
+                                  : 'bg-white dark:bg-slate-800 border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {toArabicNumbers(r)} ركعات
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Contextual Adhkar & Fast Qada Gateway */}
               {(() => {
                 const pendingForThisPrayer = pendingQadaPrayers.filter(q => q.prayerName === selectedPrayerToLog);
@@ -2410,18 +2771,23 @@ export default function Dashboard({
                       <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <span className="text-base">📿</span>
-                          <div className="text-end">
-                            <span className="font-extrabold text-emerald-900 dark:text-emerald-300 block">
+                          <div className="text-right">
+                            <span className="font-extrabold text-emerald-900 dark:text-emerald-300 block text-right">
                               {selectedPrayerToLog === 'Fajr' ? 'أذكار الصباح وأذكار الصلاة' : selectedPrayerToLog === 'Asr' || selectedPrayerToLog === 'Maghrib' ? 'أذكار المساء وأذكار الصلاة' : 'أذكار ما بعد الصلاة'}
                             </span>
-                            <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-bold">هل أتممت أذكارك المباركة؟</span>
+                            <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-bold text-right block">هل أتممت أذكارك المباركة؟</span>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => {
+                            const pName = selectedPrayerToLog;
                             setSelectedPrayerToLog(null);
-                            if (setActiveTab) setActiveTab('adhkar');
+                            if (onNavigateToAdhkarForPrayer && pName) {
+                              onNavigateToAdhkarForPrayer(pName);
+                            } else if (setActiveTab) {
+                              setActiveTab('adhkar');
+                            }
                           }}
                           className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-[11px] cursor-pointer transition-all shrink-0 active:scale-95 shadow-2xs"
                         >
@@ -2435,11 +2801,11 @@ export default function Dashboard({
                       <div className="p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-500/20 rounded-2xl flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <span className="text-base">⚡</span>
-                          <div className="text-end">
-                            <span className="font-extrabold text-amber-900 dark:text-amber-300 block">
+                          <div className="text-right">
+                            <span className="font-extrabold text-amber-900 dark:text-amber-300 block text-right">
                               لديك {toArabicNumbers(qadaCount)} صلاة {getArabicPrayerName(selectedPrayerToLog, now)} فائتة
                             </span>
-                            <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-bold">هل قضيت صلاة سابقة مع هذه الفريضة؟</span>
+                            <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-bold text-right block">هل قضيت صلاة سابقة مع هذه الفريضة؟</span>
                           </div>
                         </div>
                         <button
@@ -2484,13 +2850,13 @@ export default function Dashboard({
 
       {/* 3. Actionable Local Nudges */}
       {activeNudge && (
-        <div id="nudge-banner" className="bg-emerald-50/70 dark:bg-[#132c23] border border-emerald-100 dark:border-[#234237] rounded-3xl p-5 flex items-start gap-4 transition-colors duration-300">
-          <div className="p-3 bg-emerald-100 dark:bg-[#1e4638] text-emerald-700 dark:text-emerald-300 rounded-2xl">
+        <div id="nudge-banner" className="bg-emerald-50/70 dark:bg-[#132c23] border border-emerald-100 dark:border-[#234237] rounded-3xl p-5 flex items-start gap-4 transition-colors duration-300" dir="rtl">
+          <div className="p-3 bg-emerald-100 dark:bg-[#1e4638] text-emerald-700 dark:text-emerald-300 rounded-2xl shrink-0">
             <Sparkles className="w-6 h-6 animate-pulse" />
           </div>
-          <div className="space-y-3 flex-1 text-end">
-            <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300">توجيه رفيق مبارك</h4>
-            <p className="text-sm text-emerald-800 dark:text-emerald-100 leading-relaxed font-semibold">
+          <div className="space-y-3 flex-1 text-right">
+            <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300 text-right">توجيه مبارك من هِمَّتِي</h4>
+            <p className="text-sm text-emerald-800 dark:text-emerald-100 leading-relaxed font-semibold text-right">
               {activeNudge.message}
             </p>
             {activeNudge.actionKey && activeNudge.actionKey !== 'general' && (
@@ -2506,16 +2872,16 @@ export default function Dashboard({
       )}
 
       {/* Fasting Tracker Bar - Compact Full-Width */}
-      <div id="fasting-tracker-container" className="bg-white dark:bg-[#161d26] rounded-3xl p-4 border border-[#e2e8f0]/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 transition-colors duration-300 shadow-xs">
-        <div className="flex items-center gap-3 text-end">
+      <div id="fasting-tracker-container" className="bg-white dark:bg-[#161d26] rounded-3xl p-4 border border-[#e2e8f0]/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 transition-colors duration-300 shadow-xs" dir="rtl">
+        <div className="flex items-center gap-3 text-right">
           <div className="p-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-2xl shrink-0">
             <Heart className="w-5 h-5 text-rose-500" />
           </div>
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-black text-slate-800 dark:text-white">
+          <div className="space-y-0.5 text-right">
+            <h3 className="text-sm font-black text-slate-800 dark:text-white text-right">
               تتبع الصيام اليومي والسنن
             </h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium text-right">
               {todayFast.fasted ? 'تم تسجيل صيامك اليوم، تقبل الله منكم صالح الأعمال 🤍' : 'لم تسجل صياماً لليوم بعد (رمضان، الإثنين والخميس، الأيام البيض، إلخ).'}
             </p>
           </div>
@@ -2533,39 +2899,6 @@ export default function Dashboard({
           {todayFast.fasted ? 'صائم بفضل الله ✓' : 'تسجيل صيام اليوم'}
         </button>
       </div>
-
-      {/* Pinned Favorite Widget Section */}
-      {settings.pinnedWidget && (
-        <PinnedFavoriteWidget
-          pinnedWidget={settings.pinnedWidget}
-          cityName={settings.cityName}
-          now={now}
-          hijri={hijri}
-          times={times}
-          current={current}
-          next={next}
-          timeRemainingStr={timeRemainingStr}
-          dayNameArabic={dayNameArabic}
-          gregorianClean={gregorianClean}
-          toArabicNumbers={toArabicNumbers}
-          onNavigateWidgets={() => setActiveTab && setActiveTab('widgets')}
-        />
-      )}
-
-      {/* Interactive App Feature Discovery Guide & Tour Launcher */}
-      <FeatureDiscoveryWidget
-        onSelectTab={(tab, subTab) => {
-          if (setActiveTab) {
-            setActiveTab(tab as any);
-            if (tab === 'settings' && subTab) {
-              window.dispatchEvent(new CustomEvent('change-settings-subtab', { detail: { subTab } }));
-            }
-          }
-        }}
-        onOpenTour={() => {
-          window.dispatchEvent(new CustomEvent('open-feature-tour'));
-        }}
-      />
 
 
 
@@ -2662,6 +2995,25 @@ export default function Dashboard({
       <PushNotificationManager
         isOpen={showPushControlCenter}
         onClose={() => setShowPushControlCenter(false)}
+      />
+
+      {/* Contextual Quick Log Modals */}
+      <DuhaQuickLogModal
+        isOpen={showDuhaQuickLog}
+        onClose={() => setShowDuhaQuickLog(false)}
+        prayerLogs={prayerLogs}
+        setPrayerLogs={setPrayerLogs}
+        voluntaryPrayerLogs={voluntaryPrayerLogs}
+        setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
+      />
+
+      <NightPrayersQuickLogModal
+        isOpen={showNightPrayersQuickLog}
+        onClose={() => setShowNightPrayersQuickLog(false)}
+        prayerLogs={prayerLogs}
+        setPrayerLogs={setPrayerLogs}
+        voluntaryPrayerLogs={voluntaryPrayerLogs}
+        setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
       />
 
       {appModal && (

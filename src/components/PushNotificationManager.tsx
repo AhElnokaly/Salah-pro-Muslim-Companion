@@ -52,7 +52,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
     const result = await requestPushPermission();
     setPermissionStatus(result);
     if (result === 'granted') {
-      sendPushNotification('تم تفعيل إشعارات رفيق المسلم بنجاح 🕌', {
+      sendPushNotification('تم تفعيل إشعارات تطبيق هِمَّتِي بنجاح 🕌', {
         body: 'ستصلك الآن تنبيهات الأذان والأذكار الفورية في المواعيد المحددة.',
         soundType: 'athan'
       });
@@ -70,7 +70,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
 
   const handleTestPush = async () => {
     setTestStatusMsg(null);
-    const success = await sendPushNotification('اختبار إشعار رفيق المسلم 🔔', {
+    const success = await sendPushNotification('اختبار إشعار تطبيق هِمَّتِي 🔔', {
       body: 'هذا إشعار تجريبي لاختبار التنبيهات الفورية على جهازك.',
       soundType: 'athan'
     });

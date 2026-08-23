@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, Moon, Sun, AlertTriangle, Clock, ArrowLeft, HeartHandshake } from 'lucide-react';
 import { PrayerTimes } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
+import { parseTimeToMinutes } from '../utils/prayerCalc';
 
 interface SacredHoursBannerProps {
   prayerTimes?: PrayerTimes;
@@ -41,9 +42,9 @@ export default function SacredHoursBanner({
     // Parse prayer date objects for today
     const parseTime = (timeStr: string) => {
       if (!timeStr) return null;
-      const [hoursStr, minutesStr] = timeStr.split(':');
+      const totalMins = parseTimeToMinutes(timeStr);
       const d = new Date(now);
-      d.setHours(parseInt(hoursStr, 10), parseInt(minutesStr, 10), 0, 0);
+      d.setHours(Math.floor(totalMins / 60), totalMins % 60, 0, 0);
       return d;
     };
 

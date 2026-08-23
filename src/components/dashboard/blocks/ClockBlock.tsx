@@ -46,7 +46,7 @@ const ClockBlock: React.FC<ClockBlockProps> = ({
           <span className={`${digitalTextSize} font-black font-mono tracking-tight text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.35)]`}>
             {`${toArabicNumbers(hrs.toString())}:${toArabicNumbers(mins)}`}
           </span>
-          <span className="text-[9px] font-black text-amber-300 bg-black/20 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/5">
+          <span className="text-[9px] font-black text-amber-300 bg-black/20 px-1.5 py-0.5 rounded-md border border-white/5">
             {periodStr}
           </span>
         </div>
@@ -64,7 +64,7 @@ const ClockBlock: React.FC<ClockBlockProps> = ({
       {/* Analog Clock Face Options Selector */}
       {showAnalogClock && (
         <div className="flex items-center justify-center gap-1 z-10 w-full animate-fade-in mt-1 scale-90">
-          <div className="flex bg-black/25 backdrop-blur-md p-0.5 rounded-lg border border-white/5 shadow-inner">
+          <div className="flex bg-black/20 p-0.5 rounded-lg border border-white/5 shadow-inner">
             {(['classic', 'islamic', 'minimal', 'cyber', 'salatuk'] as const).map(face => (
               <button
                 key={face}

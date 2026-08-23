@@ -24,7 +24,7 @@ import {
   UnifiedPeriodProgress 
 } from '../utils/progressEngine';
 import BadgesShowcaseModal from './BadgesShowcaseModal';
-import { PrayerLog, QuranSession, QuranKhatma } from '../types';
+import { PrayerLog, QuranSession, QuranKhatma, AppSettings } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface UnifiedProgressCardProps {
@@ -36,6 +36,7 @@ interface UnifiedProgressCardProps {
   isWomenExcuse?: boolean;
   onNavigateTab?: (tab: string) => void;
   appStyle?: 'glass-dark' | 'faith-bright';
+  settings?: AppSettings;
 }
 
 export default function UnifiedProgressCard({
@@ -46,7 +47,8 @@ export default function UnifiedProgressCard({
   khatmat = [],
   isWomenExcuse = false,
   onNavigateTab,
-  appStyle = 'faith-bright'
+  appStyle = 'faith-bright',
+  settings
 }: UnifiedProgressCardProps) {
   const [activePeriod, setActivePeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('daily');
   const [showBadgesModal, setShowBadgesModal] = useState(false);
@@ -58,7 +60,12 @@ export default function UnifiedProgressCard({
     dhikrLogs,
     quranSessions,
     khatmat,
-    isWomenExcuse
+    isWomenExcuse,
+    latitude: settings?.latitude,
+    longitude: settings?.longitude,
+    calcMethod: settings?.calcMethod,
+    madhab: settings?.madhab,
+    prayerOffsets: settings?.prayerOffsets,
   });
 
   const dailyProgress = progressData.daily;
@@ -410,7 +417,10 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
 
   const handleClick = () => {
     if (!onNavigateTab) return;
-    if (item.id === 'salah' || item.id === 'sunnah') onNavigateTab('salah');
+    if (item.id === 'salah' || item.id === 'sunnah') {
+      window.dispatchEvent(new CustomEvent('navigate-salah-subtab', { detail: 'worship' }));
+      onNavigateTab('salah');
+    }
     else if (item.id === 'adhkar') onNavigateTab('adhkar');
     else if (item.id === 'fasting') onNavigateTab('fasting');
     else if (item.id === 'quran') onNavigateTab('quran');
@@ -422,14 +432,14 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
     <button
       type="button"
       onClick={handleClick}
-      className={`p-1 sm:p-2.5 rounded-2xl sm:rounded-3xl border transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer group flex flex-col items-center justify-between text-center relative overflow-hidden shadow-xs focus:outline-none w-full ${
+      className={`p-1.5 xs:p-2 sm:p-3 rounded-2xl sm:rounded-3xl border transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer group flex flex-col items-center justify-between text-center relative shadow-xs focus:outline-none w-full min-h-[140px] xs:min-h-[150px] sm:min-h-[165px] ${
         isDark ? 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]' : 'bg-slate-50/90 border-slate-200/80 hover:bg-white hover:shadow-md'
       }`}
     >
       {/* Top Badge Pill */}
-      <div className={`px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black flex items-center justify-center gap-0.5 shadow-2xs ${tier.colorClasses.badgeBg} ${tier.colorClasses.glow}`}>
-        <span className="text-[9px]">{tier.badgeSymbol}</span>
-        <span className="text-[8px] font-bold">{tier.shortLabel.split(' ')[0]}</span>
+      <div className={`px-1.5 py-0.5 rounded-full text-[7.5px] xs:text-[8.5px] sm:text-[9.5px] font-black flex items-center justify-center gap-0.5 shadow-2xs ${tier.colorClasses.badgeBg} ${tier.colorClasses.glow}`}>
+        <span className="text-[8.5px] xs:text-[9.5px]">{tier.badgeSymbol}</span>
+        <span className="text-[7.5px] xs:text-[8.5px] font-black">{tier.shortLabel.split(' ')[0]}</span>
       </div>
 
       {/* Responsive SVG Circular Ring */}
@@ -442,21 +452,21 @@ function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemPr
       />
 
       {/* Titles & Details */}
-      <div className="space-y-0.5 w-full flex flex-col items-center justify-center text-center">
+      <div className="space-y-0.5 w-full flex flex-col items-center justify-center text-center mt-auto">
         <h4 className="text-[10.5px] xs:text-[11.5px] sm:text-xs font-black text-slate-900 dark:text-slate-100 leading-tight">
           {item.categoryName}
         </h4>
-        <p className="text-[8.5px] xs:text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-tight whitespace-nowrap">
-          {item.detailText}
+        <p className="text-[8px] xs:text-[8.5px] sm:text-[10px] text-slate-600 dark:text-slate-300 font-bold leading-tight px-0.5 max-w-full break-words">
+          {toArabicNumbers(item.detailText)}
         </p>
 
         {hasLatePrayers && (
-          <div className="flex items-center justify-center gap-1 mt-0.5">
-            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[8px] font-black">
+          <div className="flex flex-col xs:flex-row items-center justify-center gap-0.5 mt-1 w-full">
+            <span className="inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/90 text-emerald-800 dark:text-emerald-300 text-[7px] xs:text-[8px] font-black leading-none whitespace-nowrap">
               <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
               {toArabicNumbers(item.onTimeValue || 0)} حاضراً
             </span>
-            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded-md bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 text-[8px] font-black">
+            <span className="inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/90 text-amber-800 dark:text-amber-300 text-[7px] xs:text-[8px] font-black leading-none whitespace-nowrap">
               <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />
               {toArabicNumbers(item.lateValue || 0)} متأخر
             </span>

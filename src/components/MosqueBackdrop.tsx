@@ -7,6 +7,7 @@ export type { BackdropType };
 export interface MosqueBackdropProps {
   type: BackdropType | string;
   renderMode?: BackdropRenderMode;
+  opacity?: number;
   className?: string;
 }
 
@@ -108,13 +109,16 @@ export const OccasionOverlay = memo(function OccasionOverlay({
  */
 export const LineArtBackdrop = memo(function LineArtBackdrop({
   type,
+  opacity = 75,
   className = '',
 }: {
   type: string;
+  opacity?: number;
   className?: string;
 }) {
   const backdropKey = type === 'auto' ? 'classic' : type;
   const isGlass = backdropKey.startsWith('glass_');
+  const alphaVal = Math.max(0.05, Math.min(1.0, opacity / 100));
 
   // Determine primary stroke color scheme based on theme
   let strokeColor = '#fcd34d'; // Gold default
@@ -140,7 +144,10 @@ export const LineArtBackdrop = memo(function LineArtBackdrop({
   }
 
   return (
-    <div className={`w-full h-full relative overflow-hidden pointer-events-none select-none ${className}`}>
+    <div 
+      className={`w-full h-full relative overflow-hidden pointer-events-none select-none transition-opacity duration-200 ${className}`}
+      style={{ opacity: alphaVal }}
+    >
       <svg
         viewBox="0 0 1200 400"
         preserveAspectRatio="xMidYMax slice"
@@ -339,9 +346,11 @@ export const LineArtBackdrop = memo(function LineArtBackdrop({
  */
 export const IllustratedBackdrop = memo(function IllustratedBackdrop({
   type,
+  opacity = 75,
   className = '',
 }: {
   type: string;
+  opacity?: number;
   className?: string;
 }) {
   const backdropKey = type === 'auto' ? 'classic' : type;
@@ -349,15 +358,20 @@ export const IllustratedBackdrop = memo(function IllustratedBackdrop({
 
   if (!imagePath) {
     // Fallback to LineArtBackdrop if image path is not found
-    return <LineArtBackdrop type={backdropKey} className={className} />;
+    return <LineArtBackdrop type={backdropKey} opacity={opacity} className={className} />;
   }
 
+  const alphaVal = Math.max(0.05, Math.min(1.0, opacity / 100));
+
   return (
-    <div className={`w-full h-full relative overflow-hidden pointer-events-none select-none ${className}`}>
+    <div 
+      className={`w-full h-full relative overflow-hidden pointer-events-none select-none transition-opacity duration-200 ${className}`}
+      style={{ opacity: alphaVal }}
+    >
       <img
         src={imagePath}
         alt={`Islamic Backdrop ${backdropKey}`}
-        className="w-full h-full object-cover object-bottom transition-opacity duration-500"
+        className="w-full h-full object-cover object-center transition-all duration-300 pointer-events-none"
         referrerPolicy="no-referrer"
         onError={(e) => {
           // Hide broken image gracefully if file fails to load
@@ -378,19 +392,25 @@ export const IllustratedBackdrop = memo(function IllustratedBackdrop({
 function MosqueBackdropComponent({
   type,
   renderMode,
+  opacity,
   className = '',
 }: MosqueBackdropProps) {
   const backdropKey = type === 'auto' ? 'classic' : type;
 
-  // Read setting preference if renderMode prop is not explicitly supplied
+  // Read setting preference if renderMode or opacity prop is not explicitly supplied
   let effectivePreference: BackdropRenderMode = renderMode || 'auto';
-  if (!renderMode && typeof window !== 'undefined') {
+  let effectiveOpacity = opacity ?? 75;
+
+  if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem('salah_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.backdropRenderMode) {
+        if (!renderMode && parsed.backdropRenderMode) {
           effectivePreference = parsed.backdropRenderMode;
+        }
+        if (opacity === undefined && parsed.backdropOpacity !== undefined) {
+          effectiveOpacity = parsed.backdropOpacity;
         }
       }
     } catch (e) {
@@ -401,10 +421,10 @@ function MosqueBackdropComponent({
   const resolvedMode = resolveRenderMode(backdropKey, effectivePreference);
 
   if (resolvedMode === 'illustrated') {
-    return <IllustratedBackdrop type={backdropKey} className={className} />;
+    return <IllustratedBackdrop type={backdropKey} opacity={effectiveOpacity} className={className} />;
   }
 
-  return <LineArtBackdrop type={backdropKey} className={className} />;
+  return <LineArtBackdrop type={backdropKey} opacity={effectiveOpacity} className={className} />;
 }
 
 export default memo(MosqueBackdropComponent);

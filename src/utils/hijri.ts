@@ -9,7 +9,7 @@ export function toArabicNumbers(num: number | string | null | undefined): string
   return num.toString().replace(/\d/g, (d) => arabicDigits[parseInt(d)]);
 }
 
-export function getHijriDate(date: Date, offsetDays: number = 0): {
+export function getHijriDate(date: Date = new Date(), offsetDays: number = 0): {
   day: number;
   month: number;
   year: number;
@@ -87,12 +87,12 @@ export function formatArabicDayCount(n: number): string {
   return `${toArabicNumbers(n)} يوماً`;
 }
 
-export function getArabicDayOfWeek(date: Date): string {
+export function getArabicDayOfWeek(date: Date = new Date()): string {
   const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   return days[date.getDay()];
 }
 
-export function getArabicMonthNameGregorian(date: Date): string {
+export function getArabicMonthNameGregorian(date: Date = new Date()): string {
   const months = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
@@ -100,7 +100,7 @@ export function getArabicMonthNameGregorian(date: Date): string {
   return months[date.getMonth()];
 }
 
-export function formatGregorianFullDateArabic(date: Date): string {
+export function formatGregorianFullDateArabic(date: Date = new Date()): string {
   const dayName = getArabicDayOfWeek(date);
   const dayNum = toArabicNumbers(date.getDate());
   const monthName = getArabicMonthNameGregorian(date);

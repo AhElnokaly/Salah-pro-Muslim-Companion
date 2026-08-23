@@ -40,9 +40,11 @@ import {
   HelpCircle,
   Info,
   Globe,
-  Edit3
+  Edit3,
+  FileJson,
+  FileUp
 } from 'lucide-react';
-import { AppSettings, BackdropRenderMode, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua, QuranSession, QuranKhatma, MuezzinOption } from '../types';
+import { AppSettings, BackdropRenderMode, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, PrayerName, CustomDua, QuranSession, QuranKhatma, MuezzinOption, SettingsSubTabId } from '../types';
 import { POPULAR_CITIES } from '../utils/prayerCalc';
 import { detectUserLocation } from '../utils/locationService';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
@@ -50,10 +52,12 @@ import { toArabicNumbers, formatArabicDayCount, getHijriDate } from '../utils/hi
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins, downloadAndSaveAudio, deleteDownloadedAudio, getDownloadedTrackIds, getAudioStorageStats } from '../utils/audioStorage';
 import ToggleSwitch from './ui/ToggleSwitch';
 import { safeSetItem } from '../utils/storage';
+import { DASHBOARD_SECTION_REGISTRY, getDashboardSectionsConfig, saveDashboardSectionsConfig, DashboardSectionId } from './dashboard/dashboardSections';
+import { formatDateKey } from '../utils/prayerDayBoundary';
 
 interface MoreSettingsProps {
-  subTab: 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas';
-  setSubTab: React.Dispatch<React.SetStateAction<'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas'>>;
+  subTab: SettingsSubTabId;
+  setSubTab: React.Dispatch<React.SetStateAction<SettingsSubTabId>>;
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   pendingQadaPrayers: PendingQadaPrayer[];
@@ -62,12 +66,16 @@ interface MoreSettingsProps {
   setRamadanQada: React.Dispatch<React.SetStateAction<RamadanQadaTracker>>;
   prayerLogs: Record<string, Record<string, PrayerLog>>;
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
+  voluntaryPrayerLogs?: any[];
+  setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<any[]>>;
   fastingLogs: Record<string, { date: string; fasted: boolean; fastType: string }>;
   setFastingLogs: React.Dispatch<React.SetStateAction<Record<string, { date: string; fasted: boolean; fastType: string }>>>;
   quranSessions: QuranSession[];
   setQuranSessions: React.Dispatch<React.SetStateAction<QuranSession[]>>;
   khatmat: QuranKhatma[];
   setKhatmat: React.Dispatch<React.SetStateAction<QuranKhatma[]>>;
+  dhikrLogs?: Record<string, Record<string, number>>;
+  setDhikrLogs?: React.Dispatch<React.SetStateAction<Record<string, Record<string, number>>>>;
   customDuas: CustomDua[];
   setCustomDuas: React.Dispatch<React.SetStateAction<CustomDua[]>>;
 }
@@ -83,12 +91,16 @@ export default function MoreSettings({
   setRamadanQada,
   prayerLogs,
   setPrayerLogs,
+  voluntaryPrayerLogs,
+  setVoluntaryPrayerLogs,
   fastingLogs,
   setFastingLogs,
   quranSessions,
   setQuranSessions,
   khatmat,
   setKhatmat,
+  dhikrLogs,
+  setDhikrLogs,
   customDuas,
   setCustomDuas
 }: MoreSettingsProps) {
@@ -97,6 +109,35 @@ export default function MoreSettings({
   const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
   const [importText, setImportText] = useState('');
   const [showImportResult, setShowImportResult] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setImportText(content);
+        handleImportData(content);
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so same file can be chosen again if needed
+    e.target.value = '';
+  };
+
+  // Dashboard Sections customization state
+  const [dashboardSections, setDashboardSections] = useState<Record<DashboardSectionId, boolean>>(() => getDashboardSectionsConfig());
+
+  const handleToggleDashboardSection = (id: DashboardSectionId) => {
+    setDashboardSections(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      saveDashboardSectionsConfig(next);
+      window.dispatchEvent(new CustomEvent('salah_dashboard_sections_updated'));
+      return next;
+    });
+  };
 
   // Location & GPS state
   const [isAutoLocating, setIsAutoLocating] = useState(false);
@@ -268,7 +309,13 @@ export default function MoreSettings({
       setAudioDuration(0);
 
       const playAudioTrack = (srcUrl: string, isFallback = false) => {
-        const audio = new Audio(srcUrl);
+        let safeUrl = srcUrl;
+        if (!safeUrl || typeof safeUrl !== 'string' || safeUrl.trim() === '' || safeUrl.startsWith('db://')) {
+          safeUrl = isFajr
+            ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
+            : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+        }
+        const audio = new Audio(safeUrl);
         audioRef.current = audio;
         audio.volume = audioVolume;
         audio.playbackRate = playbackSpeed;
@@ -421,7 +468,7 @@ export default function MoreSettings({
         daysCompleted: prev.daysCompleted + 1
       }));
       
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = formatDateKey(new Date());
       setFastingLogs(prev => ({
         ...prev,
         [todayStr]: {
@@ -455,7 +502,7 @@ export default function MoreSettings({
   };
 
   const handleAddManualMissedPrayer = (prayerName: PrayerName) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = formatDateKey(new Date());
     const newQada: PendingQadaPrayer = {
       id: crypto.randomUUID(),
       date: todayStr,
@@ -476,56 +523,253 @@ export default function MoreSettings({
     }));
   };
 
-  // Export state to JSON string
+  // Export all application state to JSON string
   const handleExportData = () => {
-    const fullData = {
-      settings,
-      prayerLogs,
-      pendingQadaPrayers,
-      fastingLogs,
-      ramadanQada,
-      quranSessions,
-      khatmat,
-      version: '1.2',
-      exportedAt: new Date().toISOString()
-    };
-    const jsonStr = JSON.stringify(fullData, null, 2);
-    setBackupText(jsonStr);
+    try {
+      const fullData = {
+        appName: 'Hemmaty',
+        version: '2.5',
+        exportedAt: new Date().toISOString(),
+        // 1. Core Spiritual State
+        settings,
+        prayerLogs,
+        pendingQadaPrayers,
+        voluntaryPrayerLogs: voluntaryPrayerLogs || [],
+        fastingLogs,
+        ramadanQada,
+        quranSessions,
+        khatmat,
+        dhikrLogs: dhikrLogs || {},
+        customDuas: customDuas || [],
+        // 2. Extended Adhkar & Tasbeeh
+        customTasbeehs: JSON.parse(localStorage.getItem('mc_custom_tasbeehs') || '[]'),
+        favoriteDhikrCategories: JSON.parse(localStorage.getItem('mc_favorite_dhikr_categories') || '[]'),
+        favoriteDhikrs: JSON.parse(localStorage.getItem('mc_favorite_dhikrs') || '[]'),
+        fridayChecklist: JSON.parse(localStorage.getItem('mc_friday_checklist') || '[]'),
+        // 3. Extended Quran & Khushu
+        quranJuzProgress: JSON.parse(localStorage.getItem('quran_juz_progress') || '[]'),
+        quranRoutines: JSON.parse(localStorage.getItem('quran_routines') || '[]'),
+        qiyamJournalHistory: JSON.parse(localStorage.getItem('qiyam_journal_history') || '[]'),
+        // 4. Custom Alarms & Audio
+        customAlarms: JSON.parse(localStorage.getItem('salah_custom_alarms') || '[]'),
+        spiritualAlerts: JSON.parse(localStorage.getItem('salah_alerts') || 'null'),
+        soundModes: JSON.parse(localStorage.getItem('salah_sound_modes') || 'null'),
+        audioPreferences: {
+          fajrMuezzin: localStorage.getItem('salah_fajr_muezzin') || fajrMuezzin,
+          generalMuezzin: localStorage.getItem('salah_general_muezzin') || generalMuezzin,
+          audioVolume: localStorage.getItem('salah_audio_volume') || audioVolume.toString(),
+          autoPlayAthan: localStorage.getItem('salah_auto_play_athan') !== 'false',
+          prayerMuezzins: {
+            Fajr: localStorage.getItem('salah_muezzin_Fajr') || '',
+            Sunrise: localStorage.getItem('salah_muezzin_Sunrise') || '',
+            Dhuhr: localStorage.getItem('salah_muezzin_Dhuhr') || '',
+            Asr: localStorage.getItem('salah_muezzin_Asr') || '',
+            Maghrib: localStorage.getItem('salah_muezzin_Maghrib') || '',
+            Isha: localStorage.getItem('salah_muezzin_Isha') || ''
+          }
+        },
+        // 5. App Customizations & Preferences
+        clockFace: localStorage.getItem('salah_clock_face') || 'classic',
+        tasbihColor: localStorage.getItem('salah_tasbih_color') || 'indigo',
+        dashboardSections: getDashboardSectionsConfig(),
+        pushSettings: JSON.parse(localStorage.getItem('hemmaty_push_settings') || 'null'),
+        featureAnalytics: JSON.parse(localStorage.getItem('rafiq_feature_analytics_v1') || 'null'),
+        womenExcuseActive: localStorage.getItem('rafiq_women_excuse_active_v1') === 'true'
+      };
+      const jsonStr = JSON.stringify(fullData, null, 2);
+      setBackupText(jsonStr);
 
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `muslim_companion_backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hemmaty_backup_${formatDateKey(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error generating backup:', e);
+      setShowImportResult('فشل إنشاء ملف النسخ الاحتياطي.');
+    }
   };
 
   // Import state from JSON
-  const handleImportData = () => {
+  const handleImportData = (contentToImport?: string) => {
     try {
-      if (!importText.trim()) {
-        setShowImportResult('يرجى لصق نص النسخ الاحتياطي أولاً.');
+      const rawText = contentToImport || importText;
+      if (!rawText || !rawText.trim()) {
+        setShowImportResult('يرجى اختيار ملف أو لصق نص النسخ الاحتياطي أولاً.');
         return;
       }
-      const data = JSON.parse(importText);
-      if (data.settings && data.prayerLogs) {
+      const data = JSON.parse(rawText);
+      if (!data || typeof data !== 'object') {
+        setShowImportResult('الصيغة غير صحيحة. يرجى التأكد من نسخ ملف النسخ الاحتياطي الأصلي بالكامل.');
+        return;
+      }
+
+      let restoredCount = 0;
+
+      // 1. Core Spiritual State
+      if (data.settings) {
         setSettings(data.settings);
+        safeSetItem('mc_settings', JSON.stringify(data.settings));
+        safeSetItem('salah_settings', JSON.stringify(data.settings));
+        restoredCount++;
+      }
+      if (data.prayerLogs) {
         setPrayerLogs(data.prayerLogs);
-        if (data.pendingQadaPrayers) setPendingQadaPrayers(data.pendingQadaPrayers);
-        if (data.fastingLogs) setFastingLogs(data.fastingLogs);
-        if (data.ramadanQada) setRamadanQada(data.ramadanQada);
-        if (data.quranSessions) setQuranSessions(data.quranSessions);
-        if (data.khatmat) setKhatmat(data.khatmat);
-        setShowImportResult('تمت استعادة البيانات بنجاح! تم تحديث السجلات والإعدادات بنجاح.');
+        safeSetItem('mc_prayer_logs', JSON.stringify(data.prayerLogs));
+        restoredCount++;
+      }
+      if (data.pendingQadaPrayers) {
+        setPendingQadaPrayers(data.pendingQadaPrayers);
+        safeSetItem('mc_pending_qada', JSON.stringify(data.pendingQadaPrayers));
+        restoredCount++;
+      }
+      if (data.voluntaryPrayerLogs && setVoluntaryPrayerLogs) {
+        setVoluntaryPrayerLogs(data.voluntaryPrayerLogs);
+        safeSetItem('mc_voluntary_prayer_logs', JSON.stringify(data.voluntaryPrayerLogs));
+        restoredCount++;
+      }
+      if (data.fastingLogs) {
+        setFastingLogs(data.fastingLogs);
+        safeSetItem('mc_fasting_logs', JSON.stringify(data.fastingLogs));
+        restoredCount++;
+      }
+      if (data.ramadanQada) {
+        setRamadanQada(data.ramadanQada);
+        safeSetItem('mc_ramadan_qada', JSON.stringify(data.ramadanQada));
+        restoredCount++;
+      }
+      if (data.quranSessions) {
+        setQuranSessions(data.quranSessions);
+        safeSetItem('mc_quran_sessions', JSON.stringify(data.quranSessions));
+        restoredCount++;
+      }
+      if (data.khatmat) {
+        setKhatmat(data.khatmat);
+        safeSetItem('mc_khatmat', JSON.stringify(data.khatmat));
+        restoredCount++;
+      }
+      if (data.dhikrLogs && setDhikrLogs) {
+        setDhikrLogs(data.dhikrLogs);
+        safeSetItem('mc_dhikr_logs', JSON.stringify(data.dhikrLogs));
+        restoredCount++;
+      }
+      if (data.customDuas) {
+        setCustomDuas(data.customDuas);
+        safeSetItem('mc_custom_duas', JSON.stringify(data.customDuas));
+        restoredCount++;
+      }
+
+      // 2. Extended Adhkar & Tasbeeh
+      if (data.customTasbeehs) {
+        safeSetItem('mc_custom_tasbeehs', JSON.stringify(data.customTasbeehs));
+        restoredCount++;
+      }
+      if (data.favoriteDhikrCategories) {
+        safeSetItem('mc_favorite_dhikr_categories', JSON.stringify(data.favoriteDhikrCategories));
+        restoredCount++;
+      }
+      if (data.favoriteDhikrs) {
+        safeSetItem('mc_favorite_dhikrs', JSON.stringify(data.favoriteDhikrs));
+        restoredCount++;
+      }
+      if (data.fridayChecklist) {
+        safeSetItem('mc_friday_checklist', JSON.stringify(data.fridayChecklist));
+        restoredCount++;
+      }
+
+      // 3. Extended Quran & Khushu
+      if (data.quranJuzProgress) {
+        safeSetItem('quran_juz_progress', JSON.stringify(data.quranJuzProgress));
+        restoredCount++;
+      }
+      if (data.quranRoutines) {
+        safeSetItem('quran_routines', JSON.stringify(data.quranRoutines));
+        restoredCount++;
+      }
+      if (data.qiyamJournalHistory) {
+        safeSetItem('qiyam_journal_history', JSON.stringify(data.qiyamJournalHistory));
+        restoredCount++;
+      }
+
+      // 4. Custom Alarms & Audio Preferences
+      if (data.customAlarms) {
+        safeSetItem('salah_custom_alarms', JSON.stringify(data.customAlarms));
+        restoredCount++;
+      }
+      if (data.spiritualAlerts) {
+        safeSetItem('salah_alerts', JSON.stringify(data.spiritualAlerts));
+        restoredCount++;
+      }
+      if (data.soundModes) {
+        safeSetItem('salah_sound_modes', JSON.stringify(data.soundModes));
+        restoredCount++;
+      }
+      if (data.audioPreferences) {
+        if (data.audioPreferences.fajrMuezzin) {
+          setFajrMuezzin(data.audioPreferences.fajrMuezzin);
+          safeSetItem('salah_fajr_muezzin', data.audioPreferences.fajrMuezzin);
+        }
+        if (data.audioPreferences.generalMuezzin) {
+          setGeneralMuezzin(data.audioPreferences.generalMuezzin);
+          safeSetItem('salah_general_muezzin', data.audioPreferences.generalMuezzin);
+        }
+        if (data.audioPreferences.audioVolume) {
+          setAudioVolume(parseFloat(data.audioPreferences.audioVolume));
+          safeSetItem('salah_audio_volume', data.audioPreferences.audioVolume.toString());
+        }
+        if (typeof data.audioPreferences.autoPlayAthan === 'boolean') {
+          setAutoPlayAthan(data.audioPreferences.autoPlayAthan);
+          safeSetItem('salah_auto_play_athan', data.audioPreferences.autoPlayAthan ? 'true' : 'false');
+        }
+        if (data.audioPreferences.prayerMuezzins) {
+          for (const [pKey, mVal] of Object.entries(data.audioPreferences.prayerMuezzins)) {
+            if (mVal) safeSetItem(`salah_muezzin_${pKey}`, mVal as string);
+          }
+        }
+        restoredCount++;
+      }
+
+      // 5. App Customizations & Preferences
+      if (data.clockFace) {
+        safeSetItem('salah_clock_face', data.clockFace);
+        restoredCount++;
+      }
+      if (data.tasbihColor) {
+        safeSetItem('salah_tasbih_color', data.tasbihColor);
+        restoredCount++;
+      }
+      if (data.dashboardSections) {
+        saveDashboardSectionsConfig(data.dashboardSections);
+        setDashboardSections(data.dashboardSections);
+        restoredCount++;
+      }
+      if (data.pushSettings) {
+        safeSetItem('hemmaty_push_settings', JSON.stringify(data.pushSettings));
+        restoredCount++;
+      }
+      if (data.featureAnalytics) {
+        safeSetItem('rafiq_feature_analytics_v1', JSON.stringify(data.featureAnalytics));
+        restoredCount++;
+      }
+      if (typeof data.womenExcuseActive === 'boolean') {
+        safeSetItem('rafiq_women_excuse_active_v1', data.womenExcuseActive ? 'true' : 'false');
+        restoredCount++;
+      }
+
+      if (restoredCount > 0) {
+        setShowImportResult(`تمت استعادة البيانات بنجاح! تم تحديث ${toArabicNumbers(restoredCount)} سجلاً وإعداداً دينياً.`);
         setImportText('');
+        window.dispatchEvent(new CustomEvent('spiritual-state-restored'));
       } else {
-        setShowImportResult('الصيغة غير صحيحة. يرجى التأكد من نسخ النص الأصلي بالكامل.');
+        setShowImportResult('الصيغة غير صحيحة. يرجى التأكد من نسخ ملف النسخ الاحتياطي الأصلي بالكامل.');
       }
     } catch (e) {
-      setShowImportResult('فشل استيراد البيانات. تأكد من أن النص الملصق بصيغة JSON صالحة.');
+      console.error('Failed to import backup JSON:', e);
+      setShowImportResult('فشل استيراد البيانات. تأكد من أن الملف أو النص الملصق بصيغة JSON صالحة.');
     }
   };
 
@@ -1545,6 +1789,27 @@ export default function MoreSettings({
               </div>
             </div>
 
+            {/* Opacity Control Slider */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  درجة شفافية صورة خلفية بطاقة الصلاة ({settings.backdropOpacity ?? 75}%)
+                </span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                step="5"
+                value={settings.backdropOpacity ?? 75}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setSettings(prev => ({ ...prev, backdropOpacity: val }));
+                }}
+                className="w-full accent-indigo-600 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+              />
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
               {[
                 { 
@@ -1814,7 +2079,8 @@ export default function MoreSettings({
                         ...prev,
                         cityName: cityData.arabicName,
                         latitude: cityData.lat,
-                        longitude: cityData.lng
+                        longitude: cityData.lng,
+                        timezoneId: cityData.timezone
                       }));
                       setLocationStatusMsg(`تم تحديد ${cityData.arabicName} بنجاح ✨`);
                     }}
@@ -1859,7 +2125,8 @@ export default function MoreSettings({
                     ...prev,
                     cityName: found.arabicName,
                     latitude: found.lat,
-                    longitude: found.lng
+                    longitude: found.lng,
+                    timezoneId: found.timezone
                   }));
                   setLocationStatusMsg(`تم تحديد مدينة ${found.arabicName} (${found.country}) بنجاح`);
                 }
@@ -2316,8 +2583,31 @@ export default function MoreSettings({
               <h3 className="text-sm font-black text-slate-800 dark:text-white">استيراد واسترجاع السجلات السابقة</h3>
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
-              لاستعادة بياناتك على جهاز جديد أو متصفح آخر، الصق نص النسخ الاحتياطي (JSON) الذي قمت بتصديره سابقاً في الحقل أدناه ثم اضغط تأكيد الاستعادة.
+              لاستعادة بياناتك على جهاز جديد أو متصفح آخر، يمكنك اختيار ملف النسخة الاحتياطية (.json) مباشرة من جهازك أو لصق النص المرمز في الحقل أدناه:
             </p>
+
+            {/* Hidden File Input & File Select Button */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".json,application/json"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-extrabold rounded-2xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            >
+              <FileUp className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              اختيار ملف النسخة الاحتياطية (.json) من جهازك
+            </button>
+
+            <div className="flex items-center gap-2 my-2">
+              <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+              <span className="text-[10px] text-slate-400 font-bold">أو لصق النص يدوياً</span>
+              <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+            </div>
 
             <textarea
               rows={4}
@@ -2328,7 +2618,7 @@ export default function MoreSettings({
             />
 
             <button
-              onClick={handleImportData}
+              onClick={() => handleImportData()}
               className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-2xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
             >
               <Upload className="w-4 h-4" />
@@ -2336,10 +2626,64 @@ export default function MoreSettings({
             </button>
 
             {showImportResult && (
-              <p className={`p-3 rounded-xl text-xs font-black text-center ${showImportResult.includes('بنجاح') ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-450' : 'bg-rose-50 dark:bg-rose-950/20 text-rose-500'}`}>
+              <p className={`p-3 rounded-xl text-xs font-black text-center ${showImportResult.includes('بنجاح') ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-450 border border-emerald-500/20' : 'bg-rose-50 dark:bg-rose-950/20 text-rose-500 border border-rose-500/20'}`}>
                 {showImportResult}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 8. DASHBOARD SECTIONS CUSTOMIZATION ==================== */}
+      {subTab === 'dashboard' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <div>
+              <h2 className="text-lg font-black text-slate-800 dark:text-white">تخصيص شاشة الرئيسية (الداشبورد)</h2>
+              <p className="text-xs text-slate-400 dark:text-slate-500 font-bold mt-0.5">اختر الأقسام والبطاقات المعروضة في الصفحة الرئيسية لتناسب احتياجك اليومي</p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
+            <div className="space-y-3">
+              {(Object.keys(DASHBOARD_SECTION_REGISTRY) as DashboardSectionId[]).map((secId) => {
+                const sec = DASHBOARD_SECTION_REGISTRY[secId];
+                const isEnabled = sec.alwaysVisible ? true : (dashboardSections[secId] ?? sec.defaultEnabled);
+
+                return (
+                  <div
+                    key={secId}
+                    className="p-3.5 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/50 flex items-center justify-between gap-3"
+                  >
+                    <div className="space-y-0.5 text-end flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-100">{sec.label}</span>
+                        {sec.alwaysVisible && (
+                          <span className="text-[9.5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            أساسي (بارز دائمًا)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold leading-relaxed">{sec.description}</p>
+                    </div>
+
+                    {!sec.alwaysVisible ? (
+                      <ToggleSwitch
+                        checked={isEnabled}
+                        onChange={() => handleToggleDashboardSection(secId)}
+                      />
+                    ) : (
+                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">مفعّل ✓</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            <p className="text-[10.5px] text-indigo-600 dark:text-indigo-400 font-extrabold text-center pt-2 border-t border-slate-100 dark:border-slate-800/40">
+              💡 الأقسام غير المفعّلة لا يتم تحميلها لتوفير السرعة والأداء.
+            </p>
           </div>
         </div>
       )}

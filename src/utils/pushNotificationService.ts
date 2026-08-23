@@ -4,6 +4,8 @@
  */
 
 import { safeSetItem } from './storage';
+import { parseTimeToMinutes } from './prayerCalc';
+import { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
 
 export interface PushNotificationSettings {
   enabled: boolean;
@@ -80,11 +82,8 @@ export function isInQuietHours(settings: PushNotificationSettings = getPushSetti
   const now = new Date();
   const currentMin = now.getHours() * 60 + now.getMinutes();
 
-  const [sH, sM] = settings.quietStart.split(':').map(Number);
-  const [eH, eM] = settings.quietEnd.split(':').map(Number);
-
-  const startMin = sH * 60 + sM;
-  const endMin = eH * 60 + eM;
+  const startMin = parseTimeToMinutes(settings.quietStart || '23:00');
+  const endMin = parseTimeToMinutes(settings.quietEnd || '04:30');
 
   if (startMin > endMin) {
     // Overnight quiet hours, e.g. 23:00 to 04:30
@@ -95,9 +94,22 @@ export function isInQuietHours(settings: PushNotificationSettings = getPushSetti
 }
 
 /**
- * Request notification permission from browser
+ * Request notification permission from browser or native Android environment
  */
 export async function requestPushPermission(): Promise<NotificationPermission> {
+  // First, if running in native Android / Capacitor container, request POST_NOTIFICATIONS
+  try {
+    const nativeGranted = await requestNativeNotificationPermission();
+    if (nativeGranted && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        await registerServiceWorker();
+        return 'granted';
+      }
+    }
+  } catch (nativeErr) {
+    console.warn('[PushService]: Native permission check error:', nativeErr);
+  }
+
   if (!('Notification' in window)) {
     return 'denied';
   }

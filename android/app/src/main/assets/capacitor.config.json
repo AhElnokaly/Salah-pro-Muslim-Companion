@@ -1,0 +1,8 @@
+{
+	"appId": "com.salahpro.app",
+	"appName": "هِمَّتِي Hemmaty",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	}
+}

@@ -29,7 +29,7 @@ const NextPrayerBlock: React.FC<NextPrayerBlockProps> = ({
   }[size];
 
   return (
-    <div className={`bg-black/35 backdrop-blur-md border border-white/10 rounded-2xl ${paddingClasses} flex flex-col items-center md:items-start shadow-md w-full hover:border-white/20 transition-all duration-300 my-1`}>
+    <div className={`bg-black/20 border border-white/10 rounded-2xl ${paddingClasses} flex flex-col items-center md:items-start shadow-md w-full hover:border-white/20 transition-all duration-300 my-1`}>
       <div className="flex items-center gap-1.5 justify-center md:justify-start w-full">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
         <span className="text-white/60 text-[9.5px] font-extrabold tracking-wider">الصلاة القادمة</span>

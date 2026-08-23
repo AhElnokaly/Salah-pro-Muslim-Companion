@@ -183,7 +183,8 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
   return (
     <div 
       id="friday-mode-root" 
-      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6 text-end ${
+      dir="rtl"
+      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6 text-right ${
         currentStyle === 'glass-dark'
           ? 'bg-gradient-to-br from-[#1b3c22] via-[#111723] to-[#122216] border-emerald-500/20 shadow-2xl text-slate-100'
           : 'bg-gradient-to-br from-[#f4faf5] via-white to-[#f0f8f2] border-emerald-500/30 shadow-md text-slate-800'
@@ -195,15 +196,15 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
       </div>
 
       {/* Header section */}
-      <div className="flex justify-between items-start pb-3 border-b border-emerald-500/15">
-        <div>
+      <div className="flex justify-between items-start pb-3 border-b border-emerald-500/15" dir="rtl">
+        <div className="text-right">
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
-            <h3 className="text-lg font-black text-emerald-700 dark:text-emerald-400">
+            <h3 className="text-lg font-black text-emerald-700 dark:text-emerald-400 text-right">
               {isTodayFriday ? 'يوم الجمعة المبارك 🌟' : 'معاينة أجواء سنن يوم الجمعة 🌟'}
             </h3>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1 text-right leading-relaxed">
             «إن من أفضل أيامكم يوم الجمعة، فأكثروا عليّ من الصلاة فيه...»
           </p>
         </div>
@@ -222,17 +223,17 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
       </div>
 
       {/* SURAH AL-KAHF FEATURED CARD */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md flex flex-wrap items-center justify-between gap-3" dir="rtl">
+        <div className="flex items-center gap-3 text-right">
           <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
             <BookOpen className="w-6 h-6 text-amber-300" />
           </div>
-          <div>
-            <h4 className="text-sm font-black flex items-center gap-1.5">
+          <div className="text-right">
+            <h4 className="text-sm font-black flex items-center gap-1.5 flex-wrap">
               <span>سورة الكهف المباركة</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/30">نور ما بين الجمعتين</span>
             </h4>
-            <p className="text-xs text-emerald-100/90 mt-0.5">
+            <p className="text-xs text-emerald-100/90 mt-0.5 text-right">
               {checklist['kahf'] ? 'تمت قراءتها اليوم بحمد الله ✓' : 'احرص على تلاوتها أو الاستماع إليها اليوم'}
             </p>
           </div>
@@ -266,7 +267,9 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
       </div>
 
       {/* HOUR OF ACCEPTANCE (ساعة الاستجابة) SPECIAL ALERT */}
-      <div className={`p-4 rounded-2xl border transition-all ${
+      <div 
+        dir="rtl"
+        className={`p-4 rounded-2xl border transition-all text-right ${
         isHourOfAcceptanceTime 
           ? 'bg-amber-500/15 border-amber-500/40 text-amber-900 dark:text-amber-200 animate-pulse'
           : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800'
@@ -274,7 +277,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
         <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-500" />
-            <h4 className="text-xs font-black">
+            <h4 className="text-xs font-black text-right">
               {isHourOfAcceptanceTime ? '🤲 حانت الآن ساعة الاستجابة المباركة!' : '⏳ ساعة الاستجابة يوم الجمعة'}
             </h4>
           </div>
@@ -283,13 +286,13 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
           </span>
         </div>
 
-        <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
+        <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed text-right">
           «فِيهِ سَاعَةٌ لاَ يُوَافِقُهَا عَبْدٌ مُسْلِمٌ، وَهُوَ قَائِمٌ يُصَلِّي، يَسْأَلُ اللَّهَ تَعَالَى شَيْئًا، إِلاَّ أَعْطَاهُ إِيَّاهُ»
         </p>
 
         {/* Quick Duas List */}
-        <div className="mt-3 space-y-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-          <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 block">
+        <div className="mt-3 space-y-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-right">
+          <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 block text-right">
             أدعية مأثورة جامعة لمساء يوم الجمعة:
           </span>
 
@@ -299,7 +302,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
                 key={idx}
                 className="p-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs"
               >
-                <p className="font-bold text-slate-800 dark:text-slate-200 leading-relaxed text-end flex-1 select-text">
+                <p className="font-bold text-slate-800 dark:text-slate-200 leading-relaxed text-right flex-1 select-text">
                   {dua}
                 </p>
                 <button
@@ -317,7 +320,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
       </div>
 
       {/* CHECKLIST ITEMS WITH PROGRESS BAR */}
-      <div className="space-y-3">
+      <div className="space-y-3 text-right" dir="rtl">
         <div className="flex items-center justify-between">
           <span className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
             <Trophy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -351,7 +354,7 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
                 key={item.key}
                 type="button"
                 onClick={() => handleToggleCheck(item.key)}
-                className={`p-3 rounded-2xl border text-end flex items-start gap-3 transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border text-right flex items-start gap-3 transition-all cursor-pointer ${
                   isChecked
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-bold'
                     : currentStyle === 'glass-dark'
@@ -366,11 +369,11 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
                 }`}>
                   {isChecked && <Check className="w-3.5 h-3.5" />}
                 </div>
-                <div>
-                  <span className="text-xs font-black block leading-none">
+                <div className="text-right">
+                  <span className="text-xs font-black block leading-none text-right">
                     {item.emoji} {item.label}
                   </span>
-                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block mt-1">
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block mt-1 text-right">
                     {item.desc}
                   </span>
                 </div>

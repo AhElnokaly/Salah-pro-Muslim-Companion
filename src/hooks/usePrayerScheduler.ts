@@ -1,20 +1,21 @@
-import { useState, useEffect, useCallback, Dispatch, SetStateAction, MutableRefObject } from 'react';
+import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction, MutableRefObject } from 'react';
 import { PrayerName, AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
-import { calculatePrayerTimes, getArabicPrayerName } from '../utils/prayerCalc';
+import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
 import { safeSetItem } from '../utils/storage';
+import { scheduleNativeAthanAlarms, updateNativeWidgetData } from '../services/athanAlarmPlugin';
+import { playSpiritualSound, playSpiritualSpeech } from '../utils/spiritualAudio';
+import {
+  findNearestLocationCache,
+  saveLocationSchedule,
+  getLastCachedLocationSchedule,
+} from '../utils/locationCache';
 
 export const getLocalDateStr = (d: Date): string => {
   const year = d.getFullYear();
   const month = (d.getMonth() + 1).toString().padStart(2, '0');
   const day = d.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
-};
-
-export const parseTimeToMinutes = (timeStr: string): number => {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
 };
 
 export function cleanupOldTrackingKeys(): void {
@@ -116,7 +117,7 @@ export function usePrayerScheduler({
       try {
         new Notification(`تنبيه مخصص: ${alarm.title}`, {
           body: `حان الآن موعد: ${alarm.title} (${toArabicNumbers(alarm.time)})`,
-          icon: '/favicon.ico',
+          icon: '/icon-192.png',
           dir: 'rtl'
         });
       } catch (e) {
@@ -124,28 +125,7 @@ export function usePrayerScheduler({
       }
     }
 
-    if (alarm.soundType !== 'silent') {
-      let soundUrl = 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
-      if (alarm.soundType === 'beep') {
-        soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
-      } else if (alarm.soundType === 'vibrate') {
-        if ('vibrate' in navigator) {
-          navigator.vibrate([200, 100, 200]);
-        }
-      }
-
-      if (alarm.soundType !== 'vibrate') {
-        if (globalAudioRef.current) {
-          globalAudioRef.current.pause();
-        }
-
-        const audio = new Audio(soundUrl);
-        globalAudioRef.current = audio;
-        audio.volume = audioVolume;
-
-        audio.play().catch(e => console.error(e));
-      }
-    }
+    playSpiritualSound(alarm.soundType || 'speech', alarm.title, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
 
     setActiveRingingAlarm(alarm);
   }, [globalAudioRef, audioVolume]);
@@ -155,7 +135,7 @@ export function usePrayerScheduler({
       try {
         new Notification(title, {
           body: body,
-          icon: '/favicon.ico',
+          icon: '/icon-192.png',
           dir: 'rtl'
         });
       } catch (e) {
@@ -163,15 +143,38 @@ export function usePrayerScheduler({
       }
     }
 
-    const chimeUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav';
-    const audio = new Audio(chimeUrl);
-    audio.volume = audioVolume * 0.5;
-    audio.play().catch(e => console.error(e));
+    // Play spiritual Arabic voice reminder instead of generic beep
+    playSpiritualSpeech(`${title}.. ${body}`, audioVolume);
 
     if (setToastMessage) {
       setToastMessage(`⏰ ${title}: ${body}`);
     }
   }, [audioVolume, setToastMessage]);
+
+  const prayerTimesCacheRef = useRef<{ key: string; times: Record<PrayerName | 'Sunrise', string> } | null>(null);
+
+  const getCachedPrayerTimes = useCallback((checkDate: Date) => {
+    const todayStr = getLocalDateStr(checkDate);
+    const key = `${todayStr}_${settings.latitude}_${settings.longitude}_${settings.calcMethod}_${settings.madhab}_${JSON.stringify(settings.prayerOffsets || {})}`;
+
+    if (prayerTimesCacheRef.current && prayerTimesCacheRef.current.key === key) {
+      return prayerTimesCacheRef.current.times;
+    }
+
+    const tzOffset = getTimezoneOffsetForLocation(checkDate, settings.timezoneId);
+    const times = calculatePrayerTimes(
+      checkDate,
+      settings.latitude,
+      settings.longitude,
+      tzOffset,
+      settings.calcMethod,
+      settings.madhab,
+      settings.prayerOffsets || {}
+    );
+
+    prayerTimesCacheRef.current = { key, times };
+    return times;
+  }, [settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets]);
 
   const checkTimesAndAlarms = useCallback((checkDate: Date, isCatchup = false) => {
     const currentHour = checkDate.getHours();
@@ -180,16 +183,8 @@ export function usePrayerScheduler({
     const timeKey = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
     const todayStr = getLocalDateStr(checkDate);
 
-    // Calculate prayer times for checkDate
-    const currentTimes = calculatePrayerTimes(
-      checkDate,
-      settings.latitude,
-      settings.longitude,
-      -checkDate.getTimezoneOffset() / 60,
-      settings.calcMethod,
-      settings.madhab,
-      settings.prayerOffsets || {}
-    );
+    // Get cached prayer times for checkDate (avoids running astronomical math every second)
+    const currentTimes = getCachedPrayerTimes(checkDate);
 
     // 1. Check Adhans
     const autoPlayAthanEnabled = localStorage.getItem('salah_auto_play_athan') !== 'false';
@@ -202,7 +197,7 @@ export function usePrayerScheduler({
         const currentMins = currentHour * 60 + currentMin;
         const diff = currentMins - prayerMins;
 
-        const isMatch = prayerTimeStr === timeKey || (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 20);
+        const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 20);
 
         if (isMatch) {
           const playedKey = `salah_played_${todayStr}_${prayer}`;
@@ -324,13 +319,97 @@ export function usePrayerScheduler({
     }
   }, [settings, customAlarms, alerts, triggerAthan, triggerCustomAlarm, triggerSpiritualAlert, setToastMessage]);
 
-  // Run catchup and cleanup on initial state load
+  // Run catchup, cleanup, and native Android AlarmManager scheduling on initial state load or settings update
   useEffect(() => {
     if (isLoaded) {
       checkTimesAndAlarms(new Date(), true);
       cleanupOldTrackingKeys();
+
+      const now = new Date();
+      let days60List: Array<{ date: Date; timesMap: Record<string, string> }> = [];
+
+      const hasValidCoords = Boolean(settings.latitude && settings.longitude);
+
+      if (hasValidCoords) {
+        // Check if there is a cached location schedule within 25km (Task 20)
+        const cached = findNearestLocationCache(
+          settings.latitude,
+          settings.longitude,
+          settings.calcMethod,
+          settings.madhab,
+          settings.prayerOffsets || {}
+        );
+
+        if (cached && cached.schedule && cached.schedule.length >= 60) {
+          // Cache hit within 25km with 60 days -> reuse schedule
+          days60List = cached.schedule.map(s => ({
+            date: new Date(s.dateStr),
+            timesMap: s.timesMap,
+          }));
+        } else {
+          // Cache miss or needs 60-day extension -> compute fresh 60 days
+          for (let i = 0; i < 60; i++) {
+            const d = new Date(now);
+            d.setDate(d.getDate() + i);
+            const tzOffset = getTimezoneOffsetForLocation(d, settings.timezoneId);
+            const timesMap = calculatePrayerTimes(
+              d,
+              settings.latitude,
+              settings.longitude,
+              tzOffset,
+              settings.calcMethod,
+              settings.madhab,
+              settings.prayerOffsets || {}
+            );
+            days60List.push({ date: d, timesMap: timesMap as any });
+          }
+
+          // Save to location cache
+          saveLocationSchedule(
+            settings.latitude,
+            settings.longitude,
+            settings.calcMethod,
+            settings.madhab,
+            settings.prayerOffsets || {},
+            days60List,
+            settings.cityName
+          );
+        }
+      } else {
+        // Fallback if coordinates missing: attempt to load last cached location schedule
+        const lastCached = getLastCachedLocationSchedule();
+        if (lastCached && lastCached.schedule) {
+          days60List = lastCached.schedule.map(s => ({
+            date: new Date(s.dateStr),
+            timesMap: s.timesMap,
+          }));
+        }
+      }
+
+      if (days60List.length > 0) {
+        const userTz = settings.timezoneId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
+        scheduleNativeAthanAlarms(days60List, undefined, {
+          lat: settings.latitude,
+          lng: settings.longitude,
+          calcMethod: settings.calcMethod,
+          madhab: settings.madhab,
+          timeZoneId: userTz,
+          fajrOffset: settings.prayerOffsets?.Fajr || 0,
+          dhuhrOffset: settings.prayerOffsets?.Dhuhr || 0,
+          asrOffset: settings.prayerOffsets?.Asr || 0,
+          maghribOffset: settings.prayerOffsets?.Maghrib || 0,
+          ishaOffset: settings.prayerOffsets?.Isha || 0,
+        }).catch(err => {
+          console.warn('Native athan alarm scheduling error:', err);
+        });
+
+        const currentTimes = days60List[0].timesMap;
+        updateNativeWidgetData(currentTimes as any, settings.cityName || 'مواقيت الصلاة').catch(err => {
+          console.warn('Native widget update error:', err);
+        });
+      }
     }
-  }, [isLoaded, checkTimesAndAlarms]);
+  }, [isLoaded, settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets, settings.cityName, checkTimesAndAlarms]);
 
   // Background Web Worker tick with single fallback interval (Task 2)
   useEffect(() => {

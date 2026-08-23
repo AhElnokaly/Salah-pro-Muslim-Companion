@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { safeSetItem } from '../utils/storage';
 import { 
   X, 
   Compass, 
@@ -32,6 +33,10 @@ interface QiblaCompassProps {
 type SensorStatus = 'inactive' | 'requesting' | 'active' | 'error';
 
 export default function QiblaCompass({ settings, setSettings, setActiveTab }: QiblaCompassProps) {
+  useEffect(() => {
+    safeSetItem('salah_visited_qibla', 'true');
+  }, []);
+
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null);
   const [manualHeading, setManualHeading] = useState<number>(0);
   const [sensorStatus, setSensorStatus] = useState<SensorStatus>('inactive');

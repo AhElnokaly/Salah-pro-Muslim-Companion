@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">هِمَّتِي Hemmaty</string>
+    <string name="title_activity_main">هِمَّتِي Hemmaty</string>
+    <string name="package_name">com.salahpro.app</string>
+    <string name="custom_url_scheme">com.salahpro.app</string>
+</resources>

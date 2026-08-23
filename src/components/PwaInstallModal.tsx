@@ -35,7 +35,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
               <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
                 <Smartphone className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-black text-slate-900 dark:text-white">تثبيت تطبيق رفيق المسلم 📲</h3>
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">تثبيت تطبيق هِمَّتِي 📲</h3>
             </div>
             <button
               onClick={onClose}

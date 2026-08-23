@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { 
   Home, 
   BookOpen, 
@@ -29,7 +29,11 @@ import {
   HelpCircle,
   Zap,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  ChevronUp,
+  X,
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { 
@@ -46,24 +50,37 @@ import {
   SettingsSubTabId
 } from './types';
 
-// Component imports
+// Eager Essential Components
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
-import QuranTracker from './components/QuranTracker';
-import AdhkarTracker from './components/AdhkarTracker';
-import QiblaCompass from './components/QiblaCompass';
-import MoreSettings from './components/MoreSettings';
-import PrayerManager from './components/PrayerManager';
-import FastingTracker from './components/FastingTracker';
-import IslamicCalendar from './components/IslamicCalendar';
-import WidgetSimulator from './components/WidgetSimulator';
-import WorshipAlarms from './components/WorshipAlarms';
-import KhushuQiyamTracker from './components/KhushuQiyamTracker';
 import AthanOverlay from './components/AthanOverlay';
-import FeatureTourModal from './components/FeatureTourModal';
-import AnalyticsDashboard from './components/AnalyticsDashboard';
-import MoonPhases from './components/MoonPhases';
+import SmartFabSystem from './components/SmartFabSystem';
 import { WeatherWidget } from './components/WeatherWidget';
+
+// Code-split Lazy Secondary Tabs & Features
+const QuranTracker = lazy(() => import('./components/QuranTracker'));
+const AdhkarTracker = lazy(() => import('./components/AdhkarTracker'));
+const QiblaCompass = lazy(() => import('./components/QiblaCompass'));
+const MoreSettings = lazy(() => import('./components/MoreSettings'));
+const PrayerManager = lazy(() => import('./components/PrayerManager'));
+const FastingTracker = lazy(() => import('./components/FastingTracker'));
+const IslamicCalendar = lazy(() => import('./components/IslamicCalendar'));
+const WidgetSimulator = lazy(() => import('./components/WidgetSimulator'));
+const WorshipAlarms = lazy(() => import('./components/WorshipAlarms'));
+const KhushuQiyamTracker = lazy(() => import('./components/KhushuQiyamTracker'));
+const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard'));
+const MoonPhases = lazy(() => import('./components/MoonPhases'));
+
+// Lazy Modals
+const QuickSettingsModal = lazy(() => import('./components/QuickSettingsModal').then(m => ({ default: m.QuickSettingsModal })));
+const FeatureTourModal = lazy(() => import('./components/FeatureTourModal'));
+const PostOnboardingWelcomeModal = lazy(() => import('./components/PostOnboardingWelcomeModal'));
+const SpiritualPortalModal = lazy(() => import('./components/SpiritualPortalModal'));
+const SpiritualSearchModal = lazy(() => import('./components/SpiritualSearchModal'));
+const PwaInstallModal = lazy(() => import('./components/PwaInstallModal'));
+const CustomAlarmOverlay = lazy(() => import('./components/CustomAlarmOverlay'));
+
+import { PrayerKey } from './utils/adhkarCalc';
 
 // Custom Hooks
 import { usePrayerClock } from './hooks/usePrayerClock';
@@ -71,19 +88,28 @@ import { useSpiritualState } from './hooks/useSpiritualState';
 import { usePwaInstall } from './hooks/usePwaInstall';
 import { useAthanPlayer } from './hooks/useAthanPlayer';
 import { usePrayerScheduler, getLocalDateStr } from './hooks/usePrayerScheduler';
+import { useAndroidBackButton } from './hooks/useAndroidBackButton';
 
-// Extracted Subcomponents
-import SpiritualPortalModal from './components/SpiritualPortalModal';
-import PwaInstallModal from './components/PwaInstallModal';
-import CustomAlarmOverlay from './components/CustomAlarmOverlay';
-
+import { safeSetItem } from './utils/storage';
 import { syncUpcomingPrayerSchedule } from './utils/prayerScheduleSync';
+import { formatDateKey } from './utils/prayerDayBoundary';
 import { syncPrayerScheduleWithSW } from './utils/pushNotificationService';
+import { checkExactAlarmPermission, requestExactAlarmPermission, checkNotificationPermission, requestNotificationPermission } from './services/athanAlarmPlugin';
 import { trackFeatureUsage } from './utils/analyticsStorage';
 import { defaultMuezzins, getAudioUrl, getAudioUrlSync, archiveMuezzins, getCustomAudios, silentlyCacheAudio } from './utils/audioStorage';
 
-// Import companion icon
-import companionIcon from './assets/images/app_icon_refaiq_1785232801939.jpg';
+// Minimal Loading Fallback
+const TabLoadingFallback = () => (
+  <div className="flex flex-col items-center justify-center min-h-[45vh] p-8 text-center" dir="rtl">
+    <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-3 shadow-xs">
+      <Loader2 className="w-6 h-6 animate-spin text-indigo-600 dark:text-indigo-400" />
+    </div>
+    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">جاري التحميل...</span>
+  </div>
+);
+
+// Import Hemmaty app logo icon
+import companionIcon from './assets/images/hemmaty_app_logo_1786362094156.jpg';
 
 // Calculations for standalone widget state synchronization
 import { calculatePrayerTimes, getCurrentAndNextPrayer, getArabicPrayerName } from './utils/prayerCalc';
@@ -122,6 +148,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   hasCompletedOnboarding: false,
   backdropStyle: 'auto',
+  backdropOpacity: 75,
   clockStyle: 'digital'
 };
 
@@ -239,8 +266,10 @@ const playSpiritualChime = (pitch: number = 523.25) => {
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<SettingsSubTabId>('prayer');
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => localStorage.getItem('salah_show_post_onboarding_welcome') === 'true');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
   const [storageWarningAcknowledged, setStorageWarningAcknowledged] = useState<boolean>(false);
@@ -248,6 +277,29 @@ export default function App() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
   const [notifBannerDismissed, setNotifBannerDismissed] = useState<boolean>(false);
+  const [exactAlarmPermissionGranted, setExactAlarmPermissionGranted] = useState<boolean>(true);
+  const [exactAlarmBannerDismissed, setExactAlarmBannerDismissed] = useState<boolean>(false);
+
+  // Proactive check and listener for exact alarm permission and notification permission
+  useEffect(() => {
+    checkExactAlarmPermission().then(granted => {
+      setExactAlarmPermissionGranted(granted);
+    });
+
+    checkNotificationPermission().then(granted => {
+      if (granted) {
+        setNotifPermission('granted');
+      }
+    });
+
+    const handleMissingPerm = () => {
+      setExactAlarmPermissionGranted(false);
+    };
+    window.addEventListener('exact-alarm-permission-missing', handleMissingPerm);
+    return () => {
+      window.removeEventListener('exact-alarm-permission-missing', handleMissingPerm);
+    };
+  }, []);
 
   // Custom Hooks Extraction
   const {
@@ -257,6 +309,8 @@ export default function App() {
     setPrayerLogs,
     pendingQadaPrayers,
     setPendingQadaPrayers,
+    voluntaryPrayerLogs,
+    setVoluntaryPrayerLogs,
     fastingLogs,
     setFastingLogs,
     ramadanQada,
@@ -299,6 +353,7 @@ export default function App() {
     fajrMuezzin,
     setFajrMuezzin,
     customMuezzins,
+    markAthanDismissed,
     triggerAthan,
     stopAthanGlobal,
     togglePlayAthanGlobal,
@@ -342,8 +397,92 @@ export default function App() {
 
   // Portal of Serenity & Spiritual Breath States
   const [showSpiritualModal, setShowSpiritualModal] = useState<boolean>(false);
+  const [isFabOpen, setIsFabOpen] = useState<boolean>(false);
   const [headerRippleActive, setHeaderRippleActive] = useState<boolean>(false);
   const [fiqhWarning, setFiqhWarning] = useState<{ title: string; removedReasons: string[] } | null>(null);
+  const [targetAdhkarPrayer, setTargetAdhkarPrayer] = useState<PrayerKey | null>(null);
+  const [isSpiritualSearchOpen, setIsSpiritualSearchOpen] = useState<boolean>(false);
+
+  // Register Android Hardware Back Button Handling (Task 26)
+  useAndroidBackButton({
+    activeTab,
+    setActiveTab,
+    setToastMessage: (msg) => setToastMessage(msg),
+    overlays: [
+      {
+        id: 'isSpiritualSearchOpen',
+        isOpen: isSpiritualSearchOpen,
+        close: () => setIsSpiritualSearchOpen(false)
+      },
+      {
+        id: 'athanOverlay',
+        isOpen: showAthanOverlay,
+        close: () => {
+          markAthanDismissed();
+          setShowAthanOverlay(false);
+          stopAthanGlobal();
+        }
+      },
+      {
+        id: 'activeRingingAlarm',
+        isOpen: Boolean(activeRingingAlarm),
+        close: () => setActiveRingingAlarm(null)
+      },
+      {
+        id: 'fiqhWarning',
+        isOpen: Boolean(fiqhWarning),
+        close: () => setFiqhWarning(null)
+      },
+      {
+        id: 'isFabOpen',
+        isOpen: isFabOpen,
+        close: () => setIsFabOpen(false)
+      },
+      {
+        id: 'isSidebarOpen',
+        isOpen: isSidebarOpen,
+        close: () => setIsSidebarOpen(false)
+      },
+      {
+        id: 'isQuickSettingsOpen',
+        isOpen: isQuickSettingsOpen,
+        close: () => setIsQuickSettingsOpen(false)
+      },
+      {
+        id: 'isTourModalOpen',
+        isOpen: isTourModalOpen,
+        close: () => setIsTourModalOpen(false)
+      },
+      {
+        id: 'showSpiritualModal',
+        isOpen: showSpiritualModal,
+        close: () => setShowSpiritualModal(false)
+      },
+      {
+        id: 'showPwaInstallGuide',
+        isOpen: showPwaInstallGuide,
+        close: () => setShowPwaInstallGuide(false)
+      },
+      {
+        id: 'showWelcomeModal',
+        isOpen: showWelcomeModal,
+        close: () => setShowWelcomeModal(false)
+      }
+    ]
+  });
+
+  const handleNavigateToAdhkarForPrayer = (prayerName: string) => {
+    const p = (prayerName || '').toLowerCase();
+    let key: PrayerKey = 'fajr';
+    if (p.includes('dhuhr') || p.includes('zuhr')) key = 'dhuhr';
+    else if (p.includes('asr')) key = 'asr';
+    else if (p.includes('maghrib')) key = 'maghrib';
+    else if (p.includes('isha')) key = 'isha';
+    else if (p.includes('fajr')) key = 'fajr';
+
+    setTargetAdhkarPrayer(key);
+    setActiveTab('adhkar');
+  };
 
   // Smart Network & Sync Status Indicator State (Online = Green 🟢, Syncing/Loading = Yellow 🟡, Offline = Red 🔴)
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -438,24 +577,29 @@ export default function App() {
         setActiveTab(e.detail.tab);
       }
     };
+    const handleOpenSpiritualSearch = () => {
+      setIsSpiritualSearchOpen(true);
+    };
 
     window.addEventListener('open-khushu-page', handleKhushuTrigger);
     window.addEventListener('open-feature-tour', handleTourTrigger);
     window.addEventListener('change-settings-subtab', handleSettingsSubtabTrigger);
     window.addEventListener('change-main-tab', handleMainTabTrigger);
+    window.addEventListener('salah_open_spiritual_search', handleOpenSpiritualSearch);
 
     return () => {
       window.removeEventListener('open-khushu-page', handleKhushuTrigger);
       window.removeEventListener('open-feature-tour', handleTourTrigger);
       window.removeEventListener('change-settings-subtab', handleSettingsSubtabTrigger);
       window.removeEventListener('change-main-tab', handleMainTabTrigger);
+      window.removeEventListener('salah_open_spiritual_search', handleOpenSpiritualSearch);
     };
   }, []);
 
   const handleShareApp = async () => {
     const shareData = {
-      title: 'رفيق المسلم - Muslim Companion',
-      text: 'تطبيق رفيق المسلم: مواقيت الصلاة بدقة عالية، الأذكار اليومية، الختمات والقرآن الكريم، واتجاه القبلة مع ميزات رائعة وتصميم عصري!',
+      title: 'هِمَّتِي Hemmaty',
+      text: 'تطبيق هِمَّتِي: مواقيت الصلاة بدقة عالية، الأذكار اليومية، الختمات والقرآن الكريم، واتجاه القبلة مع ميزات رائعة وتصميم عصري!',
       url: 'https://salah-pro-muslim-companion.vercel.app/',
     };
 
@@ -496,6 +640,37 @@ export default function App() {
   }, []);
 
   const { now, hijri, gregorianStr, times, current, next, timeRemainingStr, dayNameArabic } = usePrayerClock(settings);
+  const activePrayerName = current === 'Sunrise' ? 'Fajr' : (current || 'Dhuhr');
+
+  // Quick Log Event Handlers (Triggered by Smart FAB or Quick Actions)
+  useEffect(() => {
+    const handleQuickLogPrayer = () => {
+      // Ensure user is navigated to home tab where the prayer logging modal is displayed
+      setActiveTab('home');
+    };
+
+    const handleQuickLogQuran = () => {
+      const today = getLocalDateStr(new Date());
+      const newSession: QuranSession = {
+        id: `qs_${Date.now()}`,
+        date: today,
+        sessionType: 'read',
+        unitType: 'pages',
+        unitValue: 1
+      };
+      const updated = [newSession, ...quranSessions];
+      setQuranSessions(updated);
+      safeSetItem('mc_quran_sessions', JSON.stringify(updated));
+    };
+
+    window.addEventListener('salah_quick_log_prayer', handleQuickLogPrayer);
+    window.addEventListener('salah_quick_log_quran', handleQuickLogQuran);
+
+    return () => {
+      window.removeEventListener('salah_quick_log_prayer', handleQuickLogPrayer);
+      window.removeEventListener('salah_quick_log_quran', handleQuickLogQuran);
+    };
+  }, [prayerLogs, setPrayerLogs, quranSessions, setQuranSessions, next]);
 
   // Sync 30-day prayer schedule in local background storage
   useEffect(() => {
@@ -672,7 +847,7 @@ export default function App() {
     setSettings(finalSettings);
     
     // Log the starting prayer so they don't start with empty logs
-    const todayStr = getLocalDateStr(new Date());
+    const todayStr = formatDateKey(new Date());
     const initialLog: PrayerLog = {
       status: lastPrayerDone.wasOnTime ? 'A' : 'B',
       sunnahBefore: 0,
@@ -691,6 +866,7 @@ export default function App() {
       trackingStartDate: todayStr,
       trackingStartPrayer: lastPrayerDone.prayer
     }));
+    setShowWelcomeModal(true);
   };
 
   // While loading, display a gorgeous, clean loading pulse
@@ -700,17 +876,17 @@ export default function App() {
         <div className="relative w-20 h-20 rounded-2xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-850 animate-pulse bg-[#16202c]">
           <img 
             src={companionIcon} 
-            alt="Muslim Companion Logo" 
+            alt="Hemmaty Logo" 
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = '/muslim_companion_icon.jpg';
+              (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
             }}
             className="w-full h-full object-contain p-1" 
             referrerPolicy="no-referrer" 
           />
         </div>
         <div className="space-y-1">
-          <h2 className="text-lg font-black text-slate-800 dark:text-white">رفيق المسلم</h2>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">Muslim Companion</p>
+          <h2 className="text-lg font-black text-slate-800 dark:text-white">هِمَّتِي</h2>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">Hemmaty</p>
         </div>
         <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold animate-pulse">جاري تحميل السجلات المباركة...</p>
       </div>
@@ -805,9 +981,9 @@ export default function App() {
               >
                 <img 
                   src={companionIcon} 
-                  alt="رفيق المسلم" 
+                  alt="هِمَّتِي" 
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/muslim_companion_icon.jpg';
+                    (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
                   }}
                   className="w-full h-full object-contain p-0.5 select-none transition-transform duration-300 hover:scale-105"
                   referrerPolicy="no-referrer"
@@ -836,7 +1012,7 @@ export default function App() {
 
             <div className="flex flex-col text-end min-w-0">
               <div className="flex items-center gap-1 min-w-0">
-                <h1 className="text-xs md:text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">رفيق المسلم</h1>
+                <h1 className="text-xs md:text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">هِمَّتِي</h1>
               </div>
               <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
                 <button
@@ -857,6 +1033,16 @@ export default function App() {
         
         {/* Left side: Streamlined High-Priority Action Panel */}
         <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+          {/* Worship Alarms Shortcut Button */}
+          <button 
+            onClick={() => setActiveTab('alarms')}
+            className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
+            title="منبهات العبادات والصلوات ⏰"
+            aria-label="منبهات العبادات والصلوات"
+          >
+            <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          </button>
+
           {/* Minaret / Athan Simulator Button */}
           <button 
             onClick={() => {
@@ -938,6 +1124,11 @@ export default function App() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={async () => {
+                  try {
+                    await requestNotificationPermission();
+                  } catch (e) {
+                    console.warn('Native notification request error:', e);
+                  }
                   if ('Notification' in window) {
                     const res = await Notification.requestPermission();
                     setNotifPermission(res);
@@ -950,6 +1141,41 @@ export default function App() {
               <button
                 onClick={() => setNotifBannerDismissed(true)}
                 className="p-1.5 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 transition-colors cursor-pointer"
+                aria-label="إغلاق التنبيه"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!exactAlarmPermissionGranted && !exactAlarmBannerDismissed && (
+          <div className="w-full p-3.5 bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-100 flex items-center justify-between gap-3 text-end text-xs shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base">⏰</span>
+              <div>
+                <p className="font-bold text-sm">تنبيه الأذان الدقيق</p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  يتطلب إطلاق الأذان في الوقت المظبوط منح صلاحية المنبهات والتذكيرات في إعدادات النظام
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={async () => {
+                  await requestExactAlarmPermission();
+                  setTimeout(async () => {
+                    const isGranted = await checkExactAlarmPermission();
+                    setExactAlarmPermissionGranted(isGranted);
+                  }, 1200);
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                منح الصلاحية
+              </button>
+              <button
+                onClick={() => setExactAlarmBannerDismissed(true)}
+                className="p-1.5 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200 transition-colors cursor-pointer"
                 aria-label="إغلاق التنبيه"
               >
                 ✕
@@ -979,11 +1205,14 @@ export default function App() {
             setPrayerLogs={setPrayerLogs}
             pendingQadaPrayers={pendingQadaPrayers}
             setPendingQadaPrayers={setPendingQadaPrayers}
+            voluntaryPrayerLogs={voluntaryPrayerLogs}
+            setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
             fastingLogs={fastingLogs}
             setFastingLogs={setFastingLogs}
             ramadanQada={ramadanQada}
             setRamadanQada={setRamadanQada}
             setActiveTab={setActiveTab}
+            onNavigateToAdhkarForPrayer={handleNavigateToAdhkarForPrayer}
             customDuas={customDuas}
             setCustomDuas={setCustomDuas}
             quranSessions={quranSessions}
@@ -994,160 +1223,178 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'calendar' && (
-          <div className="pb-12 space-y-6">
-            <IslamicCalendar 
+        <Suspense fallback={<TabLoadingFallback />}>
+          {activeTab === 'calendar' && (
+            <div className="pb-12 space-y-6">
+              <IslamicCalendar 
+                settings={settings}
+                setSettings={setSettings}
+                prayerLogs={prayerLogs}
+                fastingLogs={fastingLogs}
+                dhikrLogs={dhikrLogs}
+                quranSessions={quranSessions}
+                khatmat={khatmat}
+                onNavigateTab={(tab) => setActiveTab(tab as TabId)}
+              />
+            </div>
+          )}
+
+          {activeTab === 'salah' && (
+            <PrayerManager
               settings={settings}
               setSettings={setSettings}
               prayerLogs={prayerLogs}
-              fastingLogs={fastingLogs}
-              dhikrLogs={dhikrLogs}
-              quranSessions={quranSessions}
-              khatmat={khatmat}
-              onNavigateTab={(tab) => setActiveTab(tab as TabId)}
+              setPrayerLogs={setPrayerLogs}
+              pendingQadaPrayers={pendingQadaPrayers}
+              setPendingQadaPrayers={setPendingQadaPrayers}
+              voluntaryPrayerLogs={voluntaryPrayerLogs}
+              setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
+              customAlarms={customAlarms}
+              setCustomAlarms={setCustomAlarms}
+              alerts={alerts}
+              setAlerts={setAlerts}
+              onNavigateTab={(tab, subTab) => {
+                if (tab) setActiveTab(tab as TabId);
+                if (subTab && tab === 'settings') setActiveSettingsSubTab(subTab as SettingsSubTabId);
+              }}
             />
-          </div>
-        )}
+          )}
 
-        {activeTab === 'salah' && (
-          <PrayerManager
-            settings={settings}
-            setSettings={setSettings}
-            prayerLogs={prayerLogs}
-            setPrayerLogs={setPrayerLogs}
-            pendingQadaPrayers={pendingQadaPrayers}
-            setPendingQadaPrayers={setPendingQadaPrayers}
-          />
-        )}
+          {activeTab === 'quran' && (
+            <QuranTracker 
+              khatmat={khatmat}
+              setKhatmat={setKhatmat}
+              quranSessions={quranSessions}
+              setQuranSessions={setQuranSessions}
+            />
+          )}
 
-        {activeTab === 'quran' && (
-          <QuranTracker 
-            khatmat={khatmat}
-            setKhatmat={setKhatmat}
-            quranSessions={quranSessions}
-            setQuranSessions={setQuranSessions}
-          />
-        )}
-
-        {activeTab === 'adhkar' && (
-          <AdhkarTracker 
-            dhikrLogs={dhikrLogs}
-            setDhikrLogs={setDhikrLogs}
-            currentPrayer={current}
-            prayerTimes={times}
-            onNavigateTab={(tab) => {
-              if (tab === 'settings' || tab === 'prayer' || tab === 'adhan') {
-                setActiveTab('settings');
-                if (tab === 'prayer' || tab === 'adhan') {
-                  setActiveSettingsSubTab(tab as SettingsSubTabId);
+          {activeTab === 'adhkar' && (
+            <AdhkarTracker 
+              dhikrLogs={dhikrLogs}
+              setDhikrLogs={setDhikrLogs}
+              currentPrayer={current}
+              prayerTimes={times}
+              targetPrayerKey={targetAdhkarPrayer}
+              onNavigateTab={(tab) => {
+                if (tab === 'settings' || tab === 'prayer' || tab === 'adhan') {
+                  setActiveTab('settings');
+                  if (tab === 'prayer' || tab === 'adhan') {
+                    setActiveSettingsSubTab(tab as SettingsSubTabId);
+                  }
+                } else {
+                  setActiveTab(tab as TabId);
                 }
-              } else {
-                setActiveTab(tab as TabId);
-              }
-            }}
-            onOpenNotificationsModal={() => {
-              window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
-            }}
-          />
-        )}
+              }}
+              onOpenNotificationsModal={() => {
+                window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
+              }}
+            />
+          )}
 
-        {activeTab === 'qibla' && (
-          <QiblaCompass 
-            settings={settings}
-            setSettings={setSettings}
-            setActiveTab={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'fasting' && (
-          <FastingTracker 
-            settings={settings}
-            fastingLogs={fastingLogs}
-            setFastingLogs={setFastingLogs}
-            ramadanQada={ramadanQada}
-            setRamadanQada={setRamadanQada}
-            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <MoreSettings 
-            subTab={activeSettingsSubTab}
-            setSubTab={setActiveSettingsSubTab}
-            settings={settings}
-            setSettings={setSettings}
-            pendingQadaPrayers={pendingQadaPrayers}
-            setPendingQadaPrayers={setPendingQadaPrayers}
-            ramadanQada={ramadanQada}
-            setRamadanQada={setRamadanQada}
-            prayerLogs={prayerLogs}
-            setPrayerLogs={setPrayerLogs}
-            fastingLogs={fastingLogs}
-            setFastingLogs={setFastingLogs}
-            quranSessions={quranSessions}
-            setQuranSessions={setQuranSessions}
-            khatmat={khatmat}
-            setKhatmat={setKhatmat}
-            customDuas={customDuas}
-            setCustomDuas={setCustomDuas}
-          />
-        )}
-
-        {activeTab === 'widgets' && (
-          <div className="pb-12 space-y-6">
-            <WidgetSimulator 
-              prayerTimes={times} 
+          {activeTab === 'qibla' && (
+            <QiblaCompass 
               settings={settings}
               setSettings={setSettings}
-              currentPrayer={current}
-              nextPrayer={next}
-              timeRemainingStr={timeRemainingStr}
-              hijri={hijri}
-              dayNameArabic={dayNameArabic}
-              gregorianStr={gregorianStr}
+              setActiveTab={setActiveTab}
             />
-          </div>
-        )}
+          )}
 
-        {activeTab === 'alarms' && (
-          <WorshipAlarms
-            settings={settings}
-            setSettings={setSettings}
-            customAlarms={customAlarms}
-            setCustomAlarms={setCustomAlarms}
-            alerts={alerts}
-            setAlerts={setAlerts}
-            audioVolume={audioVolume}
-            setAudioVolume={setAudioVolume}
-          />
-        )}
+          {activeTab === 'fasting' && (
+            <FastingTracker 
+              settings={settings}
+              fastingLogs={fastingLogs}
+              setFastingLogs={setFastingLogs}
+              ramadanQada={ramadanQada}
+              setRamadanQada={setRamadanQada}
+              onNavigateTab={(tab) => setActiveTab(tab as TabId)}
+            />
+          )}
 
-        {activeTab === 'khushu' && (
-          <KhushuQiyamTracker
-            settings={settings}
-            prayerLogs={prayerLogs}
-            setPrayerLogs={setPrayerLogs}
-            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
-          />
-        )}
+          {activeTab === 'settings' && (
+            <MoreSettings 
+              subTab={activeSettingsSubTab}
+              setSubTab={setActiveSettingsSubTab}
+              settings={settings}
+              setSettings={setSettings}
+              pendingQadaPrayers={pendingQadaPrayers}
+              setPendingQadaPrayers={setPendingQadaPrayers}
+              ramadanQada={ramadanQada}
+              setRamadanQada={setRamadanQada}
+              prayerLogs={prayerLogs}
+              setPrayerLogs={setPrayerLogs}
+              voluntaryPrayerLogs={voluntaryPrayerLogs}
+              setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
+              fastingLogs={fastingLogs}
+              setFastingLogs={setFastingLogs}
+              quranSessions={quranSessions}
+              setQuranSessions={setQuranSessions}
+              khatmat={khatmat}
+              setKhatmat={setKhatmat}
+              dhikrLogs={dhikrLogs}
+              setDhikrLogs={setDhikrLogs}
+              customDuas={customDuas}
+              setCustomDuas={setCustomDuas}
+            />
+          )}
 
-        {activeTab === 'analytics' && (
-          <AnalyticsDashboard
-            onSelectTab={(tab) => setActiveTab(tab as TabId)}
-          />
-        )}
+          {activeTab === 'widgets' && (
+            <div className="pb-12 space-y-6">
+              <WidgetSimulator 
+                prayerTimes={times} 
+                settings={settings}
+                setSettings={setSettings}
+                currentPrayer={current}
+                nextPrayer={next}
+                timeRemainingStr={timeRemainingStr}
+                hijri={hijri}
+                dayNameArabic={dayNameArabic}
+                gregorianStr={gregorianStr}
+              />
+            </div>
+          )}
 
-        {activeTab === 'moon' && (
-          <MoonPhases
-            now={now}
-            hijriDay={hijri.day}
-            hijriMonthName={hijri.monthName}
-            hijriYear={hijri.year}
-            cityName={settings.cityName}
-            toArabicNumbers={toArabicNumbers}
-            onNavigateTab={(tab) => setActiveTab(tab as TabId)}
-          />
-        )}
+          {activeTab === 'alarms' && (
+            <WorshipAlarms
+              settings={settings}
+              setSettings={setSettings}
+              customAlarms={customAlarms}
+              setCustomAlarms={setCustomAlarms}
+              alerts={alerts}
+              setAlerts={setAlerts}
+              audioVolume={audioVolume}
+              setAudioVolume={setAudioVolume}
+            />
+          )}
+
+          {activeTab === 'khushu' && (
+            <KhushuQiyamTracker
+              settings={settings}
+              prayerLogs={prayerLogs}
+              setPrayerLogs={setPrayerLogs}
+              setCustomAlarms={setCustomAlarms}
+              onNavigateTab={(tab) => setActiveTab(tab as TabId)}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsDashboard
+              onSelectTab={(tab) => setActiveTab(tab as TabId)}
+            />
+          )}
+
+          {activeTab === 'moon' && (
+            <MoonPhases
+              now={now}
+              hijriDay={hijri.day}
+              hijriMonthName={hijri.monthName}
+              hijriYear={hijri.year}
+              cityName={settings.cityName}
+              toArabicNumbers={toArabicNumbers}
+              onNavigateTab={(tab) => setActiveTab(tab as TabId)}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* 4. Slide-out Sidebar Drawer with motion */}
@@ -1169,7 +1416,7 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="fixed top-0 end-0 h-full w-4/5 max-w-xs bg-white dark:bg-[#161d26] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto"
+              className="fixed top-0 right-0 h-full w-4/5 max-w-xs bg-white dark:bg-[#161d26] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto"
               dir="rtl"
             >
               <div className="space-y-6">
@@ -1246,6 +1493,25 @@ export default function App() {
                   </motion.div>
                 </div>
 
+                {/* Single Clean Menu Item for Quick Settings Page/Modal */}
+                <button
+                  onClick={() => {
+                    setIsQuickSettingsOpen(true);
+                    setIsSidebarOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent dark:from-indigo-500/20 dark:via-indigo-500/10 dark:to-transparent border border-indigo-200/80 dark:border-indigo-800/50 text-indigo-700 dark:text-indigo-300 font-extrabold hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-all cursor-pointer shadow-xs active:scale-98"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <div className="text-end">
+                      <div className="text-xs font-black">التحكم والإعدادات السريعة ⚙️</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">المظهر، خلفية البطاقات، المذهب والساعة</div>
+                    </div>
+                  </div>
+                </button>
+
                 {/* Main Worship Navigation */}
                 <div className="space-y-2 text-end">
                   <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">الأقسام والعبادات</span>
@@ -1295,6 +1561,7 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-1">
                     {(
                       [
+                        { id: 'dashboard', label: 'تخصيص الشاشة الرئيسية', icon: Sliders },
                         { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
                         { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
                         { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
@@ -1357,7 +1624,7 @@ export default function App() {
                     <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">نشر الخير ومشاركة التطبيق</span>
                   </div>
                   <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
-                    الدال على الخير كفاعله. شارك رفيق المسلم مع أصدقائك وعائلتك ليكتب الله لك الأجر! 🤍
+                    الدال على الخير كفاعله. شارك تطبيق هِمَّتِي مع أصدقائك وعائلتك ليكتب الله لك الأجر! 🤍
                   </p>
                   <button
                     onClick={() => {
@@ -1376,7 +1643,7 @@ export default function App() {
                   <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-end">
                     <div className="flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-500 animate-bounce" />
-                      <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل رفيق المسلم كـ App</span>
+                      <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل تطبيق هِمَّتِي كـ App</span>
                     </div>
                     <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
                       ثبّت التطبيق على جهازك للوصول السريع، وتلقي تنبيهات الأذان حتى بدون إنترنت!
@@ -1398,7 +1665,7 @@ export default function App() {
 
               {/* Sidebar Footer */}
               <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4 text-center">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">رفيق المسلم 🤍</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">هِمَّتِي 🤍</span>
                 <span className="text-[9px] text-slate-400/80 dark:text-slate-500/80 block mt-0.5">يعمل بالكامل دون خوادم لخصوصية تامة</span>
               </div>
             </motion.div>
@@ -1406,14 +1673,30 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 3. Rebalanced Fixed Bottom Navigation (5 Primary High-Priority Tabs) */}
+      {/* 3. Rebalanced Fixed Bottom Navigation with Central FAB Radial Menu */}
       <nav className="fixed bottom-0 start-0 end-0 bg-white/95 dark:bg-[#161d26]/95 backdrop-blur-md border-t border-[#e2e8f0] dark:border-slate-800/80 py-2 px-1 shadow-xl z-40 flex justify-around items-center w-full max-w-md mx-auto rounded-t-3xl transition-colors duration-300">
         
-        {/* 1. Home / Dashboard */}
+        {/* Backdrop overlay when FAB fan menu is open */}
+        <AnimatePresence>
+          {isFabOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsFabOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* 1. Home Dashboard */}
         <button
-          onClick={() => setActiveTab('home')}
+          onClick={() => {
+            setIsFabOpen(false);
+            setActiveTab('home');
+          }}
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
-            activeTab === 'home' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+            activeTab === 'home' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
           <Home className="w-5 h-5" />
@@ -1422,7 +1705,10 @@ export default function App() {
 
         {/* 2. Adhkar & Remembrance */}
         <button
-          onClick={() => setActiveTab('adhkar')}
+          onClick={() => {
+            setIsFabOpen(false);
+            setActiveTab('adhkar');
+          }}
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'adhkar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
@@ -1431,9 +1717,26 @@ export default function App() {
           <span className="text-[9.5px] leading-none font-bold">الأذكار</span>
         </button>
 
-        {/* 3. Qibla Compass */}
+        {/* 3. Central Raised FAB (Smart Radial Speed-Dial & Quick Log System) */}
+        <SmartFabSystem
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isFabOpen={isFabOpen}
+          setIsFabOpen={setIsFabOpen}
+          currentPrayerArabic={getArabicPrayerName(activePrayerName)}
+          currentPrayerKey={activePrayerName}
+          nextPrayerArabic={getArabicPrayerName(typeof next === 'string' ? next : 'Asr')}
+          nextPrayerKey={typeof next === 'string' ? next : 'Asr'}
+          prayerLogs={prayerLogs}
+          setToastMessage={setToastMessage}
+        />
+
+        {/* 4. Qibla Compass */}
         <button
-          onClick={() => setActiveTab('qibla')}
+          onClick={() => {
+            setIsFabOpen(false);
+            setActiveTab('qibla');
+          }}
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'qibla' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
@@ -1442,36 +1745,18 @@ export default function App() {
           <span className="text-[9.5px] leading-none font-bold">القبلة</span>
         </button>
 
-        {/* 4. Hijri Calendar */}
+        {/* 5. Hijri Calendar */}
         <button
-          onClick={() => setActiveTab('calendar')}
+          onClick={() => {
+            setIsFabOpen(false);
+            setActiveTab('calendar');
+          }}
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'calendar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
           <Calendar className="w-5 h-5" />
           <span className="text-[9.5px] leading-none font-bold">التقويم</span>
-        </button>
-
-        {/* 5. Spiritual Notifications & Blessings */}
-        <button
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('open-spiritual-notifications'));
-          }}
-          className="flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 relative"
-        >
-          <div className="relative">
-            <Bell className="w-5 h-5" />
-            {notificationsCount > 0 && (
-              <span className="absolute -top-1.5 -end-2 bg-rose-500 text-white text-[7.5px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white dark:border-[#161d26] animate-pulse">
-                {(() => {
-                  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-                  return notificationsCount.toString().replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
-                })()}
-              </span>
-            )}
-          </div>
-          <span className="text-[9.5px] leading-none font-bold">النفحات</span>
         </button>
 
       </nav>
@@ -1498,26 +1783,11 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* PWA Installation Guide Modal */}
-      <PwaInstallModal
-        isOpen={showPwaInstallGuide}
-        onClose={() => setShowPwaInstallGuide(false)}
-        showManualSteps={showManualSteps}
-        setShowManualSteps={setShowManualSteps}
-        onDirectInstall={() => handleDirectInstallInsideModal(setToastMessage)}
-      />
-
-      {/* بوابة النفحات الإيمانية */}
-      <SpiritualPortalModal
-        isOpen={showSpiritualModal}
-        onClose={() => setShowSpiritualModal(false)}
-        setToastMessage={setToastMessage}
-      />
-
       {/* Global Immersive Athan Overlay Screen */}
       <AthanOverlay 
         isOpen={showAthanOverlay} 
         onClose={() => {
+          markAthanDismissed();
           setShowAthanOverlay(false);
           stopAthanGlobal();
         }} 
@@ -1534,38 +1804,6 @@ export default function App() {
         stopAthan={stopAthanGlobal}
         audioError={audioError}
         onRetryWithLocal={handleRetryAudioWithLocal}
-      />
-
-      {/* Global Custom Alarm Ringing Modal */}
-      <CustomAlarmOverlay
-        activeRingingAlarm={activeRingingAlarm}
-        onSnooze={() => {
-          if (globalAudioRef.current) {
-            globalAudioRef.current.pause();
-          }
-          const snoozedAlarm = {
-            ...activeRingingAlarm,
-            id: `snooze_${Date.now()}`,
-            title: `${activeRingingAlarm.title} (غفوة)`,
-            time: (() => {
-              const d = new Date();
-              d.setMinutes(d.getMinutes() + 5);
-              return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-            })(),
-            days: [new Date().getDay()],
-            enabled: true,
-            soundType: activeRingingAlarm.soundType
-          };
-          setCustomAlarms((prev: AlarmConfig[]) => [...prev, snoozedAlarm]);
-          setActiveRingingAlarm(null);
-          setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
-        }}
-        onStop={() => {
-          if (globalAudioRef.current) {
-            globalAudioRef.current.pause();
-          }
-          setActiveRingingAlarm(null);
-        }}
       />
 
       {/* Fiqh Warning Modal for prohibited fasting days */}
@@ -1600,17 +1838,103 @@ export default function App() {
         </div>
       )}
 
-      {/* Feature Tour Guide Modal */}
-      <FeatureTourModal
-        isOpen={isTourModalOpen}
-        onClose={() => setIsTourModalOpen(false)}
-        onSelectTab={(tab, subTab) => {
-          setActiveTab(tab as TabId);
-          if (subTab) {
-            setActiveSettingsSubTab(subTab as SettingsSubTabId);
-          }
-        }}
-      />
+      {/* Lazy Loaded Modal Dialogs */}
+      <Suspense fallback={null}>
+        {/* PWA Installation Guide Modal */}
+        <PwaInstallModal
+          isOpen={showPwaInstallGuide}
+          onClose={() => setShowPwaInstallGuide(false)}
+          showManualSteps={showManualSteps}
+          setShowManualSteps={setShowManualSteps}
+          onDirectInstall={() => handleDirectInstallInsideModal(setToastMessage)}
+        />
+
+        {/* بوابة النفحات الإيمانية */}
+        <SpiritualPortalModal
+          isOpen={showSpiritualModal}
+          onClose={() => setShowSpiritualModal(false)}
+          setToastMessage={setToastMessage}
+        />
+
+        {/* Global Custom Alarm Ringing Modal */}
+        <CustomAlarmOverlay
+          activeRingingAlarm={activeRingingAlarm}
+          onSnooze={() => {
+            if (globalAudioRef.current) {
+              globalAudioRef.current.pause();
+            }
+            const snoozedAlarm = {
+              ...activeRingingAlarm,
+              id: `snooze_${Date.now()}`,
+              title: `${activeRingingAlarm.title} (غفوة)`,
+              time: (() => {
+                const d = new Date();
+                d.setMinutes(d.getMinutes() + 5);
+                return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+              })(),
+              days: [new Date().getDay()],
+              enabled: true,
+              soundType: activeRingingAlarm.soundType
+            };
+            setCustomAlarms((prev: AlarmConfig[]) => [...prev, snoozedAlarm]);
+            setActiveRingingAlarm(null);
+            setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
+          }}
+          onStop={() => {
+            if (globalAudioRef.current) {
+              globalAudioRef.current.pause();
+            }
+            setActiveRingingAlarm(null);
+          }}
+        />
+
+        {/* Feature Tour Guide Modal */}
+        <FeatureTourModal
+          isOpen={isTourModalOpen}
+          onClose={() => setIsTourModalOpen(false)}
+          onSelectTab={(tab, subTab) => {
+            setActiveTab(tab as TabId);
+            if (subTab) {
+              setActiveSettingsSubTab(subTab as SettingsSubTabId);
+            }
+          }}
+        />
+
+        {/* Quick Interactive Settings Modal */}
+        <QuickSettingsModal
+          isOpen={isQuickSettingsOpen}
+          onClose={() => setIsQuickSettingsOpen(false)}
+          settings={settings}
+          setSettings={setSettings}
+          setToastMessage={setToastMessage}
+          onOpenFullSettings={() => {
+            setActiveTab('settings');
+            setActiveSettingsSubTab('prayer');
+          }}
+        />
+
+        {/* Post Onboarding Welcome Modal */}
+        <PostOnboardingWelcomeModal
+          isOpen={showWelcomeModal}
+          onStartTour={() => {
+            localStorage.removeItem('salah_show_post_onboarding_welcome');
+            setShowWelcomeModal(false);
+            setIsTourModalOpen(true);
+          }}
+          onExploreOnOwn={() => {
+            localStorage.removeItem('salah_show_post_onboarding_welcome');
+            setShowWelcomeModal(false);
+          }}
+        />
+
+        {/* Spiritual Search Modal (Unified Search across Quran, Adhkar, Prayers & Events) */}
+        <SpiritualSearchModal
+          isOpen={isSpiritualSearchOpen}
+          onClose={() => setIsSpiritualSearchOpen(false)}
+          setActiveTab={setActiveTab}
+          setToastMessage={setToastMessage}
+        />
+      </Suspense>
 
     </div>
   );

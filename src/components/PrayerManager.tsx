@@ -30,13 +30,24 @@ import {
   Pause,
   Music,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Sun,
+  Moon,
+  BarChart3
 } from 'lucide-react';
-import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus, ClockFace, AlarmSoundType } from '../types';
-import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes } from '../utils/prayerCalc';
+import { PrayerHeatmapStats } from './PrayerHeatmapStats';
+import { DuhaQuickLogModal } from './DuhaQuickLogModal';
+import { NightPrayersQuickLogModal } from './NightPrayersQuickLogModal';
+import { AppSettings, PendingQadaPrayer, PrayerLog, PrayerName, PrayerStatus, ClockFace, AlarmSoundType, VoluntaryPrayerLog, AlarmConfig, SpiritualAlerts } from '../types';
+import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { toArabicNumbers, getHijriDate, formatGregorianFullDateArabic } from '../utils/hijri';
+import { getDateFromPrayerDay, formatDateKey } from '../utils/prayerDayBoundary';
 import { trackFeatureCompletion } from '../utils/analyticsStorage';
 import { safeSetItem } from '../utils/storage';
+import { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
 import { 
   defaultMuezzins, 
   getCustomAudios, 
@@ -87,6 +98,13 @@ interface PrayerManagerProps {
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
   pendingQadaPrayers: PendingQadaPrayer[];
   setPendingQadaPrayers: React.Dispatch<React.SetStateAction<PendingQadaPrayer[]>>;
+  voluntaryPrayerLogs?: VoluntaryPrayerLog[];
+  setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<VoluntaryPrayerLog[]>>;
+  customAlarms: AlarmConfig[];
+  setCustomAlarms: React.Dispatch<React.SetStateAction<AlarmConfig[]>>;
+  alerts: SpiritualAlerts;
+  setAlerts: React.Dispatch<React.SetStateAction<SpiritualAlerts>>;
+  onNavigateTab?: (tab: string, subTab?: string) => void;
 }
 
 type SubTab = 'times' | 'worship' | 'settings';
@@ -97,15 +115,61 @@ export default function PrayerManager({
   prayerLogs,
   setPrayerLogs,
   pendingQadaPrayers,
-  setPendingQadaPrayers
+  setPendingQadaPrayers,
+  voluntaryPrayerLogs = [],
+  setVoluntaryPrayerLogs,
+  customAlarms,
+  setCustomAlarms,
+  alerts,
+  setAlerts,
+  onNavigateTab
 }: PrayerManagerProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('times');
-  const [worshipTab, setWorshipTab] = useState<'today' | 'qada'>('today');
+  const [worshipTab, setWorshipTab] = useState<'today' | 'qada' | 'heatmap'>('today');
   const [qadaPace, setQadaPace] = useState<number>(5);
   
-  // Day selection for logging today or yesterday
-  const [selectedDateOffset, setSelectedDateOffset] = useState<0 | -1>(0); // 0 = Today, -1 = Yesterday
+  // Day selection for logging past days (0 = Today, -1 = Yesterday, down to -90)
+  const [selectedDateOffset, setSelectedDateOffset] = useState<number>(0);
   const [logSuccessMessage, setLogSuccessMessage] = useState<string>('');
+
+  useEffect(() => {
+    const handleSubtabNav = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail === 'worship' || customEvent.detail === 'times' || customEvent.detail === 'settings') {
+        setActiveSubTab(customEvent.detail as SubTab);
+        if (customEvent.detail === 'worship') {
+          setWorshipTab('today');
+        }
+      }
+    };
+    const handleYesterdayNav = () => {
+      setActiveSubTab('worship');
+      setWorshipTab('today');
+      setSelectedDateOffset(-1);
+    };
+    window.addEventListener('navigate-salah-subtab', handleSubtabNav);
+    window.addEventListener('open-prayer-worship-yesterday', handleYesterdayNav);
+    return () => {
+      window.removeEventListener('navigate-salah-subtab', handleSubtabNav);
+      window.removeEventListener('open-prayer-worship-yesterday', handleYesterdayNav);
+    };
+  }, []);
+
+  // Voluntary Prayers BottomSheets / Modals state
+  const [showDuhaModal, setShowDuhaModal] = useState<boolean>(false);
+  const [showNightPrayersModal, setShowNightPrayersModal] = useState<boolean>(false);
+
+  // Duha modal state
+  const [duhaRakaat, setDuhaRakaat] = useState<number>(2);
+
+  // Night prayers modal states
+  const [qiyamEnabled, setQiyamEnabled] = useState<boolean>(false);
+  const [qiyamRakaat, setQiyamRakaat] = useState<number>(2);
+  const [shafiEnabled, setShafiEnabled] = useState<boolean>(false);
+  const [witrEnabled, setWitrEnabled] = useState<boolean>(false);
+  const [witrRakaat, setWitrRakaat] = useState<number>(1);
+  const [taraweehEnabled, setTaraweehEnabled] = useState<boolean>(false);
+  const [taraweehRakaat, setTaraweehRakaat] = useState<number>(8);
 
   // Real-time ticking date/time
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -173,30 +237,11 @@ export default function PrayerManager({
 
   const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
 
-  // Custom Alarms Interface & State
-  interface CustomAlarm {
-    id: string;
-    title: string;
-    time: string; // "HH:MM"
-    days: number[]; // 0-6
-    enabled: boolean;
-    soundType: 'beep' | 'adhan' | 'vibrate' | 'silent';
-  }
-
-  const [customAlarms, setCustomAlarms] = useState<CustomAlarm[]>(() => {
-    const saved = localStorage.getItem('salah_custom_alarms');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    safeSetItem('salah_custom_alarms', JSON.stringify(customAlarms));
-  }, [customAlarms]);
-
   // Alarms Form States
   const [alarmTitle, setAlarmTitle] = useState('');
   const [alarmTime, setAlarmTime] = useState('05:00');
   const [alarmDays, setAlarmDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [alarmSoundType, setAlarmSoundType] = useState<'beep' | 'adhan' | 'vibrate' | 'silent'>('beep');
+  const [alarmSoundType, setAlarmSoundType] = useState<AlarmSoundType>('beep');
   const [showAddAlarm, setShowAddAlarm] = useState(false);
 
   // Custom Muezzin Form States
@@ -296,9 +341,9 @@ export default function PrayerManager({
       return;
     }
 
-    const newAlarm: CustomAlarm = {
+    const newAlarm: AlarmConfig = {
       id: `alarm_${Date.now()}`,
-      title: alarmTitle,
+      title: alarmTitle.trim(),
       time: alarmTime,
       days: alarmDays,
       enabled: true,
@@ -370,164 +415,36 @@ export default function PrayerManager({
     return localStorage.getItem('salah_last_auto_played_key') || '';
   });
 
-  const requestNotificationPermission = () => {
+  const requestNotificationPermission = async () => {
+    try {
+      await requestNativeNotificationPermission();
+    } catch (e) {
+      console.warn('Native notification permission error:', e);
+    }
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   };
 
   const now = new Date();
-  const targetDate = new Date();
-  if (selectedDateOffset === -1) {
-    targetDate.setDate(now.getDate() - 1);
-  }
-  const dateStr = targetDate.toISOString().split('T')[0];
+  const targetTimestamp = new Date();
+  targetTimestamp.setDate(now.getDate() + selectedDateOffset);
+
+  const dateStr = formatDateKey(targetTimestamp);
+
+  const targetDate = getDateFromPrayerDay(dateStr);
   const hijri = getHijriDate(targetDate, settings.hijriOffset);
 
+  const tzOffset = getTimezoneOffsetForLocation(targetDate, settings.timezoneId);
   const times = calculatePrayerTimes(
     targetDate,
     settings.latitude,
     settings.longitude,
-    -targetDate.getTimezoneOffset() / 60,
+    tzOffset,
     settings.calcMethod,
     settings.madhab,
     settings.prayerOffsets || {}
   );
-
-  // Bypassed local auto-play and custom alarms checkers to prevent conflicts.
-  // Root level background service inside App.tsx now handles all automated triggers.
-  /*
-  useEffect(() => {
-    if (!autoPlayOnTime) return;
-
-    // Only check and play for today (current actual date/time)
-    if (selectedDateOffset !== 0) return;
-
-    const currentStr = formatDateToTimesStr(currentTime);
-    const todayStr = currentTime.toISOString().split('T')[0];
-
-    for (const prayer of (['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as PrayerName[])) {
-      // Check if this prayer has adhan enabled in settings
-      const isAdhanEnabled = settings.adhanEnabled[prayer] !== false;
-      if (!isAdhanEnabled) continue;
-
-      const prayerTime = times[prayer];
-      if (prayerTime && prayerTime === currentStr) {
-        const uniqueKey = `${todayStr}_${prayer}`;
-        if (lastAutoPlayedKey !== uniqueKey) {
-          // Play Athan automatically!
-          togglePlayAthan(prayer);
-          setLastAutoPlayedKey(uniqueKey);
-          safeSetItem('salah_last_auto_played_key', uniqueKey);
-
-          // Trigger a beautiful push notification if supported and allowed
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)}`, {
-                body: `حسب توقيت مدينة ${settings.cityName || 'الإسكندرية'}. تقبل الله صلاتكم.`,
-                icon: '/favicon.ico',
-                dir: 'rtl'
-              });
-            } catch (e) {
-              console.error('Notification failed', e);
-            }
-          }
-          break;
-        }
-      }
-    }
-  }, [currentTime, autoPlayOnTime, selectedDateOffset, times, lastAutoPlayedKey, settings.cityName, settings.adhanEnabled]);
-
-  // Check and trigger Custom Alarms
-  useEffect(() => {
-    const currentHour = currentTime.getHours();
-    const currentMin = currentTime.getMinutes();
-    const currentDay = currentTime.getDay();
-    const timeKey = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
-    const todayStr = currentTime.toISOString().split('T')[0];
-
-    customAlarms.forEach(alarm => {
-      if (!alarm.enabled) return;
-      if (alarm.time === timeKey && alarm.days.includes(currentDay)) {
-        const uniqueKey = `${alarm.id}_${todayStr}`;
-        if (lastTriggeredAlarms[alarm.id] !== uniqueKey) {
-          // Trigger alarm!
-          // 1. Show Web Push Notification if granted
-          if ('Notification' in window && Notification.permission === 'granted') {
-            try {
-              new Notification(`تنبيه مخصص: ${alarm.title}`, {
-                body: `حان الآن موعد: ${alarm.title} (${toArabicNumbers(alarm.time)})`,
-                icon: '/favicon.ico',
-                dir: 'rtl'
-              });
-            } catch (e) {
-              console.error('Notification failed', e);
-            }
-          }
-
-          // 2. Play Sound based on soundType
-          if (alarm.soundType !== 'silent') {
-            let soundUrl = 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3'; // Medina adhan as default
-            if (alarm.soundType === 'beep') {
-              soundUrl = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-200.wav'; // Standard beep sound
-            } else if (alarm.soundType === 'vibrate') {
-              if ('vibrate' in navigator) {
-                navigator.vibrate([200, 100, 200]);
-              }
-            }
-            
-            if (audioRef.current) {
-              audioRef.current.pause();
-            }
-            
-            const resolvedSoundUrl = soundUrl.startsWith('/') ? new URL(soundUrl, window.location.origin).href : soundUrl;
-            const audio = new Audio(resolvedSoundUrl);
-            audioRef.current = audio;
-            audio.volume = audioVolume;
-
-            audio.addEventListener('play', () => {
-              setIsPlaying(true);
-              setCurrentPlayingPrayer(null); // Setting to null denotes custom alarm
-            });
-
-            audio.addEventListener('ended', () => {
-              setIsPlaying(false);
-            });
-
-            audio.play().catch(e => console.error('Play alarm failed', e));
-          }
-
-          setLogSuccessMessage(`تنبيه مخصص: حان الآن موعد "${alarm.title}"`);
-          setLastTriggeredAlarms(prev => ({
-            ...prev,
-            [alarm.id]: uniqueKey
-          }));
-        }
-      }
-    });
-  }, [currentTime, customAlarms, lastTriggeredAlarms, audioVolume]);
-  */
-
-  // Alarms and alerts state
-  interface AlertConfig {
-    enabled: boolean;
-    minutes: number;
-    days: number[]; // 0 to 6
-    prayers: PrayerName[];
-  }
-  
-  const [alerts, setAlerts] = useState<{ before: AlertConfig; after: AlertConfig; duha: { enabled: boolean; minutes: number; days: number[] } }>(() => {
-    const saved = localStorage.getItem('salah_alerts');
-    return saved ? JSON.parse(saved) : {
-      before: { enabled: true, minutes: 10, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
-      after: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
-      duha: { enabled: true, minutes: 15, days: [0,1,2,3,4,5,6] }
-    };
-  });
-
-  useEffect(() => {
-    safeSetItem('salah_alerts', JSON.stringify(alerts));
-  }, [alerts]);
 
   // Sound Modes per prayer
   type SoundMode = 'adhan' | 'beep' | 'vibrate' | 'silent';
@@ -598,15 +515,15 @@ export default function PrayerManager({
         };
         setPendingQadaPrayers(prev => [...prev, newQada]);
       }
-      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer)} كقضاء وإضافتها للفوائت.`);
+      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer, targetTimestamp)} كقضاء وإضافتها للفوائت.`);
     } else if (!isMissed && wasMissed) {
       // Remove Qada item
       setPendingQadaPrayers(prev => prev.filter(
         q => !(q.date === dateStr && q.prayerName === prayer)
       ));
-      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer)} وإزالتها من الفوائت.`);
+      setLogSuccessMessage(`تم تسجيل صلاة ${getArabicPrayerName(prayer, targetTimestamp)} وإزالتها من الفوائت.`);
     } else {
-      setLogSuccessMessage(`تم حفظ حالة صلاة ${getArabicPrayerName(prayer)} بنجاح.`);
+      setLogSuccessMessage(`تم حفظ حالة صلاة ${getArabicPrayerName(prayer, targetTimestamp)} بنجاح.`);
     }
   };
 
@@ -656,6 +573,84 @@ export default function PrayerManager({
     }
   };
 
+  const handleSaveDuhaModal = (rakaat: number) => {
+    if (setVoluntaryPrayerLogs) {
+      setVoluntaryPrayerLogs(prev => [
+        ...prev.filter(l => !(l.appPrayerDay === dateStr && l.type === 'duha')),
+        {
+          id: crypto.randomUUID(),
+          appPrayerDay: dateStr,
+          type: 'duha',
+          rakaat,
+          loggedAt: Date.now()
+        }
+      ]);
+    }
+    handleUpdateNafilah('Duha', rakaat);
+    setShowDuhaModal(false);
+    setLogSuccessMessage(`تم تسجيل صلاة الضحى (${toArabicNumbers(rakaat)} ركعات) بنجاح ✓`);
+  };
+
+  const handleSaveNightPrayersModal = () => {
+    const newLogs: VoluntaryPrayerLog[] = [];
+
+    if (qiyamEnabled) {
+      newLogs.push({
+        id: crypto.randomUUID(),
+        appPrayerDay: dateStr,
+        type: 'qiyam',
+        rakaat: qiyamRakaat,
+        loggedAt: Date.now()
+      });
+      handleUpdateNafilah('Qiyam', qiyamRakaat);
+    } else {
+      handleUpdateNafilah('Qiyam', 0);
+    }
+
+    if (shafiEnabled) {
+      newLogs.push({
+        id: crypto.randomUUID(),
+        appPrayerDay: dateStr,
+        type: 'shafi',
+        rakaat: 2,
+        loggedAt: Date.now()
+      });
+    }
+
+    if (witrEnabled) {
+      newLogs.push({
+        id: crypto.randomUUID(),
+        appPrayerDay: dateStr,
+        type: 'witr',
+        rakaat: witrRakaat,
+        loggedAt: Date.now()
+      });
+      handleUpdateNafilah('Witr', witrRakaat);
+    } else {
+      handleUpdateNafilah('Witr', 0);
+    }
+
+    if (taraweehEnabled && hijri.month === 9) {
+      newLogs.push({
+        id: crypto.randomUUID(),
+        appPrayerDay: dateStr,
+        type: 'taraweeh',
+        rakaat: taraweehRakaat,
+        loggedAt: Date.now()
+      });
+    }
+
+    if (setVoluntaryPrayerLogs) {
+      setVoluntaryPrayerLogs(prev => [
+        ...prev.filter(l => !(l.appPrayerDay === dateStr && ['qiyam', 'shafi', 'witr', 'taraweeh'].includes(l.type))),
+        ...newLogs
+      ]);
+    }
+
+    setShowNightPrayersModal(false);
+    setLogSuccessMessage('تم حفظ صلوات الليل بنجاح ✓');
+  };
+
   // --- Qada Section Logic ---
   const qadaCounts = {
     Fajr: pendingQadaPrayers.filter(q => q.prayerName === 'Fajr').length,
@@ -669,7 +664,7 @@ export default function PrayerManager({
   const handleAddManualQada = (prayer: PrayerName) => {
     const newQada: PendingQadaPrayer = {
       id: crypto.randomUUID(),
-      date: new Date().toISOString().split('T')[0],
+      date: formatDateKey(new Date()),
       hijriDate: 'يدوي',
       prayerName: prayer
     };
@@ -685,7 +680,7 @@ export default function PrayerManager({
       setPendingQadaPrayers(updated);
       
       // Also log it as standard late/qada in today's logs if they did it today
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = formatDateKey(new Date());
       const todayLogs = prayerLogs[todayStr] || {};
       const existingToday = todayLogs[prayer] || { status: 'not_yet', sunnahBefore: 0, sunnahAfter: 0 };
       
@@ -695,7 +690,7 @@ export default function PrayerManager({
   };
 
   const handleAddFullDayQada = () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = formatDateKey(new Date());
     const newItems: PendingQadaPrayer[] = fiveDailyPrayers.map(p => ({
       id: crypto.randomUUID(),
       date: todayStr,
@@ -1146,7 +1141,28 @@ export default function PrayerManager({
                       </div>
                     </div>
 
-                     {/* Row 2: Settings & Adjustments */}
+                    {/* Quick Voluntary Prayer Action Buttons */}
+                    {pName === 'Sunrise' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDuhaModal(true)}
+                        className="w-full py-1.5 px-3 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+                      >
+                        <span>☀️ تسجيل صلاة الضحى (صلاة الأوابين)</span>
+                      </button>
+                    )}
+
+                    {pName === 'Isha' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNightPrayersModal(true)}
+                        className="w-full py-1.5 px-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+                      >
+                        <span>🌃 تسجيل صلوات الليل (قيام، شفع، وتر{hijri.month === 9 ? '، تراويح' : ''})</span>
+                      </button>
+                    )}
+
+                    {/* Row 2: Settings & Adjustments */}
                      <div className="border-t border-slate-100 dark:border-slate-800/30 pt-2.5 mt-1 flex flex-col gap-2">
                        {/* First sub-row: Offset & Muezzin */}
                        <div className="flex items-center gap-2">
@@ -1342,7 +1358,7 @@ export default function PrayerManager({
                       <div className="grid grid-cols-5 gap-1 pt-1.5 border-t border-slate-100/50 dark:border-slate-800/30 text-center">
                         {[
                           { key: 'Fajr', label: 'الفجر' },
-                          { key: 'Dhuhr', label: new Date().getDay() === 5 ? 'الجمعة' : 'الظهر' },
+                          { key: 'Dhuhr', label: getArabicPrayerName('Dhuhr', now) },
                           { key: 'Asr', label: 'العصر' },
                           { key: 'Maghrib', label: 'المغرب' },
                           { key: 'Isha', label: 'العشاء' }
@@ -1367,11 +1383,11 @@ export default function PrayerManager({
       {activeSubTab === 'worship' && (
         <div className="space-y-6">
           {/* Internal sub-navigation for worship */}
-          <div className="flex bg-slate-100/80 dark:bg-slate-800/60 p-1 rounded-2xl border border-slate-200/20 dark:border-slate-700/30 gap-1">
+          <div className="flex bg-slate-100/80 dark:bg-slate-800/60 p-1 rounded-2xl border border-slate-200/20 dark:border-slate-700/30 gap-1 overflow-x-auto">
             <button
               type="button"
               onClick={() => setWorshipTab('today')}
-              className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 worshipTab === 'today'
                   ? 'bg-white dark:bg-[#111720] text-indigo-600 dark:text-indigo-400 shadow-xs'
                   : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 font-bold'
@@ -1382,59 +1398,102 @@ export default function PrayerManager({
             <button
               type="button"
               onClick={() => setWorshipTab('qada')}
-              className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 worshipTab === 'qada'
                   ? 'bg-white dark:bg-[#111720] text-indigo-600 dark:text-indigo-400 shadow-xs'
                   : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 font-bold'
               }`}
             >
-              <span>قضاء الفوائت والصلوات الفائتة</span>
+              <span>قضاء الفوائت</span>
               {totalQadaCount > 0 && (
                 <span className="bg-rose-500 text-white font-mono text-[9px] px-1.5 py-0.5 rounded-full">
                   {toArabicNumbers(totalQadaCount)}
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setWorshipTab('heatmap')}
+              className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                worshipTab === 'heatmap'
+                  ? 'bg-white dark:bg-[#111720] text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 font-bold'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>إحصائيات الصلاة (Heatmap)</span>
+            </button>
           </div>
 
           {worshipTab === 'today' && (
         <div className="space-y-6">
-          {/* Day Offset Selector */}
-          <div className="bg-white dark:bg-[#161d26] p-4 rounded-3xl border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 flex justify-between items-center shadow-xs">
-            <div className="space-y-1">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold block">تاريخ التسجيل الحالي:</span>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-xs font-black text-slate-800 dark:text-white">
-                  {hijri.fullString}
-                </span>
+          {/* Day Navigation Header (أسهم التنقل بين الأيام) */}
+          <div className="bg-white dark:bg-[#161d26] p-4 rounded-3xl border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              {/* Right Button in RTL (Previous Day: moves backwards to older days) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedDateOffset > -90) {
+                    setSelectedDateOffset(prev => prev - 1);
+                  } else {
+                    setLogSuccessMessage('التسجيل الرجعي متاح لآخر 90 يوم فقط.');
+                  }
+                }}
+                disabled={selectedDateOffset <= -90}
+                className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-30 cursor-pointer transition-all flex items-center justify-center shrink-0"
+                title="اليوم السابق"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+
+              {/* Center Title & Date Display */}
+              <div className="text-center space-y-0.5">
+                <div className="flex items-center justify-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-white">
+                    {targetDate.toLocaleDateString('ar-EG', { weekday: 'long' })} {hijri.fullString} ({toArabicNumbers(targetDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' }))})
+                  </span>
+                </div>
+                {selectedDateOffset !== 0 && (
+                  <span className="inline-block text-[9px] font-black bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                    سجل سابق
+                  </span>
+                )}
               </div>
+
+              {/* Left Button in RTL (Next Day: moves forward towards today, capped at today) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedDateOffset < 0) {
+                    setSelectedDateOffset(prev => prev + 1);
+                  }
+                }}
+                disabled={selectedDateOffset >= 0}
+                className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-30 cursor-pointer transition-all flex items-center justify-center shrink-0"
+                title="اليوم التالي"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
-              <button
-                type="button"
-                onClick={() => setSelectedDateOffset(0)}
-                className={`py-1.5 px-4 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                  selectedDateOffset === 0
-                    ? 'bg-white dark:bg-[#111720] text-indigo-600 dark:text-indigo-400 shadow-xs font-black'
-                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                }`}
-              >
-                اليوم
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedDateOffset(-1)}
-                className={`py-1.5 px-4 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                  selectedDateOffset === -1
-                    ? 'bg-white dark:bg-[#111720] text-indigo-600 dark:text-indigo-400 shadow-xs font-black'
-                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
-                }`}
-              >
-                الأمس
-              </button>
-            </div>
+            {/* Past Day Banner */}
+            {selectedDateOffset !== 0 && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-between gap-2 text-xs font-bold text-amber-800 dark:text-amber-300 animate-fade-in">
+                <div className="flex items-center gap-1.5">
+                  <span>📅</span>
+                  <span>بتعرض يوم سابق ({toArabicNumbers(Math.abs(selectedDateOffset))} {Math.abs(selectedDateOffset) === 1 ? 'يوم مضى' : 'أيام مضت'})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDateOffset(0)}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black cursor-pointer transition-all shrink-0"
+                >
+                  ارجع للنهاردة
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Hadith Quote Card */}
@@ -1480,7 +1539,7 @@ export default function PrayerManager({
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-[#3b82f6]" />
                       <h4 className="text-sm font-black text-slate-800 dark:text-white">
-                        صلاة {getArabicPrayerName(prayer)}
+                        صلاة {getArabicPrayerName(prayer, targetTimestamp)}
                       </h4>
                     </div>
                     <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 font-bold bg-slate-50 dark:bg-slate-800/40 py-1 px-2.5 rounded-xl">
@@ -1619,6 +1678,14 @@ export default function PrayerManager({
                       </button>
                     ))}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDuhaModal(true)}
+                    className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/20 rounded-2xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span>فتح نافذة تسجيل صلاة الضحى بالتفصيل ✨</span>
+                  </button>
                 </div>
               );
             })()}
@@ -1647,7 +1714,7 @@ export default function PrayerManager({
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                       <h4 className="text-sm font-black text-slate-800 dark:text-white">
-                        صلاة {getArabicPrayerName(prayer)}
+                        صلاة {getArabicPrayerName(prayer, targetTimestamp)}
                       </h4>
                     </div>
                     <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400 dark:text-slate-500 font-bold bg-slate-50 dark:bg-slate-800/40 py-1 px-2.5 rounded-xl">
@@ -2063,6 +2130,13 @@ export default function PrayerManager({
             🌿 "أحب الأعمال إلى الله أدومها وإن قل"، واصل قضاء صلواتك الفائتة بانتظام، صلاةً بصلاة مع كل فريضة يومية، وبإذن الله تبرأ ذمتك وتطمئن روحك.
           </div>
         </div>
+      )}
+
+      {worshipTab === 'heatmap' && (
+        <PrayerHeatmapStats 
+          prayerLogs={prayerLogs}
+          voluntaryPrayerLogs={voluntaryPrayerLogs}
+        />
       )}
         </div>
       )}
@@ -2799,6 +2873,30 @@ export default function PrayerManager({
 
         </div>
       )}
+
+      {/* Duha Prayer BottomSheet Modal */}
+      <DuhaQuickLogModal
+        isOpen={showDuhaModal}
+        onClose={() => setShowDuhaModal(false)}
+        dateStr={dateStr}
+        prayerLogs={prayerLogs}
+        setPrayerLogs={setPrayerLogs}
+        voluntaryPrayerLogs={voluntaryPrayerLogs}
+        setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
+        onSuccess={(msg) => setLogSuccessMessage(msg)}
+      />
+
+      {/* Night Prayers BottomSheet Modal */}
+      <NightPrayersQuickLogModal
+        isOpen={showNightPrayersModal}
+        onClose={() => setShowNightPrayersModal(false)}
+        dateStr={dateStr}
+        prayerLogs={prayerLogs}
+        setPrayerLogs={setPrayerLogs}
+        voluntaryPrayerLogs={voluntaryPrayerLogs}
+        setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
+        onSuccess={(msg) => setLogSuccessMessage(msg)}
+      />
 
     </div>
   );

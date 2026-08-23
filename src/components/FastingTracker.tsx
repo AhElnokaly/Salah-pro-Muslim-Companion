@@ -23,7 +23,8 @@ import {
 import { AppSettings, RamadanQadaTracker, FastingLog } from '../types';
 import { toArabicNumbers, getHijriDate, isForbiddenFastDay } from '../utils/hijri';
 import { getMoonPhaseInfo } from '../utils/moonPhases';
-import { calculatePrayerTimes } from '../utils/prayerCalc';
+import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
+import { formatDateKey } from '../utils/prayerDayBoundary';
 
 interface FastingTrackerProps {
   settings: AppSettings;
@@ -44,7 +45,7 @@ export default function FastingTracker({
 }: FastingTrackerProps) {
   const [now, setNow] = useState(new Date());
   const [fastType, setFastType] = useState<'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar'>('Sunnah');
-  const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customDate, setCustomDate] = useState(formatDateKey(new Date()));
   const [note, setNote] = useState('');
   const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
 
@@ -56,15 +57,16 @@ export default function FastingTracker({
     return () => clearInterval(timer);
   }, []);
 
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = formatDateKey(now);
   const hijriToday = getHijriDate(now, settings.hijriOffset);
 
   // Calculate prayer times to get Iftar (Maghrib) and Imsak (Fajr) times
+  const tzOffset = getTimezoneOffsetForLocation(now, settings.timezoneId);
   const times = calculatePrayerTimes(
     now,
     settings.latitude,
     settings.longitude,
-    -now.getTimezoneOffset() / 60,
+    tzOffset,
     settings.calcMethod,
     settings.madhab,
     settings.prayerOffsets || {}
@@ -79,36 +81,10 @@ export default function FastingTracker({
     if (!times.Fajr || !times.Maghrib) return { label: '', timeStr: '' };
 
     const parseTimeToDate = (timeStr: string) => {
-      const digitsMap: Record<string, string> = {
-        '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
-        '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
-      };
-      
-      let normalized = '';
-      for (let i = 0; i < timeStr.length; i++) {
-        const char = timeStr[i];
-        normalized += digitsMap[char] ?? char;
-      }
-      
-      const parts = normalized.split(':');
-      if (parts.length < 2) {
-        return new Date(now);
-      }
-      
-      let hours = parseInt(parts[0], 10);
-      const minutesPart = parts[1].trim();
-      const mins = parseInt(minutesPart.substring(0, 2), 10);
-      
-      if (isNaN(hours) || isNaN(mins)) {
-        return new Date(now);
-      }
-      
-      const isPM = normalized.includes('م');
-      if (isPM && hours !== 12) hours += 12;
-      if (!isPM && hours === 12) hours = 0;
-      
+      if (!timeStr) return new Date(now);
+      const totalMins = parseTimeToMinutes(timeStr);
       const d = new Date(now);
-      d.setHours(hours, mins, 0, 0);
+      d.setHours(Math.floor(totalMins / 60), totalMins % 60, 0, 0);
       return d;
     };
 
@@ -347,7 +323,7 @@ export default function FastingTracker({
     // Filter duplicates
     const seenDates = new Set<string>();
     return list.filter(item => {
-      const dStr = item.date.toISOString().split('T')[0];
+      const dStr = formatDateKey(item.date);
       const key = `${dStr}-${item.name}`;
       if (seenDates.has(key)) return false;
       seenDates.add(key);
@@ -586,7 +562,7 @@ export default function FastingTracker({
 
         <div className="space-y-2.5">
           {recommendations.map((item, idx) => {
-            const dateKey = item.date.toISOString().split('T')[0];
+            const dateKey = formatDateKey(item.date);
             const isLogged = fastingLogs[dateKey]?.fasted || false;
             const itemHijri = getHijriDate(item.date, settings.hijriOffset);
 

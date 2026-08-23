@@ -31,13 +31,11 @@ export { archiveMuezzins };
 
 // Default muezzin tracks using high-reliability online HTTPS URLs
 export const defaultMuezzins: AudioTrack[] = [
-  { id: 'fajr_yusuf', name: 'أذان الفجر - الشيخ يوسف إسلام', url: 'https://archive.org/download/LifeOfTheLastProphet-ByYusufIslam/01%20-%20Call%20To%20Prayer%20%28Adhan%29.mp3', isFajr: true },
   { id: 'fajr_makkah', name: 'أذان الفجر - الحرم المكي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/033--.mp3', isFajr: true },
   { id: 'fajr_medina', name: 'أذان الفجر - المسجد النبوي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/034--.mp3', isFajr: true },
   { id: 'fajr_aqsa', name: 'أذان الفجر - المسجد الأقصى المبارك', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/069--.mp3', isFajr: true },
   { id: 'makkah', name: 'أذان الحرم المكي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/016---2.mp3', isFajr: false },
   { id: 'medina', name: 'أذان المسجد النبوي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3', isFajr: false },
-  { id: 'yusuf_islam', name: 'الشيخ يوسف إسلام', url: 'https://archive.org/download/LifeOfTheLastProphet-ByYusufIslam/01%20-%20Call%20To%20Prayer%20%28Adhan%29.mp3', isFajr: false },
   { id: 'aqsa', name: 'المسجد الأقصى المبارك', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/007--.mp3', isFajr: false },
 ];
 
@@ -243,34 +241,42 @@ export async function deleteCustomAudio(id: string): Promise<void> {
   });
 }
 
-export function getAudioUrlSync(url: string): string {
-  if (!url) return '';
-  if (!url.startsWith('db://')) {
-    return url;
+export function getAudioUrlSync(url: string, isFajr = false): string {
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
   }
-  return '';
+  if (url.startsWith('db://')) {
+    return isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+  }
+  return url;
 }
 
 /**
  * Resolves an audio URL to a playable source string.
  * Checks IndexedDB first if trackId is provided or if url is a db:// link.
- */
-/**
- * Resolves an audio URL to a playable source string.
- * Checks IndexedDB first if trackId is provided or if url is a db:// link.
- * If online and not yet stored, silently caches the track in IndexedDB for offline use!
- * If offline and track is missing, falls back to any available offline track in IndexedDB.
+ * If online, returns the actual audio URL (and silently caches it in IndexedDB for offline use).
+ * Never returns unresolved db:// URLs.
  */
 export async function getAudioUrl(url: string, trackId?: string, isFajr = false): Promise<string> {
-  // 1. لو فيه نسخة محمّلة بالفعل في IndexedDB (مؤكدة تشتغل offline)، استخدمها
-  if (url && url.startsWith('db://')) {
+  const fallback = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return fallback;
+  }
+
+  // 1. If URL starts with db://, load blob from IndexedDB
+  if (url.startsWith('db://')) {
     const id = url.replace('db://', '');
     try {
       const blobUrl = await getBlobUrlFromDb(id);
       if (blobUrl) return blobUrl;
-    } catch { /* fall through */ }
+    } catch {
+      console.warn(`[getAudioUrl] Could not load db:// track for ID ${id}, using fallback.`);
+      return fallback;
+    }
   }
 
+  // 2. If trackId is provided, check if stored in IndexedDB first
   if (trackId) {
     const dbKey = `downloaded_${trackId}`;
     try {
@@ -279,16 +285,15 @@ export async function getAudioUrl(url: string, trackId?: string, isFajr = false)
     } catch { /* not cached yet */ }
   }
 
-  // 2. مفيش نسخة محمّلة؟ رجّع الملف المحلي المضمون فورًا (مش الـ live stream)
-  //    وابدأ تحميل اختيار المستخدم الفعلي في الخلفية للمرة الجاية
-  if (trackId && url && url.startsWith('http')) {
-    if (typeof window !== 'undefined' && navigator.onLine) {
+  // 3. If online URL (http/https/relative), return it and trigger background cache
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
+    if (typeof window !== 'undefined' && navigator.onLine && trackId && url.startsWith('http')) {
       silentlyCacheAudio(trackId, url, isFajr).catch(() => {});
     }
-    return isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+    return url;
   }
 
-  return url;
+  return fallback;
 }
 
 /**

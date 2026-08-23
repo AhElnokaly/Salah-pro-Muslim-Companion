@@ -5,15 +5,17 @@
 
 export type PrayerName = 'Fajr' | 'Sunrise' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha';
 
-export type PrayerStatus = 'future' | 'A' | 'B' | 'C' | 'D' | 'not_yet' | 'E';
+export type PrayerStatus = 'future' | 'A' | 'B' | 'C' | 'D' | 'not_yet' | 'E' | 'done';
 // A: In time (في وقتها), B: Late/Qada (قضاء/متأخر), C/D: Missed (لم يصلها/فائتة), E: Excused/License (عذر شرعي - لا تحسب كفائتة)
 
 export interface PrayerLog {
   status: PrayerStatus;
-  sunnahBefore: number;
-  sunnahAfter: number;
+  sunnahBefore?: number;
+  sunnahAfter?: number;
   notes?: string;
   extraRakahs?: number;
+  timestamp?: number;
+  jamaah?: boolean;
 }
 
 export interface PendingQadaPrayer {
@@ -21,6 +23,16 @@ export interface PendingQadaPrayer {
   date: string;
   hijriDate: string;
   prayerName: PrayerName;
+}
+
+export type VoluntaryPrayerType = 'duha' | 'qiyam' | 'shafi' | 'witr' | 'taraweeh';
+
+export interface VoluntaryPrayerLog {
+  id: string;
+  appPrayerDay: string; // YYYY-MM-DD standard date string (formatDateKey)
+  type: VoluntaryPrayerType;
+  rakaat?: number;
+  loggedAt?: string | number;
 }
 
 export interface FastingLog {
@@ -36,7 +48,7 @@ export interface FastingLog {
 export interface RamadanQadaTracker {
   daysOwed: number;
   daysCompleted: number;
-  trackMode: 'fasting' | 'fidya';
+  trackMode: 'fasting' | 'fidya' | 'qada';
   fidyaTarget: number;
   fidyaCompleted: number;
   reason?: string;
@@ -50,6 +62,8 @@ export interface QuranKhatma {
   totalPages: number;
   currentPage: number;
   status: 'active' | 'completed';
+  completedAt?: string;
+  attributedHijriYear?: number;
 }
 
 export interface QuranSession {
@@ -57,8 +71,41 @@ export interface QuranSession {
   date: string;
   sessionType: 'read' | 'memorize' | 'review';
   khatmaId?: string;
-  unitType: 'pages' | 'juz' | 'surah';
+  unitType: 'pages' | 'juz' | 'surah' | 'verses';
   unitValue: number;
+  surahOrJuzName?: string;
+  isCorrection?: boolean;
+}
+
+export interface JuzProgress {
+  juzNumber: number; // 1 to 30
+  status: 'not_started' | 'memorized';
+  memorizedDate?: string;
+  lastReviewedDate?: string;
+  reviewIntervalDays?: number; // default 30 days
+  reviewRating?: 'excellent' | 'medium' | 'needs_repeat';
+}
+
+export interface MemorizationRoutine {
+  id: string;
+  type: 'memorize' | 'review';
+  unitType: 'verses' | 'pages' | 'juz';
+  unitValue: number;
+  surahOrJuz?: string;
+  reminderDays: number[]; // 0 = Sun, 1 = Mon ...
+  reminderTime?: string;
+  notificationEnabled: boolean;
+  createdAt: string;
+}
+
+export interface VerseCardConfig {
+  surahName: string;
+  surahNumber: number;
+  ayahNumber: number | string;
+  ayahText: string;
+  theme: 'green_gradient' | 'cream_light' | 'dark_elegant' | 'cyan_gold';
+  fontSize: number;
+  wisdomWord?: string;
 }
 
 export interface DhikrLog {
@@ -100,10 +147,10 @@ export type BackdropType =
 export type BackdropRenderMode = 'lineArt' | 'illustrated' | 'auto';
 
 export interface AppSettings {
-
   latitude: number;
   longitude: number;
   cityName: string;
+  timezoneId?: string;
   calcMethod: string; // 'Egypt' | 'UmmAlQura' | 'ISNA' | 'MWL' | 'Karachi' | 'Tehran' | 'Gulf'
   madhab: 'standard' | 'hanafi'; // standard = Shafi'i, Maliki, Hanbali
   hijriOffset: number; // -2 to +2
@@ -118,15 +165,29 @@ export interface AppSettings {
   primaryCalendar?: 'hijri' | 'gregorian';
   backdropStyle?: 'gold' | 'classic' | 'banner' | 'emerald' | 'night_sky' | 'kaaba' | 'andulas' | 'minimal' | 'ramadan' | 'eid_fitr' | 'eid_adha' | 'friday' | 'madinah' | 'aqsa' | 'glass_crystal' | 'glass_emerald' | 'glass_blue' | 'glass_dark' | 'auto';
   backdropRenderMode?: BackdropRenderMode;
+  backdropOpacity?: number; // 10 to 100 percentage
   cardTheme?: 'dynamic' | 'gold_luxury' | 'emerald_royal' | 'velvet_night' | 'sunset_amber' | 'cyan_dome' | 'rose_twilight' | 'dark_onyx' | 'pure_light';
   clockStyle?: 'digital' | 'analog';
   cardCompactMode?: boolean;
   gender?: 'male' | 'female';
   isWomenExcuse?: boolean;
+  annualKhatmaGoal?: number;
+  persistentNotificationEnabled?: boolean;
   pinnedWidget?: {
     type: string;
     theme: string;
-    wallpaper: string;
+    wallpaper?: string;
+    enabled?: boolean;
+    clockStyle?: 'none' | 'digital' | 'analog';
+    showMoonPhase?: boolean;
+    prayerDisplay?: 'none' | 'next_only' | 'all_prayers';
+    showDate?: boolean;
+    showDhikr?: boolean;
+    showAyah?: boolean;
+    showQibla?: boolean;
+    showSubhaBtn?: boolean;
+    showProgressBar?: boolean;
+    cardSize?: 'compact' | 'medium' | 'large';
   };
   mainCardLayout?: MainCardLayout;
 }
@@ -169,13 +230,18 @@ export const DEFAULT_CARD_LAYOUT: MainCardLayout = {
   ],
 };
 
+export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' | 'alsalatu_khayr' | 'salawat' | 'istighfar' | 'beep' | 'vibrate' | 'silent';
+
+export type AlarmNotifyMode = 'sound' | 'vibrate' | 'both' | 'silent';
+
 export interface AlarmConfig {
   id: string;
   title: string;
   time: string; // "HH:MM"
   days: number[];
   enabled: boolean;
-  soundType: 'adhan' | 'azan' | 'beep' | 'vibrate' | 'silent';
+  soundType: AlarmSoundType;
+  notifyMode?: AlarmNotifyMode;
 }
 
 export interface SpiritualAlertRule {
@@ -206,10 +272,12 @@ export interface MuezzinOption {
   name: string;
   nameAr?: string;
   src?: string;          // URL or path
+  url?: string;
   localFile?: string;    // cached blob URL
   archiveUrl?: string;   // archive.org fallback
   isCustom?: boolean;
   isDownloaded?: boolean;
+  isFajr?: boolean;
 }
 
 // ============================================
@@ -218,11 +286,9 @@ export interface MuezzinOption {
 
 export type TabId = 'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon';
 
-export type SettingsSubTabId = 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas';
+export type SettingsSubTabId = 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas' | 'dashboard';
 
 export type ClockFace = 'classic' | 'islamic' | 'minimal' | 'hybrid';
-
-export type AlarmSoundType = 'beep' | 'adhan' | 'vibrate' | 'silent';
 
 export interface PrayerTimes {
   Fajr: string;

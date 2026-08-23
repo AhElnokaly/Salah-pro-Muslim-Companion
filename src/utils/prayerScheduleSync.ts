@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { calculatePrayerTimes, parseTimeToMinutes } from './prayerCalc';
+import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from './prayerCalc';
 import { ScheduledAthanItem } from '../types/pushSchedule';
 import { safeSetItem } from './storage';
 
@@ -58,7 +58,8 @@ export function generate30DayPrayerSchedule(
   calcMethod: string = 'Egypt',
   madhab: 'standard' | 'hanafi' = 'standard',
   manualOffsets: Record<string, number> = {},
-  daysCount: number = 30
+  daysCount: number = 30,
+  timezoneId?: string
 ): ScheduledAthanItem[] {
   const result: ScheduledAthanItem[] = [];
   const prayerKeys = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const;
@@ -70,7 +71,7 @@ export function generate30DayPrayerSchedule(
     const day = d.getDate().toString().padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
 
-    const timezoneOffsetHours = -d.getTimezoneOffset() / 60;
+    const timezoneOffsetHours = getTimezoneOffsetForLocation(d, timezoneId);
     const times = calculatePrayerTimes(d, lat, lng, timezoneOffsetHours, calcMethod, madhab, manualOffsets);
 
     for (const key of prayerKeys) {
@@ -106,7 +107,9 @@ export function syncUpcomingPrayerSchedule(settings: any): ScheduledAthanItem[] 
     settings.longitude ?? 31.2357,
     settings.calcMethod ?? 'Egypt',
     settings.madhab ?? 'standard',
-    settings.manualOffsets ?? {}
+    settings.manualOffsets ?? {},
+    30,
+    settings.timezoneId
   );
   saveScheduledAthans(schedule);
   return schedule;

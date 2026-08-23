@@ -31,7 +31,7 @@ export const CustomAlarmOverlay: React.FC<CustomAlarmOverlayProps> = ({
         </div>
 
         <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold leading-relaxed">
-          تذكير مبارك من رفيق المسلم للقيام بالعبادة المخصصة والتقرب إلى الله سبحانه وتعالى.
+          تذكير مبارك من تطبيق هِمَّتِي للقيام بالعبادة المخصصة والتقرب إلى الله سبحانه وتعالى.
         </p>
 
         <div className="flex gap-2">

@@ -21,7 +21,7 @@ const EventTagBlock: React.FC<EventTagBlockProps> = ({
   }[size];
 
   return (
-    <div className="bg-gradient-to-r from-amber-500/10 via-emerald-600/25 to-amber-500/10 border border-amber-400/15 backdrop-blur-md rounded-full text-center animate-pulse my-0.5">
+    <div className="bg-gradient-to-r from-amber-500/10 via-emerald-600/25 to-amber-500/10 border border-amber-400/15 rounded-full text-center animate-pulse my-0.5">
       <span className={`font-black text-amber-300 block leading-normal ${sizeClasses}`}>{ev.text}</span>
     </div>
   );

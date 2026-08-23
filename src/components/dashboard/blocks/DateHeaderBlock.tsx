@@ -32,7 +32,7 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-center text-center gap-2 z-10 w-full border-b border-white/10 pb-2.5">
-      <div className={`flex items-center justify-center gap-2 sm:gap-3 bg-black/30 backdrop-blur-md rounded-full border border-white/15 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none ${sizeClasses}`}>
+      <div className={`flex items-center justify-center gap-2 sm:gap-3 bg-black/20 rounded-full border border-white/10 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none ${sizeClasses}`}>
         {/* Clickable Hijri Date */}
         <button
           type="button"

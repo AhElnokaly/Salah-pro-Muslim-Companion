@@ -3,12 +3,14 @@ import { safeSetItem } from '../utils/storage';
 import { 
   AppSettings, 
   PrayerLog, 
+  PrayerName,
   PendingQadaPrayer, 
   RamadanQadaTracker, 
   QuranSession, 
   QuranKhatma, 
   CustomDua,
-  FastingLog 
+  FastingLog,
+  VoluntaryPrayerLog
 } from '../types';
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -38,6 +40,8 @@ export interface UseSpiritualStateReturn {
   setPrayerLogs: Dispatch<SetStateAction<Record<string, Record<string, PrayerLog>>>>;
   pendingQadaPrayers: PendingQadaPrayer[];
   setPendingQadaPrayers: Dispatch<SetStateAction<PendingQadaPrayer[]>>;
+  voluntaryPrayerLogs: VoluntaryPrayerLog[];
+  setVoluntaryPrayerLogs: Dispatch<SetStateAction<VoluntaryPrayerLog[]>>;
   fastingLogs: Record<string, FastingLog>;
   setFastingLogs: Dispatch<SetStateAction<Record<string, FastingLog>>>;
   ramadanQada: RamadanQadaTracker;
@@ -54,10 +58,47 @@ export interface UseSpiritualStateReturn {
   storageWriteError: boolean;
 }
 
+function sanitizePrayerLogs(rawLogs: any): Record<string, Record<string, PrayerLog>> {
+  if (!rawLogs || typeof rawLogs !== 'object') return {};
+  const cleaned: Record<string, Record<string, PrayerLog>> = {};
+  const mapKey: Record<string, PrayerName> = {
+    fajr: 'Fajr',
+    dhuhr: 'Dhuhr',
+    asr: 'Asr',
+    maghrib: 'Maghrib',
+    isha: 'Isha',
+    Fajr: 'Fajr',
+    Dhuhr: 'Dhuhr',
+    Asr: 'Asr',
+    Maghrib: 'Maghrib',
+    Isha: 'Isha',
+    Sunrise: 'Sunrise',
+  };
+
+  for (const dateKey of Object.keys(rawLogs)) {
+    cleaned[dateKey] = {};
+    const day = rawLogs[dateKey] || {};
+    for (const pKey of Object.keys(day)) {
+      const canonicalKey = mapKey[pKey] || mapKey[pKey.toLowerCase()] || pKey;
+      const log = day[pKey];
+      if (log && typeof log === 'object') {
+        const rawStatus = log.status;
+        const status = rawStatus === 'done' ? 'A' : (rawStatus || 'not_yet');
+        cleaned[dateKey][canonicalKey] = {
+          ...log,
+          status
+        };
+      }
+    }
+  }
+  return cleaned;
+}
+
 export function useSpiritualState(): UseSpiritualStateReturn {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [prayerLogs, setPrayerLogs] = useState<Record<string, Record<string, PrayerLog>>>({});
   const [pendingQadaPrayers, setPendingQadaPrayers] = useState<PendingQadaPrayer[]>([]);
+  const [voluntaryPrayerLogs, setVoluntaryPrayerLogs] = useState<VoluntaryPrayerLog[]>([]);
   const [fastingLogs, setFastingLogs] = useState<Record<string, FastingLog>>({});
   const [ramadanQada, setRamadanQada] = useState<RamadanQadaTracker>({
     daysOwed: 0,
@@ -79,6 +120,7 @@ export function useSpiritualState(): UseSpiritualStateReturn {
       const storedSettings = localStorage.getItem('mc_settings');
       const storedPrayerLogs = localStorage.getItem('mc_prayer_logs');
       const storedPendingQada = localStorage.getItem('mc_pending_qada');
+      const storedVoluntary = localStorage.getItem('mc_voluntary_prayer_logs');
       const storedFasting = localStorage.getItem('mc_fasting_logs');
       const storedRamadanQada = localStorage.getItem('mc_ramadan_qada');
       const storedQuranSessions = localStorage.getItem('mc_quran_sessions');
@@ -96,7 +138,8 @@ export function useSpiritualState(): UseSpiritualStateReturn {
       }
       if (storedPrayerLogs) {
         try {
-          setPrayerLogs(JSON.parse(storedPrayerLogs));
+          const parsed = JSON.parse(storedPrayerLogs);
+          setPrayerLogs(sanitizePrayerLogs(parsed));
         } catch (e) {
           console.error('Failed parsing mc_prayer_logs:', e);
         }
@@ -106,6 +149,13 @@ export function useSpiritualState(): UseSpiritualStateReturn {
           setPendingQadaPrayers(JSON.parse(storedPendingQada));
         } catch (e) {
           console.error('Failed parsing mc_pending_qada:', e);
+        }
+      }
+      if (storedVoluntary) {
+        try {
+          setVoluntaryPrayerLogs(JSON.parse(storedVoluntary));
+        } catch (e) {
+          console.error('Failed parsing mc_voluntary_prayer_logs:', e);
         }
       }
       if (storedFasting) {
@@ -187,6 +237,13 @@ export function useSpiritualState(): UseSpiritualStateReturn {
 
   useEffect(() => {
     if (!isLoaded) return;
+    if (!safeSetItem('mc_voluntary_prayer_logs', JSON.stringify(voluntaryPrayerLogs))) {
+      setStorageWriteError(true);
+    }
+  }, [voluntaryPrayerLogs, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
     if (!safeSetItem('mc_fasting_logs', JSON.stringify(fastingLogs))) {
       setStorageWriteError(true);
     }
@@ -234,6 +291,8 @@ export function useSpiritualState(): UseSpiritualStateReturn {
     setPrayerLogs,
     pendingQadaPrayers,
     setPendingQadaPrayers,
+    voluntaryPrayerLogs,
+    setVoluntaryPrayerLogs,
     fastingLogs,
     setFastingLogs,
     ramadanQada,

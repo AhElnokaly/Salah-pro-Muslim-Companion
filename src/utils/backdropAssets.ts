@@ -4,21 +4,28 @@ import fridayBackdrop from '../assets/images/friday_mosque_backdrop_178548809891
 import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
 import classicBackdrop from '../assets/images/mosque_backdrop_1784095267677.jpg';
 import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
+import lightMosqueBackdrop from '../assets/images/mosque_backdrop_light_1785869903259.jpg';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
+
+export const LIGHT_MOSQUE_BACKDROP = lightMosqueBackdrop;
+export const DARK_MOSQUE_BACKDROP = darkMosqueBackdrop;
 
 export const BACKDROP_IMAGE_MAP: Record<string, string> = {
   friday: fridayBackdrop,
-  gold: goldBackdrop,
-  classic: classicBackdrop,
+  gold: darkMosqueBackdrop,
+  classic: lightMosqueBackdrop,
   banner: bannerBackdrop,
-  ramadan: classicBackdrop,
-  eid_fitr: goldBackdrop,
+  ramadan: darkMosqueBackdrop,
+  eid_fitr: lightMosqueBackdrop,
   eid_adha: bannerBackdrop,
-  night_sky: classicBackdrop,
-  emerald: classicBackdrop,
-  madinah: classicBackdrop,
-  kaaba: goldBackdrop,
-  aqsa: goldBackdrop,
-  andulas: classicBackdrop,
+  night_sky: darkMosqueBackdrop,
+  emerald: darkMosqueBackdrop,
+  madinah: lightMosqueBackdrop,
+  kaaba: darkMosqueBackdrop,
+  aqsa: lightMosqueBackdrop,
+  andulas: darkMosqueBackdrop,
+  light_mosque: lightMosqueBackdrop,
+  dark_mosque: darkMosqueBackdrop,
 };
 
 /**
@@ -38,6 +45,8 @@ export const AVAILABLE_PNG_BACKDROPS: Set<string> = new Set([
   'kaaba',
   'aqsa',
   'andulas',
+  'light_mosque',
+  'dark_mosque',
 ]);
 
 /**
@@ -46,15 +55,16 @@ export const AVAILABLE_PNG_BACKDROPS: Set<string> = new Set([
  */
 export function resolveRenderMode(
   type: BackdropType | string,
-  preference: BackdropRenderMode = 'auto'
+  preference: BackdropRenderMode | string = 'auto'
 ): 'lineArt' | 'illustrated' {
   const backdropKey = type === 'auto' ? 'classic' : type;
 
-  if (preference === 'illustrated') {
-    return AVAILABLE_PNG_BACKDROPS.has(backdropKey) ? 'illustrated' : 'lineArt';
+  if (preference === 'lineArt') {
+    return 'lineArt';
   }
-  // Default to 'lineArt' vector SVG for crisp vector graphics over card gradients
-  return 'lineArt';
+
+  // For 'auto', 'illustrated', 'preset', prefer illustrated PNG images if available
+  return AVAILABLE_PNG_BACKDROPS.has(backdropKey) ? 'illustrated' : 'lineArt';
 }
 
 /**
@@ -62,9 +72,22 @@ export function resolveRenderMode(
  */
 export function getBackdropImagePath(type: string): string | null {
   const key = type === 'auto' ? 'classic' : type;
+  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+
+  if (key === 'classic' || key === 'auto') {
+    return isDark ? darkMosqueBackdrop : lightMosqueBackdrop;
+  }
+  if (key === 'gold' || key === 'dark_mosque') {
+    return darkMosqueBackdrop;
+  }
+  if (key === 'light_mosque') {
+    return lightMosqueBackdrop;
+  }
+
   if (BACKDROP_IMAGE_MAP[key]) {
     return BACKDROP_IMAGE_MAP[key];
   }
-  return null;
+  return isDark ? darkMosqueBackdrop : lightMosqueBackdrop;
 }
+
 

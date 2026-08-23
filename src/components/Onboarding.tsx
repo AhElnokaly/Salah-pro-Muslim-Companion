@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { safeSetItem } from '../utils/storage';
 import { Compass, MapPin, ChevronLeft, Moon, Sun, Bell, Heart, Info } from 'lucide-react';
 import { AppSettings, PrayerName } from '../types';
 import { POPULAR_CITIES, calculatePrayerTimes } from '../utils/prayerCalc';
@@ -64,6 +65,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       latitude: customCoords.lat,
       longitude: customCoords.lng,
       cityName: customCoords.name,
+      timezoneId: selectedCity?.timezone,
       calcMethod,
       madhab,
       hijriOffset,
@@ -79,6 +81,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       hasCompletedOnboarding: true
     };
     
+    safeSetItem('salah_show_post_onboarding_welcome', 'true');
     onComplete(finalSettings, { prayer: lastPrayer, wasOnTime });
   };
 
