@@ -32,30 +32,50 @@
       </div>
     </div>
     <script>
+      // Global resource error detection (catches 404/503 on JS/CSS modules)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          console.error('[BootGuard] Failed loading essential asset:', e.target.src || e.target.href);
+          var box = document.getElementById('recovery-box');
+          if (box) {
+            box.style.display = 'block';
+          }
+        }
+      }, true);
+
       setTimeout(function() {
         var box = document.getElementById('recovery-box');
         if (box && document.getElementById('boot-loader')) {
           box.style.display = 'block';
         }
-      }, 3500);
+      }, 2500);
 
       function clearAndReload() {
+        var btn = document.querySelector('#recovery-box button');
+        if (btn) {
+          btn.innerText = 'جاري التحديث والتنظيف... ⏳';
+          btn.disabled = true;
+        }
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(function(regs) {
-            for (var i = 0; i < regs.length; i++) regs[i].unregister();
-            if ('caches' in window) {
-              caches.keys().then(function(keys) {
-                for (var key of keys) caches.delete(key);
-                window.location.reload(true);
-              });
-            } else {
-              window.location.reload(true);
+            var promises = [];
+            for (var i = 0; i < regs.length; i++) {
+              promises.push(regs[i].unregister());
             }
-          }).catch(function() {
-            window.location.reload(true);
+            return Promise.all(promises);
+          }).then(function() {
+            if ('caches' in window) {
+              return caches.keys().then(function(keys) {
+                var cachePromises = [];
+                for (var key of keys) cachePromises.push(caches.delete(key));
+                return Promise.all(cachePromises);
+              });
+            }
+          }).finally(function() {
+            window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
           });
         } else {
-          window.location.reload(true);
+          window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
         }
       }
     </script>

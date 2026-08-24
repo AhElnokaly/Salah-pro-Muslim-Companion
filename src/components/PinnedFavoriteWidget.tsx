@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppSettings, PrayerTimes } from '../types';
 import { parseTimeToMinutes } from '../utils/prayerCalc';
-import { getMoonPhaseInfo } from './WidgetSimulator';
+import { getMoonPhaseInfo } from '../utils/moonPhase';
 
 interface PinnedFavoriteWidgetProps {
   pinnedWidget?: AppSettings['pinnedWidget'];

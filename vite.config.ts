@@ -18,14 +18,11 @@ export default defineConfig(({ command }) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) {
-                return 'vendor-react';
+              if (id.includes('react') || id.includes('react-dom') || id.includes('motion')) {
+                return 'vendor-core';
               }
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';
-              }
-              if (id.includes('motion')) {
-                return 'vendor-motion';
               }
               if (id.includes('@capacitor')) {
                 return 'vendor-capacitor';
