@@ -89,6 +89,20 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     <div id="onboarding-root" className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center p-4 text-end" dir="rtl">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-6 border border-[#e2e8f0] transition-all duration-300">
         
+        {/* App Logo & Branding */}
+        <div className="flex items-center justify-center gap-2.5 mb-5 pb-3 border-b border-gray-100">
+          <img 
+            src="/muslim_companion_icon.jpg" 
+            alt="Hemmaty App Logo" 
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
+            className="w-10 h-10 rounded-xl object-cover shadow-sm border border-amber-500/20"
+          />
+          <div className="text-right">
+            <h1 className="text-sm font-black text-gray-900 leading-tight">تطبيق هِمَّتِي الإيماني</h1>
+            <p className="text-[10px] text-gray-400 font-bold">رفيقك الذكي لمواقيت الصلاة والقرآن والطاعات</p>
+          </div>
+        </div>
+
         {/* Progress Bar */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-1.5 w-full">

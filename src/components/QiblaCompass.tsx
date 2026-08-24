@@ -23,6 +23,7 @@ import { AppSettings } from '../types';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
 import { detectUserLocation } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
 
 interface QiblaCompassProps {
   settings: AppSettings;
@@ -306,6 +307,16 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
       className="fixed inset-0 z-50 bg-gradient-to-b from-[#0c3147] via-[#091d2c] to-[#040d16] flex flex-col justify-between py-8 px-6 select-none text-white overflow-hidden text-center"
       dir="rtl"
     >
+      {/* Background Mosque Atmosphere Layer */}
+      <div className="absolute inset-0 pointer-events-none opacity-15 overflow-hidden select-none">
+        <img 
+          src={darkMosqueBackdrop} 
+          alt="Mosque Atmosphere" 
+          className="w-full h-full object-cover object-center scale-110 filter blur-[0.5px]" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#040d16] via-[#091d2c]/60 to-[#0c3147]/80" />
+      </div>
+
       {/* 1. Top Bar: Title & Close Button */}
       <div className="flex items-center justify-between w-full relative z-10 px-2">
         <div className="flex items-center gap-2">

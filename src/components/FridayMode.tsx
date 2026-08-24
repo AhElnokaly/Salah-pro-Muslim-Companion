@@ -23,6 +23,7 @@ import {
 import { AppSettings } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 import { safeSetItem } from '../utils/storage';
+import fridayBackdrop from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
 
 interface FridayModeProps {
   settings: AppSettings;
@@ -190,9 +191,14 @@ export default function FridayMode({ settings, todayPrayerTimes, onNavigateTab }
           : 'bg-gradient-to-br from-[#f4faf5] via-white to-[#f0f8f2] border-emerald-500/30 shadow-md text-slate-800'
       }`}
     >
-      {/* Background Decorative Element */}
-      <div className="absolute top-2 start-3 select-none opacity-20 pointer-events-none">
-        <span className="text-4xl">🕌</span>
+      {/* Background Decorative Image & Element */}
+      <div className="absolute inset-0 select-none opacity-10 dark:opacity-20 pointer-events-none overflow-hidden">
+        <img 
+          src={fridayBackdrop} 
+          alt="Friday Mosque" 
+          className="w-full h-full object-cover object-center scale-105 filter blur-[0.5px]" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/60 via-transparent to-transparent" />
       </div>
 
       {/* Header section */}

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, X, Sliders, Moon, Sun, Monitor, Clock, Image, Sparkles, Check } from 'lucide-react';
 import { AppSettings, BackdropRenderMode } from '../types';
+import SpiritualThemePicker from './SpiritualThemePicker';
 
 interface QuickSettingsModalProps {
   isOpen: boolean;
@@ -118,34 +119,24 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                 </button>
               </div>
 
-              {/* Theme Picker Grid */}
+              {/* Visual Spiritual Theme Picker Grid */}
               <div className="pt-2">
-                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-2">اختر الصورة أو الثيم المفضل:</span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {themesList.map(t => {
-                    const isSelected = currentStyle === t.id;
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setSettings(prev => ({ ...prev, backdropStyle: t.id as any }));
-                          setToastMessage(`تم تفعيل ثيم: ${t.name} ✨`);
-                        }}
-                        className={`p-2 rounded-xl text-end border transition-all cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-amber-500 text-white border-amber-500 font-bold shadow-sm'
-                            : 'bg-white dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-amber-50/50 dark:hover:bg-amber-950/20'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm">{t.icon}</span>
-                          <span className="text-[11px] font-black truncate">{t.name}</span>
-                        </div>
-                        <span className="text-[9px] opacity-80">{t.desc}</span>
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[11px] font-black text-slate-700 dark:text-slate-200">
+                    اختر السمة الروحانية لخلفية الصلاة:
+                  </span>
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/50">
+                    7 سمات مميزة ✨
+                  </span>
                 </div>
+                <SpiritualThemePicker
+                  currentThemeId={currentStyle}
+                  onSelectTheme={(themeId, themeName) => {
+                    setSettings(prev => ({ ...prev, backdropStyle: themeId as any }));
+                    setToastMessage(`تم تفعيل ثيم: ${themeName} ✨`);
+                  }}
+                  columns={2}
+                />
               </div>
 
               {/* Backdrop Opacity Slider Bar */}

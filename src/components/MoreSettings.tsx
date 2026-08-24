@@ -48,6 +48,7 @@ import { AppSettings, BackdropRenderMode, PendingQadaPrayer, RamadanQadaTracker,
 import { POPULAR_CITIES } from '../utils/prayerCalc';
 import { detectUserLocation } from '../utils/locationService';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
+import SpiritualThemePicker from './SpiritualThemePicker';
 import { toArabicNumbers, formatArabicDayCount, getHijriDate } from '../utils/hijri';
 import { defaultMuezzins, getCustomAudios, getAudioUrl, getAudioUrlSync, archiveMuezzins, downloadAndSaveAudio, deleteDownloadedAudio, getDownloadedTrackIds, getAudioStorageStats } from '../utils/audioStorage';
 import ToggleSwitch from './ui/ToggleSwitch';
@@ -1810,119 +1811,23 @@ export default function MoreSettings({
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-              {[
-                { 
-                  id: 'auto', 
-                  name: 'تلقائي ذكي 🌟', 
-                  desc: 'يتغير تلقائياً حسب أوقات اليوم والمناسبات',
-                  bgClass: 'bg-gradient-to-r from-indigo-500/10 to-amber-500/10 border-indigo-200/50 dark:border-indigo-900/30'
-                },
-                { 
-                  id: 'glass_crystal', 
-                  name: 'شفاف زجاجي كريستالي 💎', 
-                  desc: 'خلفية شفافة بلورية راقية بدون شبكة أو ألوان داكنة',
-                  bgClass: 'bg-white/40 dark:bg-slate-800/40 border-slate-300/60 dark:border-slate-700/60 backdrop-blur-md'
-                },
-                { 
-                  id: 'glass_emerald', 
-                  name: 'شفاف زمردي ناعم 🌿', 
-                  desc: 'شفافية بلورية هادئة مع نفحات زمردية خضراء',
-                  bgClass: 'bg-emerald-500/15 border-emerald-300/50 dark:border-emerald-800/40 backdrop-blur-md'
-                },
-                { 
-                  id: 'glass_blue', 
-                  name: 'شفاف سماوي ناصع 🌤️', 
-                  desc: 'شفافية زجاجية ناصعة مع لمسات من الأزرق السماوي',
-                  bgClass: 'bg-sky-500/15 border-sky-300/50 dark:border-sky-800/40 backdrop-blur-md'
-                },
-                { 
-                  id: 'glass_dark', 
-                  name: 'شفاف بلوري داكن 🌙', 
-                  desc: 'شفافية بلورية داكنة وفاخرة لراحة العين',
-                  bgClass: 'bg-slate-900/40 border-slate-700/60 dark:border-slate-800/60 backdrop-blur-md'
-                },
-                { 
-                  id: 'madinah', 
-                  name: 'المسجد النبوي الشريف 🟢', 
-                  desc: 'القبة الخضراء الشريفة والمنارات بالمدينة المنورة',
-                  bgClass: 'bg-emerald-600/15 border-emerald-400/50 dark:border-emerald-800/40'
-                },
-                { 
-                  id: 'aqsa', 
-                  name: 'المسجد الأقصى المبارك 🕌', 
-                  desc: 'قبة الصخرة المشرفة والموازين الذهبية بالقدس',
-                  bgClass: 'bg-amber-600/15 border-amber-400/50 dark:border-amber-800/40'
-                },
-                { 
-                  id: 'kaaba', 
-                  name: 'الكعبة المشرفة 🕋', 
-                  desc: 'الكعبة المعظمة والمنارات الشامخة بالحرم المكي',
-                  bgClass: 'bg-amber-500/10 border-amber-300/50 dark:border-amber-800/40'
-                },
-                { 
-                  id: 'gold', 
-                  name: 'المسجد الذهبي ✨', 
-                  desc: 'خلفية ذهبية مشرقة مستوحاة من شروق شمس الحرم',
-                  bgClass: 'bg-amber-500/5 border-amber-200/40 dark:border-amber-900/20'
-                },
-                { 
-                  id: 'emerald', 
-                  name: 'الزمرد الملكي 🌿', 
-                  desc: 'قبة ومنارات باللون الزمردي الأخضر الروحاني',
-                  bgClass: 'bg-emerald-500/10 border-emerald-300/40 dark:border-emerald-900/30'
-                },
-                { 
-                  id: 'night_sky', 
-                  name: 'سماء المجرة 🌌', 
-                  desc: 'سماء ليلية مليئة بالنجوم المتلألئة والهدوء',
-                  bgClass: 'bg-indigo-950/20 border-indigo-300/30 dark:border-indigo-800/40'
-                },
-                { 
-                  id: 'andulas', 
-                  name: 'النجم الأندلسي 🕌', 
-                  desc: 'نقوش وزخارف هندسية أندلسية ملكية راقية',
-                  bgClass: 'bg-purple-500/10 border-purple-300/40 dark:border-purple-900/30'
-                },
-                { 
-                  id: 'ramadan', 
-                  name: 'فوانيس رمضان 🌙', 
-                  desc: 'فوانيس وهلال رمضاني مشع بالأجواء الإيمانية',
-                  bgClass: 'bg-blue-500/10 border-blue-300/40 dark:border-blue-900/30'
-                },
-                { 
-                  id: 'classic', 
-                  name: 'الظل الكلاسيكي 🌙', 
-                  desc: 'صورة ظلية زرقاء ليلية تمنحك طابعاً من السكينة',
-                  bgClass: 'bg-sky-500/5 border-sky-200/40 dark:border-sky-900/20'
-                },
-                { 
-                  id: 'banner', 
-                  name: 'راية الغروب 🌅', 
-                  desc: 'مظهر أوسع ومثالي لزوايا المسجد في وقت الغروب',
-                  bgClass: 'bg-rose-500/5 border-rose-200/40 dark:border-rose-900/20'
-                },
-              ].map((item) => {
-                const isSelected = (settings.backdropStyle || 'auto') === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setSettings(prev => ({ ...prev, backdropStyle: item.id as any }))}
-                    className={`p-3 rounded-2xl border text-end flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer hover:scale-[1.01] ${item.bgClass} ${
-                      isSelected
-                        ? 'ring-2 ring-indigo-500 dark:ring-indigo-400 border-transparent shadow-sm'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
-                    }`}
-                  >
-                    <span className="text-xs font-black text-slate-800 dark:text-white block">
-                      {item.name}
-                    </span>
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500 leading-snug font-medium block">
-                      {item.desc}
-                    </span>
-                  </button>
-                );
-              })}
+            {/* Visual Spiritual Theme Cards Inspired by Reference Image */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800 dark:text-white">
+                  السمات الإيمانية والمعالم الإسلامية (7 سمات مرئية):
+                </span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/50">
+                  عرض مرئي فاخر 🎨
+                </span>
+              </div>
+              <SpiritualThemePicker
+                currentThemeId={settings.backdropStyle || 'auto'}
+                onSelectTheme={(themeId, themeName) => {
+                  setSettings(prev => ({ ...prev, backdropStyle: themeId as any }));
+                }}
+                columns={2}
+              />
             </div>
           </div>
         </div>

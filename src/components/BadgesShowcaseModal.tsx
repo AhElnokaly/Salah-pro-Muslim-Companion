@@ -25,6 +25,7 @@ import {
   UnifiedPeriodProgress 
 } from '../utils/progressEngine';
 import { toArabicNumbers } from '../utils/hijri';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
 
 interface BadgesShowcaseModalProps {
   isOpen: boolean;
@@ -69,6 +70,16 @@ export default function BadgesShowcaseModal({
         >
           {/* Header Banner */}
           <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-5 relative overflow-hidden shrink-0">
+            {/* Ambient Mosque Watermark */}
+            <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden select-none">
+              <img 
+                src={darkMosqueBackdrop} 
+                alt="Grand Mosque" 
+                className="w-full h-full object-cover object-center scale-105 filter blur-[0.3px]" 
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/80 via-transparent to-slate-950/80" />
+            </div>
+
             <div className="absolute -start-12 -bottom-12 w-40 h-40 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none" />
             
             <div className="flex items-center justify-between relative z-10">

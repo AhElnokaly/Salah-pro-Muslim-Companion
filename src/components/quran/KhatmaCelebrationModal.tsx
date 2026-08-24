@@ -8,6 +8,7 @@ import confetti from 'canvas-confetti';
 import { Sparkles, Share2, X, BookOpen, Award, CheckCircle2 } from 'lucide-react';
 import { QuranKhatma } from '../../types';
 import { toArabicNumbers } from '../../utils/hijri';
+import darkMosqueBackdrop from '../../assets/images/mosque_backdrop_dark_1785869917166.jpg';
 
 interface KhatmaCelebrationModalProps {
   khatma: QuranKhatma;
@@ -66,6 +67,16 @@ export default function KhatmaCelebrationModal({
         onClick={(e) => e.stopPropagation()}
         className="bg-gradient-to-b from-slate-900 via-emerald-950 to-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-md p-6 text-center text-white space-y-5 shadow-2xl animate-scaleUp relative overflow-hidden"
       >
+        {/* Celebratory Mosque Background Watermark */}
+        <div className="absolute inset-0 pointer-events-none opacity-20 overflow-hidden select-none">
+          <img 
+            src={darkMosqueBackdrop} 
+            alt="Grand Mosque" 
+            className="w-full h-full object-cover object-center scale-110 filter blur-[0.5px]" 
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-slate-900" />
+        </div>
+
         {/* Subtle decorative glow background */}
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />

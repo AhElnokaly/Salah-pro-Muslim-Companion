@@ -202,9 +202,9 @@ export default function AthanOverlay({
       className="fixed inset-0 z-50 bg-[#070b11] flex flex-col justify-between p-8 sm:p-12 text-white font-sans transition-all duration-500 overflow-hidden"
       dir="rtl"
     >
-      {/* High-Precision Vector Mosque Backdrop (No Checkerboard Grid, Zero Pixelation) */}
-      <div className="absolute inset-0 transition-all duration-1000 ease-in-out scale-105 opacity-60 pointer-events-none overflow-hidden">
-        <MosqueBackdrop type={backdropType} />
+      {/* High-Precision Vector / Illustrated Mosque Backdrop */}
+      <div className="absolute inset-0 transition-all duration-1000 ease-in-out scale-105 opacity-70 pointer-events-none overflow-hidden">
+        <MosqueBackdrop type={backdropType} renderMode="illustrated" opacity={70} />
       </div>
 
       {/* Spiritual gradient overlay to blend into dark, readable interface */}

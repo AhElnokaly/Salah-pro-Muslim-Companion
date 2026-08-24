@@ -3,6 +3,7 @@ import { Sparkles, Moon, Sun, AlertTriangle, Clock, ArrowLeft, HeartHandshake } 
 import { PrayerTimes } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 import { parseTimeToMinutes } from '../utils/prayerCalc';
+import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
 
 interface SacredHoursBannerProps {
   prayerTimes?: PrayerTimes;
@@ -202,7 +203,17 @@ export default function SacredHoursBanner({
       className={`p-4 rounded-2xl border shadow-lg transition-all duration-500 relative overflow-hidden ${themeStyles.bg}`}
       dir="rtl"
     >
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      {/* Ambient Mosque Night Sky Background */}
+      <div className="absolute inset-0 select-none opacity-15 pointer-events-none overflow-hidden">
+        <img 
+          src={bannerBackdrop} 
+          alt="Sacred Hours Mosque" 
+          className="w-full h-full object-cover object-bottom scale-105" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/80" />
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative z-10">
         <div className="space-y-1.5 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-lg">{hourDetails.icon}</span>

@@ -45,6 +45,20 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
             </button>
           </div>
 
+          {/* App Preview Card */}
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+            <img 
+              src="/muslim_companion_icon.jpg" 
+              alt="Hemmaty App" 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
+              className="w-12 h-12 rounded-2xl object-cover shadow-md border border-amber-500/30"
+            />
+            <div className="text-right">
+              <h4 className="text-xs font-black text-slate-900 dark:text-white">تطبيق هِمَّتِي</h4>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">تطبيق إيماني متكامل ومجاني بالكامل</p>
+            </div>
+          </div>
+
           <p className="text-xs text-slate-600 dark:text-slate-300 font-bold leading-relaxed">
             احصل على أفضل تجربة بدون إعلانات وبدون إنترنت مباشرة على شاشتك الرئيسية!
           </p>
