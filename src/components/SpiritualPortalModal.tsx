@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles, RotateCcw } from 'lucide-react';
-import companionIcon from '../assets/images/hemmaty_app_logo_1786362094156.jpg';
+import companionIcon from '../assets/images/hemmaty_logo.jpg';
 
 export const SPIRITUAL_CAPSULES = [
   {
@@ -179,7 +179,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
                 }}
-                className="w-full h-full object-contain p-1 select-none"
+                className="w-full h-full object-cover select-none"
                 referrerPolicy="no-referrer"
               />
             </div>

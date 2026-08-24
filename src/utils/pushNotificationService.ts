@@ -223,7 +223,9 @@ export async function sendPushNotification(
   try {
     // Try via Service Worker first for better background support
     if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
+      const swReadyPromise = navigator.serviceWorker.ready;
+      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 1500));
+      const reg = await Promise.race([swReadyPromise, timeoutPromise]);
       if (reg && reg.showNotification) {
         await reg.showNotification(title, defaultOptions);
         triggerNotificationSound(options?.soundType, settings);

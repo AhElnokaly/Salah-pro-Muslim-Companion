@@ -4,18 +4,23 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-// Unregister any active Service Workers in preview/dev to prevent cache interference
+// Unregister active Service Workers ONLY in dev/preview environments to prevent cache interference
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  try {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      for (const registration of registrations) {
-        registration.unregister();
-      }
-    }).catch(() => {
-      // Ignore cleanup errors
-    });
-  } catch (e) {
-    // Ignore
+  const isDevOrPreview = window.location.hostname.includes('run.app') || 
+                         window.location.hostname.includes('aistudio') || 
+                         window.location.hostname === 'localhost';
+  if (isDevOrPreview) {
+    try {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister();
+        }
+      }).catch(() => {
+        // Ignore cleanup errors
+      });
+    } catch (e) {
+      // Ignore
+    }
   }
 }
 

@@ -23,7 +23,7 @@ import { AppSettings } from '../types';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
 import { detectUserLocation } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
-import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
 
 interface QiblaCompassProps {
   settings: AppSettings;

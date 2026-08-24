@@ -51,7 +51,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
               src="/muslim_companion_icon.jpg" 
               alt="Hemmaty App" 
               onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
-              className="w-12 h-12 rounded-2xl object-cover shadow-md border border-amber-500/30"
+              className="w-12 h-12 rounded-2xl object-cover shadow-md border border-amber-500/30 shrink-0"
             />
             <div className="text-right">
               <h4 className="text-xs font-black text-slate-900 dark:text-white">تطبيق هِمَّتِي</h4>

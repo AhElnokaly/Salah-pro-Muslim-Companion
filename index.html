@@ -14,17 +14,51 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     
-    <link rel="manifest" href="./manifest.json" />
+    <link rel="manifest" href="/manifest.json" />
   </head>
   <body class="bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root">
       <div id="boot-loader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #faf7f0; color: #0f172a; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px;" dir="rtl">
         <div style="width: 44px; height: 44px; border: 3.5px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: bootSpin 1s linear infinite; margin-bottom: 16px;"></div>
         <div style="font-weight: 800; font-size: 19px; color: #047857; margin-bottom: 6px; letter-spacing: -0.01em;">هِمَّتِي — جاري التشغيل...</div>
-        <div style="font-size: 13px; color: #64748b;">لحظات وتفتح معك لوحة العبادات والأذكار</div>
+        <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">لحظات وتفتح معك لوحة العبادات والأذكار</div>
+
+        <div id="recovery-box" style="display: none; margin-top: 14px; max-width: 320px;">
+          <p style="font-size: 12px; color: #059669; margin-bottom: 10px; line-height: 1.5; font-weight: 600;">استغرق التحميل وقتاً أطول من المعتاد. يمكنك تحديث الذاكرة المخبئية بضغطة واحدة:</p>
+          <button onclick="clearAndReload()" style="background-color: #059669; color: #ffffff; font-weight: 700; font-size: 13px; padding: 10px 22px; border-radius: 9999px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">تحديد وتحديث التشغيل 🔄</button>
+        </div>
+
         <style>@keyframes bootSpin { to { transform: rotate(360deg); } }</style>
       </div>
     </div>
+    <script>
+      setTimeout(function() {
+        var box = document.getElementById('recovery-box');
+        if (box && document.getElementById('boot-loader')) {
+          box.style.display = 'block';
+        }
+      }, 3500);
+
+      function clearAndReload() {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) regs[i].unregister();
+            if ('caches' in window) {
+              caches.keys().then(function(keys) {
+                for (var key of keys) caches.delete(key);
+                window.location.reload(true);
+              });
+            } else {
+              window.location.reload(true);
+            }
+          }).catch(function() {
+            window.location.reload(true);
+          });
+        } else {
+          window.location.reload(true);
+        }
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

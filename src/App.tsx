@@ -109,7 +109,7 @@ const TabLoadingFallback = () => (
 );
 
 // Import Hemmaty app logo icon
-import companionIcon from './assets/images/hemmaty_app_logo_1786362094156.jpg';
+import companionIcon from './assets/images/hemmaty_logo.jpg';
 
 // Calculations for standalone widget state synchronization
 import { calculatePrayerTimes, getCurrentAndNextPrayer, getArabicPrayerName } from './utils/prayerCalc';
@@ -880,7 +880,7 @@ export default function App() {
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
             }}
-            className="w-full h-full object-contain p-1" 
+            className="w-full h-full object-cover select-none" 
             referrerPolicy="no-referrer" 
           />
         </div>
@@ -985,7 +985,7 @@ export default function App() {
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
                   }}
-                  className="w-full h-full object-contain p-0.5 select-none transition-transform duration-300 hover:scale-105"
+                  className="w-full h-full object-cover select-none transition-transform duration-300 hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
                 <span className="absolute inset-0 ring-1 ring-inset ring-white/20 rounded-2xl pointer-events-none" />

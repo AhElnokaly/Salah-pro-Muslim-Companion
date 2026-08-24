@@ -1,11 +1,11 @@
 import { BackdropType, BackdropRenderMode } from '../types';
 
-import fridayBackdrop from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
-import goldBackdrop from '../assets/images/mosque_backdrop_gold_1784097866777.jpg';
-import classicBackdrop from '../assets/images/mosque_backdrop_1784095267677.jpg';
-import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
-import lightMosqueBackdrop from '../assets/images/mosque_backdrop_light_1785869903259.jpg';
-import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
+import fridayBackdrop from '../assets/images/friday_mosque_backdrop.jpg';
+import goldBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
+import classicBackdrop from '../assets/images/mosque_backdrop_light.jpg';
+import bannerBackdrop from '../assets/images/mosque_banner.jpg';
+import lightMosqueBackdrop from '../assets/images/mosque_backdrop_light.jpg';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
 
 export const LIGHT_MOSQUE_BACKDROP = lightMosqueBackdrop;
 export const DARK_MOSQUE_BACKDROP = darkMosqueBackdrop;

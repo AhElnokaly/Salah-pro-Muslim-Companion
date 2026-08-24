@@ -25,7 +25,7 @@ import {
   UnifiedPeriodProgress 
 } from '../utils/progressEngine';
 import { toArabicNumbers } from '../utils/hijri';
-import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
+import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
 
 interface BadgesShowcaseModalProps {
   isOpen: boolean;

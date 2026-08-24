@@ -1,10 +1,10 @@
 import React, { memo } from 'react';
 import { BackdropType } from '../types';
 import { Check } from 'lucide-react';
-import fridayImg from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
-import darkMosqueImg from '../assets/images/mosque_backdrop_dark_1785869917166.jpg';
-import lightMosqueImg from '../assets/images/mosque_backdrop_light_1785869903259.jpg';
-import bannerImg from '../assets/images/mosque_banner_1784014914575.jpg';
+import fridayImg from '../assets/images/friday_mosque_backdrop.jpg';
+import darkMosqueImg from '../assets/images/mosque_backdrop_dark.jpg';
+import lightMosqueImg from '../assets/images/mosque_backdrop_light.jpg';
+import bannerImg from '../assets/images/mosque_banner.jpg';
 
 export interface ThemeOption {
   id: BackdropType | string;

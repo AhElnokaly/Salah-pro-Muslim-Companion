@@ -3,7 +3,7 @@ import { Sparkles, Moon, Sun, AlertTriangle, Clock, ArrowLeft, HeartHandshake } 
 import { PrayerTimes } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 import { parseTimeToMinutes } from '../utils/prayerCalc';
-import bannerBackdrop from '../assets/images/mosque_banner_1784014914575.jpg';
+import bannerBackdrop from '../assets/images/mosque_banner.jpg';
 
 interface SacredHoursBannerProps {
   prayerTimes?: PrayerTimes;

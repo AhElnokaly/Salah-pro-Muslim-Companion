@@ -95,7 +95,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             src="/muslim_companion_icon.jpg" 
             alt="Hemmaty App Logo" 
             onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
-            className="w-10 h-10 rounded-xl object-cover shadow-sm border border-amber-500/20"
+            className="w-10 h-10 rounded-xl object-cover shadow-sm border border-amber-500/20 shrink-0"
           />
           <div className="text-right">
             <h1 className="text-sm font-black text-gray-900 leading-tight">تطبيق هِمَّتِي الإيماني</h1>

@@ -23,7 +23,7 @@ import {
 import { AppSettings } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 import { safeSetItem } from '../utils/storage';
-import fridayBackdrop from '../assets/images/friday_mosque_backdrop_1785488098914.jpg';
+import fridayBackdrop from '../assets/images/friday_mosque_backdrop.jpg';
 
 interface FridayModeProps {
   settings: AppSettings;
