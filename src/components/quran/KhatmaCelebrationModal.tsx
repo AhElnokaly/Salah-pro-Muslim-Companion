@@ -62,7 +62,7 @@ export default function KhatmaCelebrationModal({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn" onClick={onClose} dir="rtl">
       <div 
         onClick={(e) => e.stopPropagation()}
         className="bg-gradient-to-b from-slate-900 via-emerald-950 to-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-md p-6 text-center text-white space-y-5 shadow-2xl animate-scaleUp relative overflow-hidden"

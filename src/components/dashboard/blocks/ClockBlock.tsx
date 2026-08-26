@@ -13,7 +13,7 @@ interface ClockBlockProps {
   setClockFace: (face: 'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk') => void;
 }
 
-const ClockBlock: React.FC<ClockBlockProps> = ({
+const ClockBlock: React.FC<ClockBlockProps> = React.memo(({
   size = 'large',
   showAnalogClock,
   setShowAnalogClock,
@@ -57,6 +57,7 @@ const ClockBlock: React.FC<ClockBlockProps> = ({
         type="button"
         onClick={() => setShowAnalogClock(!showAnalogClock)}
         className="text-[9px] font-black text-white/50 hover:text-amber-300 transition-all cursor-pointer bg-white/5 px-2 py-0.5 rounded-md border border-white/5 active:scale-95"
+        aria-label={showAnalogClock ? "التبديل إلى عرض الساعة الرقمية" : "التبديل إلى عرض ساعة العقارب"}
       >
         {showAnalogClock ? 'عرض الساعة الرقمية 🕒' : 'عرض ساعة العقارب 🕰️'}
       </button>
@@ -75,6 +76,7 @@ const ClockBlock: React.FC<ClockBlockProps> = ({
                     ? 'bg-amber-400 text-slate-950 font-black'
                     : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
+                aria-label={`تغيير نمط الساعة إلى ${face === 'classic' ? 'كلاسيك' : face === 'islamic' ? 'إسلامي' : face === 'minimal' ? 'بسيط' : face === 'cyber' ? 'سايبر' : 'صلاتك'}`}
               >
                 {face === 'classic' ? 'كلاسيك' : face === 'islamic' ? 'إسلامي' : face === 'minimal' ? 'بسيط' : face === 'cyber' ? 'سايبر' : 'صلاتك'}
               </button>
@@ -84,6 +86,6 @@ const ClockBlock: React.FC<ClockBlockProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default ClockBlock;

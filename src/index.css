@@ -119,12 +119,21 @@ body {
   animation: lineart-flicker 5s ease-in-out infinite;
 }
 
-/* احترام تفضيل تقليل الحركة */
-@media (prefers-reduced-motion: reduce) {
-  .lineart-twinkle,
-  .lineart-pulse-slow,
-  .lineart-flicker {
-    animation: none;
-  }
+/* Accessibility & Design System Utilities */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.accessible-focus {
+  outline: none;
+}
+.accessible-focus:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
 

@@ -13,7 +13,7 @@ interface DateHeaderBlockProps {
   toArabicNumbers: (str: string | number) => string;
 }
 
-const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
+const DateHeaderBlock: React.FC<DateHeaderBlockProps> = React.memo(({
   size = 'normal',
   hijri,
   gregorianClean,
@@ -39,6 +39,7 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
           onClick={() => setActiveTab && setActiveTab('calendar')}
           className="flex items-center gap-1.5 font-extrabold text-white hover:text-amber-300 transition-colors cursor-pointer shrink-0 group"
           title="اضغط لعرض التقويم الهجري والميلادي وتعديل الأيام"
+          aria-label={`التاريخ الهجري: ${hijri.fullString} - فتح التقويم`}
         >
           <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
           <span className="leading-none drop-shadow-xs">{hijri.fullString}</span>
@@ -50,6 +51,7 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
           onClick={() => setActiveTab && setActiveTab('moon')}
           className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-amber-400/25 hover:bg-amber-400/45 border border-amber-300/40 hover:border-amber-300 flex items-center justify-center text-xs sm:text-sm hover:scale-110 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0 group"
           title={`طور القمر اليوم: ${moonInfo.name} (${toArabicNumbers(moonInfo.illumination)}% إضاءة) - اضغط لعرض صفحة أطوار القمر`}
+          aria-label={`طور القمر اليوم: ${moonInfo.name} - فتح صفحة أطوار القمر`}
         >
           <span className="leading-none group-hover:rotate-12 transition-transform filter drop-shadow-xs">{moonInfo.icon}</span>
         </button>
@@ -60,6 +62,7 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
           onClick={() => setActiveTab && setActiveTab('calendar')}
           className="flex items-center gap-1.5 font-bold text-white/90 hover:text-amber-200 transition-colors cursor-pointer shrink-0"
           title="اضغط لعرض التقويم الكامل"
+          aria-label={`اليوم والتاريخ الميلادي: ${dayNameArabic} ${gregorianClean} - فتح التقويم`}
         >
           <span className="font-black text-amber-200 leading-none">{dayNameArabic}</span>
           <span className="text-white/25 font-light">•</span>
@@ -68,6 +71,6 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default DateHeaderBlock;

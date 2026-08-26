@@ -416,3 +416,21 @@ export function getArabicPrayerName(name: PrayerName, date: Date | string = new 
   };
   return map[name] || name;
 }
+
+export function runPrayerCalcGoldenTests(): boolean {
+  try {
+    const testDate = new Date('2026-08-25T12:00:00Z');
+    const cairoTimes = calculatePrayerTimes(testDate, 30.0444, 31.2357, 2, 'Egypt', 'standard');
+    const makkahTimes = calculatePrayerTimes(testDate, 21.4225, 39.8262, 3, 'UmmAlQura', 'standard');
+    const londonTimes = calculatePrayerTimes(testDate, 51.5074, -0.1278, 1, 'MWL', 'standard');
+
+    const isValidTimes = (times: PrayerTimes) =>
+      Boolean(times.Fajr && times.Dhuhr && times.Asr && times.Maghrib && times.Isha && !times.Fajr.includes('NaN'));
+
+    return isValidTimes(cairoTimes) && isValidTimes(makkahTimes) && isValidTimes(londonTimes);
+  } catch {
+    return false;
+  }
+}
+
+

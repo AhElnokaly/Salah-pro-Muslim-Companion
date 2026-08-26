@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { RotateCcw, Download, Upload, FileUp } from 'lucide-react';
 import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, CustomDua, QuranSession, QuranKhatma } from '../../types';
-import { safeSetItem } from '../../utils/storage';
+import { safeSetItem, safeGetJSON } from '../../utils/storage';
 import { formatDateKey } from '../../utils/prayerDayBoundary';
 import { getDashboardSectionsConfig } from '../dashboard/dashboardSections';
 
@@ -85,6 +85,7 @@ export default function BackupSettingsTab({
       const fullData = {
         appName: 'Hemmaty',
         version: '2.5',
+        backupVersion: 1,
         exportedAt: new Date().toISOString(),
         settings,
         prayerLogs,
@@ -96,16 +97,16 @@ export default function BackupSettingsTab({
         khatmat,
         dhikrLogs: dhikrLogs || {},
         customDuas: customDuas || [],
-        customTasbeehs: JSON.parse(localStorage.getItem('mc_custom_tasbeehs') || '[]'),
-        favoriteDhikrCategories: JSON.parse(localStorage.getItem('mc_favorite_dhikr_categories') || '[]'),
-        favoriteDhikrs: JSON.parse(localStorage.getItem('mc_favorite_dhikrs') || '[]'),
-        fridayChecklist: JSON.parse(localStorage.getItem('mc_friday_checklist') || '[]'),
-        quranJuzProgress: JSON.parse(localStorage.getItem('quran_juz_progress') || '[]'),
-        quranRoutines: JSON.parse(localStorage.getItem('quran_routines') || '[]'),
-        qiyamJournalHistory: JSON.parse(localStorage.getItem('qiyam_journal_history') || '[]'),
-        customAlarms: JSON.parse(localStorage.getItem('salah_custom_alarms') || '[]'),
-        spiritualAlerts: JSON.parse(localStorage.getItem('salah_alerts') || 'null'),
-        soundModes: JSON.parse(localStorage.getItem('salah_sound_modes') || 'null'),
+        customTasbeehs: safeGetJSON('mc_custom_tasbeehs', []),
+        favoriteDhikrCategories: safeGetJSON('mc_favorite_dhikr_categories', []),
+        favoriteDhikrs: safeGetJSON('mc_favorite_dhikrs', []),
+        fridayChecklist: safeGetJSON('mc_friday_checklist', []),
+        quranJuzProgress: safeGetJSON('quran_juz_progress', []),
+        quranRoutines: safeGetJSON('quran_routines', []),
+        qiyamJournalHistory: safeGetJSON('qiyam_journal_history', []),
+        customAlarms: safeGetJSON('salah_custom_alarms', []),
+        spiritualAlerts: safeGetJSON('salah_alerts', null),
+        soundModes: safeGetJSON('salah_sound_modes', null),
         audioPreferences: {
           fajrMuezzin: localStorage.getItem('salah_fajr_muezzin') || fajrMuezzin,
           generalMuezzin: localStorage.getItem('salah_general_muezzin') || generalMuezzin,
@@ -273,7 +274,7 @@ export default function BackupSettingsTab({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex items-center gap-2 mb-2">
         <RotateCcw className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <h2 className="text-lg font-black text-slate-800 dark:text-white">النسخ الاحتياطي واسترداد البيانات</h2>

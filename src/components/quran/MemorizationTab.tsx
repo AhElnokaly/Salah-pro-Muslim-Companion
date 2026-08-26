@@ -232,7 +232,7 @@ export default function MemorizationTab({
   };
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-5 animate-fadeIn" dir="rtl">
       {/* 1. DAILY QUICK LOGGING CARD */}
       <div className="p-4 bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white rounded-3xl shadow-md border border-emerald-700/40">
         <div className="flex items-center justify-between mb-3">

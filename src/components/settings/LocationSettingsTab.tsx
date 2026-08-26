@@ -37,7 +37,7 @@ export default function LocationSettingsTab({
   const [showGpsGuide, setShowGpsGuide] = useState(false);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex items-center gap-2 mb-2">
         <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
         <h2 className="text-lg font-black text-slate-800 dark:text-white">إعدادات الموقع الجغرافي والـ GPS</h2>

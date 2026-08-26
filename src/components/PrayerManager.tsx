@@ -1040,6 +1040,7 @@ export default function PrayerManager({
                 const pTime = times[pName as PrayerName];
                 const isNext = pName === nextPrayerName;
                 const sMode = soundModes[pName] || 'adhan';
+                const arabicName = getArabicPrayerName(pName as PrayerName) || (pName === 'Sunrise' ? 'الشروق' : pName);
                 
                 const cycleSoundMode = () => {
                   const cycle: ('adhan' | 'beep' | 'vibrate' | 'silent')[] = ['adhan', 'beep', 'vibrate', 'silent'];
@@ -1047,7 +1048,6 @@ export default function PrayerManager({
                   const nextMode = cycle[nextIdx];
                   setSoundModes(prev => ({ ...prev, [pName]: nextMode }));
                   
-                  const arabicName = getArabicPrayerName(pName as PrayerName) || (pName === 'Sunrise' ? 'الشروق' : pName);
                   const modesText = {
                     adhan: 'الأذان الكامل',
                     beep: 'رنين التنبيه',
@@ -1116,6 +1116,7 @@ export default function PrayerManager({
                           onClick={cycleSoundMode}
                           className="py-1 px-1.5 sm:px-2 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg transition-all border border-slate-100 dark:border-slate-800/40 cursor-pointer flex items-center gap-1 justify-center min-w-[65px] sm:min-w-[75px]"
                           title="اضغط لتغيير وضع الصوت والتنبيه"
+                          aria-label={`تغيير وضع تنبيه ${getArabicPrayerName(pName as PrayerName) || 'الصلاة'}`}
                         >
                           {getSoundIcon()}
                           <span className="text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400">{getSoundText()}</span>
@@ -1131,6 +1132,7 @@ export default function PrayerManager({
                               : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
                           }`}
                           title={isPlaying && currentPlayingPrayer === pName ? "إيقاف سماع الصوت" : "تجربة سماع الصوت"}
+                          aria-label={isPlaying && currentPlayingPrayer === pName ? `إيقاف صوت أذان ${getArabicPrayerName(pName as PrayerName) || 'الصلاة'}` : `تجربة الاستماع لصوت أذان ${getArabicPrayerName(pName as PrayerName) || 'الصلاة'}`}
                         >
                           {isPlaying && currentPlayingPrayer === pName ? (
                             <Pause className="w-3 h-3" />
@@ -1147,6 +1149,7 @@ export default function PrayerManager({
                         type="button"
                         onClick={() => setShowDuhaModal(true)}
                         className="w-full py-1.5 px-3 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+                        aria-label="تسجيل صلاة الضحى"
                       >
                         <span>☀️ تسجيل صلاة الضحى (صلاة الأوابين)</span>
                       </button>
@@ -1157,6 +1160,7 @@ export default function PrayerManager({
                         type="button"
                         onClick={() => setShowNightPrayersModal(true)}
                         className="w-full py-1.5 px-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+                        aria-label="تسجيل صلوات الليل والقيام والشفع والوتر"
                       >
                         <span>🌃 تسجيل صلوات الليل (قيام، شفع، وتر{hijri.month === 9 ? '، تراويح' : ''})</span>
                       </button>
@@ -1178,6 +1182,7 @@ export default function PrayerManager({
                                }}
                                className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-200/40 dark:border-slate-700/40 w-5.5 h-5.5 bg-white dark:bg-slate-800 shadow-3xs"
                                title="تأخير دقيقة"
+                               aria-label={`تأخير دقيقة لوقت صلاة ${arabicName || 'الشروق'}`}
                              >
                                <Minus className="w-2.5 h-2.5" />
                              </button>
@@ -1194,6 +1199,7 @@ export default function PrayerManager({
                                }}
                                className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-200/40 dark:border-slate-700/40 w-5.5 h-5.5 bg-white dark:bg-slate-800 shadow-3xs"
                                title="تقديم دقيقة"
+                               aria-label={`تقديم دقيقة لوقت صلاة ${arabicName || 'الشروق'}`}
                              >
                                <Plus className="w-2.5 h-2.5" />
                              </button>
@@ -1443,6 +1449,7 @@ export default function PrayerManager({
                 disabled={selectedDateOffset <= -90}
                 className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-30 cursor-pointer transition-all flex items-center justify-center shrink-0"
                 title="اليوم السابق"
+                aria-label="الانتقال لليوم السابق"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -1473,6 +1480,7 @@ export default function PrayerManager({
                 disabled={selectedDateOffset >= 0}
                 className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 disabled:opacity-30 cursor-pointer transition-all flex items-center justify-center shrink-0"
                 title="اليوم التالي"
+                aria-label="الانتقال لليوم التالي"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>

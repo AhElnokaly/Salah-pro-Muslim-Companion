@@ -41,7 +41,7 @@ export default function QuranHistoryTab({
   };
 
   return (
-    <div className="space-y-4 animate-fadeIn">
+    <div className="space-y-4 animate-fadeIn" dir="rtl">
       {/* FILTER BAR */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
         <button

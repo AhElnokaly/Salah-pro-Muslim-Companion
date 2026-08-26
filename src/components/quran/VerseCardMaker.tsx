@@ -156,7 +156,7 @@ export default function VerseCardMaker({
   const style = getThemeClasses();
 
   return (
-    <div className={`space-y-6 ${isModal ? 'p-1 sm:p-2' : ''}`}>
+    <div className={`space-y-6 ${isModal ? 'p-1 sm:p-2' : ''}`} dir="rtl">
       {/* Header if modal or header bar */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2">

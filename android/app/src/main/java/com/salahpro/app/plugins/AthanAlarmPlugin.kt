@@ -39,6 +39,42 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_SAVED_ALARMS = "saved_alarms_json"
 
         @JvmStatic
+        fun createAthanIntent(
+            context: Context,
+            prayerName: String = "الصلاة",
+            isFajr: Boolean = false,
+            prayerKey: String = "",
+            timeMs: Long = 0L
+        ): Intent {
+            return Intent(context, AthanAlarmReceiver::class.java).apply {
+                action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
+                putExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME, prayerName)
+                putExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, isFajr)
+                putExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY, prayerKey)
+                putExtra(AthanAlarmReceiver.EXTRA_PRAYER_TIME, timeMs)
+            }
+        }
+
+        @JvmStatic
+        fun getAthanPendingIntent(
+            context: Context,
+            requestCode: Int,
+            intent: Intent = createAthanIntent(context)
+        ): PendingIntent {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                intent,
+                flags
+            )
+        }
+
+        @JvmStatic
         fun restoreOrScheduleAlarms(context: Context, timesArray: JSONArray): Int {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
                 ?: return 0
@@ -60,27 +96,16 @@ class AthanAlarmPlugin : Plugin() {
                         continue
                     }
 
-                    val intent = Intent(context, AthanAlarmReceiver::class.java).apply {
-                        action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
-                        putExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME, prayerName)
-                        putExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, isFajr)
-                        putExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY, prayerKey)
-                        putExtra(AthanAlarmReceiver.EXTRA_PRAYER_TIME, timeMs)
-                    }
+                    val intent = createAthanIntent(
+                        context = context,
+                        prayerName = prayerName,
+                        isFajr = isFajr,
+                        prayerKey = prayerKey,
+                        timeMs = timeMs
+                    )
 
                     val requestCode = 2000 + i
-                    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    } else {
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                    }
-
-                    val pendingIntent = PendingIntent.getBroadcast(
-                        context,
-                        requestCode,
-                        intent,
-                        flags
-                    )
+                    val pendingIntent = getAthanPendingIntent(context, requestCode, intent)
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setExactAndAllowWhileIdle(
@@ -116,14 +141,9 @@ class AthanAlarmPlugin : Plugin() {
             val maxCancel = Math.max(lastCount + 50, 200)
 
             for (i in 0 until maxCancel) {
-                val intent = Intent(context, AthanAlarmReceiver::class.java)
+                val intent = createAthanIntent(context)
                 val requestCode = 2000 + i
-                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
-                val pendingIntent = PendingIntent.getBroadcast(context, requestCode, intent, flags)
+                val pendingIntent = getAthanPendingIntent(context, requestCode, intent)
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
             }
@@ -322,82 +342,10 @@ class AthanAlarmPlugin : Plugin() {
         alarmManager: AlarmManager,
         timesArray: JSArray
     ): Int {
-        var count = 0
-        val now = System.currentTimeMillis()
-
-        for (i in 0 until timesArray.length()) {
-            try {
-                val item = timesArray.getJSONObject(i)
-                val timeMs = item.optLong("timeMs", 0L)
-                val prayerName = item.optString("prayerName", "الصلاة")
-                val isFajr = item.optBoolean("isFajr", false)
-                val prayerKey = item.optString("prayerKey", "prayer_$i")
-
-                if (timeMs <= now) {
-                    continue
-                }
-
-                val intent = Intent(context, AthanAlarmReceiver::class.java).apply {
-                    action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
-                    putExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME, prayerName)
-                    putExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, isFajr)
-                    putExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY, prayerKey)
-                    putExtra(AthanAlarmReceiver.EXTRA_PRAYER_TIME, timeMs)
-                }
-
-                val requestCode = 2000 + i
-                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
-
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    requestCode,
-                    intent,
-                    flags
-                )
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        timeMs,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        timeMs,
-                        pendingIntent
-                    )
-                }
-
-                count++
-                Log.d(TAG, "Scheduled athan for $prayerName at $timeMs")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error scheduling alarm at index $i", e)
-            }
-        }
-        return count
+        return restoreOrScheduleAlarms(context, timesArray)
     }
 
     private fun cancelAlarmsInternal(context: Context, alarmManager: AlarmManager) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val lastCount = prefs.getInt(KEY_SCHEDULED_COUNT, 150)
-        val maxCancel = Math.max(lastCount + 50, 200)
-
-        for (i in 0 until maxCancel) {
-            val intent = Intent(context, AthanAlarmReceiver::class.java)
-            val requestCode = 2000 + i
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-            val pendingIntent = PendingIntent.getBroadcast(context, requestCode, intent, flags)
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
-        }
+        cancelAlarmsInternalStatic(context, alarmManager)
     }
 }

@@ -640,6 +640,7 @@ export const SmartFabSystem: React.FC<SmartFabSystemProps> = ({
                   }}
                   className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700/80 transition-colors cursor-pointer shrink-0"
                   title="إغلاق التلميح"
+                  aria-label="إغلاق تلميح البحث الروحي"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -668,6 +669,7 @@ export const SmartFabSystem: React.FC<SmartFabSystemProps> = ({
           onMouseDown={handleTouchStart}
           onMouseUp={handleTouchEnd}
           onMouseLeave={handleTouchEnd}
+          aria-label={isFabOpen ? "إغلاق القائمة السريعة للعبادات" : "فتح القائمة السريعة للعبادات والإنجاز الفوري"}
           className={`-top-5 relative w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300 active:scale-90 cursor-pointer border-4 border-white dark:border-[#161d26] z-50 ${
             isFabOpen
               ? 'bg-gradient-to-br from-rose-500 to-rose-700 shadow-rose-600/40 dark:shadow-rose-950/60 rotate-90'

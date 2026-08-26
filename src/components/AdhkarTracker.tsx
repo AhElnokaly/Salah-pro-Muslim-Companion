@@ -1519,6 +1519,7 @@ export default function AdhkarTracker({
                   onClick={() => handleMarkAllCategoryItemsDone(selectedCategory)}
                   className="py-1.5 px-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-xl transition-colors cursor-pointer text-xs font-black flex items-center gap-1 border border-emerald-200 dark:border-emerald-900/40"
                   title="تعليم كافة أذكار هذا القسم كـ مقروءة"
+                  aria-label={`إكمال كافة أذكار ${selectedCategory.arabicName}`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span className="whitespace-nowrap">إكمال الكل</span>
@@ -1528,6 +1529,7 @@ export default function AdhkarTracker({
                   onClick={() => setIsFocusMode(true)}
                   className="py-1.5 px-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-xl transition-colors cursor-pointer text-xs font-black flex items-center gap-1 border border-indigo-100 dark:border-indigo-900/30"
                   title="وضع التركيز بملء الشاشة"
+                  aria-label="تفعيل وضع التركيز بملء الشاشة"
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
                   <span className="whitespace-nowrap">تركيز</span>
@@ -1537,6 +1539,7 @@ export default function AdhkarTracker({
                   onClick={() => handleResetCategory(selectedCategory)}
                   className="p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
                   title="إعادة ضبط أذكار هذه الفئة"
+                  aria-label={`إعادة ضبط عدادات أذكار ${selectedCategory.arabicName}`}
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
@@ -2118,6 +2121,7 @@ export default function AdhkarTracker({
                           setTasbeehTarget(tgt);
                           setTasbeehCount(0);
                         }}
+                        aria-label={`تحديد هدف التسبيح ${toArabicNumbers(tgt)} مرة`}
                         className={`px-3 py-1 rounded-full text-xs font-black transition-all cursor-pointer ${
                           tasbeehTarget === tgt 
                             ? `${activeColor.targetBtn} shadow-xs` 
@@ -2145,6 +2149,7 @@ export default function AdhkarTracker({
                               safeSetItem('salah_tasbih_color', cKey);
                             }}
                             title={cObj.name}
+                            aria-label={`لون السبحة: ${cObj.name}`}
                             className={`w-5 h-5 rounded-full ${cObj.dot} border-2 transition-all cursor-pointer ${
                               isSelected ? 'border-white ring-2 ring-slate-400 scale-110 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
                             }`}
@@ -2159,6 +2164,7 @@ export default function AdhkarTracker({
                 <button
                   type="button"
                   onClick={handleIncrementTasbeeh}
+                  aria-label={`تسبيح: ${toArabicNumbers(tasbeehCount)} من ${toArabicNumbers(tasbeehTarget)}`}
                   className={`w-52 h-52 rounded-full ${activeColor.bg} text-white flex flex-col items-center justify-center shadow-xl ${activeColor.shadow} dark:shadow-none border-4 border-white dark:border-slate-800 cursor-pointer active:scale-95 transition-all relative select-none`}
                 >
                   <span className="text-5xl font-black">{toArabicNumbers(tasbeehCount)}</span>
@@ -2178,6 +2184,7 @@ export default function AdhkarTracker({
                 <button
                   type="button"
                   onClick={() => setTasbeehCount(0)}
+                  aria-label="تصفير وإعادة تعيين عداد التسبيح"
                   className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer text-xs font-bold flex items-center gap-1"
                 >
                   <RotateCcw className="w-4 h-4" />

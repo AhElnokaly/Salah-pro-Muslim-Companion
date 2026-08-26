@@ -15,7 +15,7 @@ export default function DashboardSectionsTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex items-center gap-2 mb-2">
         <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <div>

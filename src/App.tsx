@@ -57,28 +57,59 @@ import AthanOverlay from './components/AthanOverlay';
 import SmartFabSystem from './components/SmartFabSystem';
 import { WeatherWidget } from './components/WeatherWidget';
 
+// Helper for safe lazy loading with retry mechanism
+function safeLazy<T extends React.ComponentType<any>>(
+  importFn: () => Promise<any>
+) {
+  return lazy(async () => {
+    try {
+      const module = await importFn();
+      if (module.default) {
+        return { default: module.default as T };
+      }
+      const firstExport = Object.values(module)[0];
+      if (firstExport) {
+        return { default: firstExport as T };
+      }
+      throw new Error('No valid component export found');
+    } catch (err) {
+      console.warn('[safeLazy] Dynamic import failed, retrying once...', err);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const retryModule = await importFn();
+      if (retryModule && retryModule.default) {
+        return { default: retryModule.default as T };
+      }
+      const firstExport = retryModule ? Object.values(retryModule)[0] : null;
+      if (firstExport) {
+        return { default: firstExport as T };
+      }
+      throw err;
+    }
+  });
+}
+
 // Code-split Lazy Secondary Tabs & Features
-const QuranTracker = lazy(() => import('./components/QuranTracker'));
-const AdhkarTracker = lazy(() => import('./components/AdhkarTracker'));
-const QiblaCompass = lazy(() => import('./components/QiblaCompass'));
-const MoreSettings = lazy(() => import('./components/MoreSettings'));
-const PrayerManager = lazy(() => import('./components/PrayerManager'));
-const FastingTracker = lazy(() => import('./components/FastingTracker'));
-const IslamicCalendar = lazy(() => import('./components/IslamicCalendar'));
-const WidgetSimulator = lazy(() => import('./components/WidgetSimulator'));
-const WorshipAlarms = lazy(() => import('./components/WorshipAlarms'));
-const KhushuQiyamTracker = lazy(() => import('./components/KhushuQiyamTracker'));
-const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard'));
-const MoonPhases = lazy(() => import('./components/MoonPhases'));
+const QuranTracker = safeLazy(() => import('./components/QuranTracker'));
+const AdhkarTracker = safeLazy(() => import('./components/AdhkarTracker'));
+const QiblaCompass = safeLazy(() => import('./components/QiblaCompass'));
+const MoreSettings = safeLazy(() => import('./components/MoreSettings'));
+const PrayerManager = safeLazy(() => import('./components/PrayerManager'));
+const FastingTracker = safeLazy(() => import('./components/FastingTracker'));
+const IslamicCalendar = safeLazy(() => import('./components/IslamicCalendar'));
+const WidgetSimulator = safeLazy(() => import('./components/WidgetSimulator'));
+const WorshipAlarms = safeLazy(() => import('./components/WorshipAlarms'));
+const KhushuQiyamTracker = safeLazy(() => import('./components/KhushuQiyamTracker'));
+const AnalyticsDashboard = safeLazy(() => import('./components/AnalyticsDashboard'));
+const MoonPhases = safeLazy(() => import('./components/MoonPhases'));
 
 // Lazy Modals
-const QuickSettingsModal = lazy(() => import('./components/QuickSettingsModal').then(m => ({ default: m.QuickSettingsModal })));
-const FeatureTourModal = lazy(() => import('./components/FeatureTourModal'));
-const PostOnboardingWelcomeModal = lazy(() => import('./components/PostOnboardingWelcomeModal'));
-const SpiritualPortalModal = lazy(() => import('./components/SpiritualPortalModal'));
-const SpiritualSearchModal = lazy(() => import('./components/SpiritualSearchModal'));
-const PwaInstallModal = lazy(() => import('./components/PwaInstallModal'));
-const CustomAlarmOverlay = lazy(() => import('./components/CustomAlarmOverlay'));
+const QuickSettingsModal = safeLazy(() => import('./components/QuickSettingsModal'));
+const FeatureTourModal = safeLazy(() => import('./components/FeatureTourModal'));
+const PostOnboardingWelcomeModal = safeLazy(() => import('./components/PostOnboardingWelcomeModal'));
+const SpiritualPortalModal = safeLazy(() => import('./components/SpiritualPortalModal'));
+const SpiritualSearchModal = safeLazy(() => import('./components/SpiritualSearchModal'));
+const PwaInstallModal = safeLazy(() => import('./components/PwaInstallModal'));
+const CustomAlarmOverlay = safeLazy(() => import('./components/CustomAlarmOverlay'));
 
 import { PrayerKey } from './utils/adhkarCalc';
 
@@ -909,6 +940,7 @@ export default function App() {
             onClick={() => setIsSidebarOpen(true)}
             className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="افتح القائمة الجانبية"
+            aria-label="فتح القائمة الجانبية والضبط"
           >
             <Menu className="w-4.5 h-4.5 md:w-5 md:h-5" />
           </button>
@@ -1021,6 +1053,7 @@ export default function App() {
                   }}
                   className="text-[9px] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-0.5 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer truncate"
                   title="اضغط لتحديث موقعك ومزامنة المواقيت تلقائياً عبر الـ GPS 📡"
+                  aria-label="مزامنة وتحديث الموقع الجغرافي والمواقيت"
                 >
                   <MapPin className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
                   <span className="truncate max-w-[80px] sm:max-w-[120px]">{settings.cityName || 'الإسكندرية'}</span>
@@ -1050,6 +1083,7 @@ export default function App() {
             }}
             className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="محاكاة تجربة الأذان الكاملة 🕌"
+            aria-label="تشغيل محاكاة تجربة الأذان الكاملة"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a1.5 1.5 0 0 0-1.5 1.5v2h3v-2A1.5 1.5 0 0 0 12 2z" />
@@ -1066,6 +1100,7 @@ export default function App() {
             onClick={() => setIsTourModalOpen(true)}
             className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-gradient-to-br from-indigo-500/15 to-purple-500/15 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 relative shadow-2xs group"
             title="جولة تفاعلية في مزايا التطبيق 💡"
+            aria-label="بدء جولة تفاعلية في مزايا التطبيق"
           >
             <Lightbulb className="w-4 h-4 text-indigo-600 dark:text-indigo-300 group-hover:scale-110 transition-transform" />
             <span className="absolute -top-1 -end-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
@@ -1080,6 +1115,7 @@ export default function App() {
             }}
             className="w-8.5 h-8.5 md:w-9.5 md:h-9.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/50 transition-all active:scale-95 cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
             title="تغيير المظهر"
+            aria-label="تغيير مظهر التطبيق (ليلي / نهاري / نظام)"
           >
             {settings.theme === 'light' ? (
               <Sun className="w-4 h-4 text-amber-500" />
@@ -1429,6 +1465,7 @@ export default function App() {
                   <button
                     onClick={() => setIsSidebarOpen(false)}
                     className="py-1 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all cursor-pointer text-xs font-bold"
+                    aria-label="إغلاق القائمة الجانبية"
                   >
                     إغلاق
                   </button>
@@ -1455,6 +1492,7 @@ export default function App() {
                           ? 'bg-indigo-600 text-white shadow-sm border-indigo-500 font-black'
                           : 'bg-white dark:bg-[#161d26] text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 border-slate-100 dark:border-slate-800/60'
                       }`}
+                      aria-label="اختيار الهوية الإيمانية: ذكر"
                     >
                       <span>ذكر 👨</span>
                     </button>
@@ -1468,6 +1506,7 @@ export default function App() {
                           ? 'bg-rose-600 text-white shadow-sm border-rose-500 font-black'
                           : 'bg-white dark:bg-[#161d26] text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 border-slate-100 dark:border-slate-800/60'
                       }`}
+                      aria-label="اختيار الهوية الإيمانية: أنثى"
                     >
                       <span>أنثى 👩</span>
                     </button>
@@ -1500,6 +1539,7 @@ export default function App() {
                     setIsSidebarOpen(false);
                   }}
                   className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent dark:from-indigo-500/20 dark:via-indigo-500/10 dark:to-transparent border border-indigo-200/80 dark:border-indigo-800/50 text-indigo-700 dark:text-indigo-300 font-extrabold hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-all cursor-pointer shadow-xs active:scale-98"
+                  aria-label="التحكم والإعدادات السريعة"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
@@ -1698,6 +1738,7 @@ export default function App() {
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'home' ? 'text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
+          aria-label="الذهاب للرئيسية"
         >
           <Home className="w-5 h-5" />
           <span className="text-[9.5px] leading-none font-bold">الرئيسية</span>
@@ -1712,6 +1753,7 @@ export default function App() {
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'adhkar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
+          aria-label="الذهاب لتبويب الأذكار"
         >
           <BookOpen className="w-5 h-5" />
           <span className="text-[9.5px] leading-none font-bold">الأذكار</span>
@@ -1740,6 +1782,7 @@ export default function App() {
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'qibla' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
+          aria-label="الذهاب لتبويب تحديد القبلة"
         >
           <Compass className="w-5 h-5" />
           <span className="text-[9.5px] leading-none font-bold">القبلة</span>
@@ -1754,6 +1797,7 @@ export default function App() {
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-2xl cursor-pointer transition-all active:scale-95 ${
             activeTab === 'calendar' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold bg-indigo-50 dark:bg-indigo-950/30' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
+          aria-label="الذهاب لتبويب التقويم الهجري"
         >
           <Calendar className="w-5 h-5" />
           <span className="text-[9.5px] leading-none font-bold">التقويم</span>
