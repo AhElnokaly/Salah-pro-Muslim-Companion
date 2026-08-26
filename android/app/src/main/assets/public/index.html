@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>هِمَّتِي Hemmaty</title>
     <meta name="theme-color" content="#0c1017" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,22 +15,75 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     
     <link rel="manifest" href="./manifest.json" />
-    <script type="module" crossorigin src="./assets/index-BoGlrHV8.js"></script>
+    <script type="module" crossorigin src="./assets/index-BtDsNIw0.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-libs-Bb8JjhAW.js">
-    <link rel="modulepreload" crossorigin href="./assets/vendor-motion-DHOHLWGS.js">
-    <link rel="modulepreload" crossorigin href="./assets/vendor-react-Ceylyz7p.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-core-I6uCUXxG.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-CAzbkKaE.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-BzVaGd3q.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-_cu3q_3t.css">
   </head>
   <body class="bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root">
       <div id="boot-loader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #faf7f0; color: #0f172a; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px;" dir="rtl">
         <div style="width: 44px; height: 44px; border: 3.5px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: bootSpin 1s linear infinite; margin-bottom: 16px;"></div>
         <div style="font-weight: 800; font-size: 19px; color: #047857; margin-bottom: 6px; letter-spacing: -0.01em;">هِمَّتِي — جاري التشغيل...</div>
-        <div style="font-size: 13px; color: #64748b;">لحظات وتفتح معك لوحة العبادات والأذكار</div>
+        <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">لحظات وتفتح معك لوحة العبادات والأذكار</div>
+
+        <div id="recovery-box" style="display: none; margin-top: 14px; max-width: 320px;">
+          <p style="font-size: 12px; color: #059669; margin-bottom: 10px; line-height: 1.5; font-weight: 600;">استغرق التحميل وقتاً أطول من المعتاد. يمكنك تحديث الذاكرة المخبئية بضغطة واحدة:</p>
+          <button onclick="clearAndReload()" style="background-color: #059669; color: #ffffff; font-weight: 700; font-size: 13px; padding: 10px 22px; border-radius: 9999px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">تحديد وتحديث التشغيل 🔄</button>
+        </div>
+
         <style>@keyframes bootSpin { to { transform: rotate(360deg); } }</style>
       </div>
     </div>
+    <script>
+      // Global resource error detection (catches 404/503 on JS/CSS modules)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          console.error('[BootGuard] Failed loading essential asset:', e.target.src || e.target.href);
+          var box = document.getElementById('recovery-box');
+          if (box) {
+            box.style.display = 'block';
+          }
+        }
+      }, true);
+
+      setTimeout(function() {
+        var box = document.getElementById('recovery-box');
+        if (box && document.getElementById('boot-loader')) {
+          box.style.display = 'block';
+        }
+      }, 2500);
+
+      function clearAndReload() {
+        var btn = document.querySelector('#recovery-box button');
+        if (btn) {
+          btn.innerText = 'جاري التحديث والتنظيف... ⏳';
+          btn.disabled = true;
+        }
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            var promises = [];
+            for (var i = 0; i < regs.length; i++) {
+              promises.push(regs[i].unregister());
+            }
+            return Promise.all(promises);
+          }).then(function() {
+            if ('caches' in window) {
+              return caches.keys().then(function(keys) {
+                var cachePromises = [];
+                for (var key of keys) cachePromises.push(caches.delete(key));
+                return Promise.all(cachePromises);
+              });
+            }
+          }).finally(function() {
+            window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
+          });
+        } else {
+          window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
+        }
+      }
+    </script>
   </body>
 </html>
 

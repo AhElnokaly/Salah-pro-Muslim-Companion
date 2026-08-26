@@ -112,6 +112,7 @@ const PwaInstallModal = safeLazy(() => import('./components/PwaInstallModal'));
 const CustomAlarmOverlay = safeLazy(() => import('./components/CustomAlarmOverlay'));
 const VersionInfoModal = safeLazy(() => import('./components/VersionInfoModal'));
 import { APP_VERSION } from './version';
+import { getUnreadVersionStatus } from './data/changelog';
 
 import { PrayerKey } from './utils/adhkarCalc';
 
@@ -360,6 +361,20 @@ export default function App() {
     isLoaded,
     storageWriteError
   } = useSpiritualState();
+
+  // Auto-show "What's New" modal when a new frontend update is detected
+  useEffect(() => {
+    if (isLoaded) {
+      const { isNew } = getUnreadVersionStatus();
+      if (isNew) {
+        const timer = setTimeout(() => {
+          setIsVersionModalOpen(true);
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoaded]);
+
 
   const {
     isInstalled,
@@ -1719,11 +1734,16 @@ export default function App() {
                   onClick={() => {
                     setIsVersionModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full text-[10px] font-black border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer active:scale-95"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full text-[10px] font-black border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer active:scale-95 relative"
                   title="عرض تفاصيل الإصدار وسجل التحديثات"
                 >
                   <Sparkles className="w-3 h-3 text-amber-500" />
                   <span>هِمَّتِي v{APP_VERSION.version} (بناء {APP_VERSION.buildNumber})</span>
+                  {getUnreadVersionStatus().isNew && (
+                    <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce shadow-xs">
+                      جديد ✨
+                    </span>
+                  )}
                 </button>
 
                 <span className="text-[9px] text-slate-400/80 dark:text-slate-500/80 block">

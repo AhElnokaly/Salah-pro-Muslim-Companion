@@ -1,3 +1,5 @@
+import { CURRENT_RELEASE } from './data/changelog';
+
 export interface AppVersionInfo {
   version: string;
   buildNumber: number;
@@ -7,14 +9,9 @@ export interface AppVersionInfo {
 }
 
 export const APP_VERSION: AppVersionInfo = {
-  version: '1.0.4',
-  buildNumber: 104,
-  releaseDate: 'أغسطس 2026',
-  releaseName: 'إصدار الاستقرار وتوافق الـ RTL الكامل',
-  changelog: [
-    'ضبط ومحاذاة اتجاه النصوص اليمينية بالكامل في القائمة الجانبية',
-    'إعادة تصميم وتنسيق بطاقات جولة استكشاف المزايا بصرياً',
-    'إضافة شارة رقم الإصدار وتفاصيل البناء في القائمة الجانبية',
-    'دعم التحديث التلقائي وبناء الـ APK المتزامن مع GitHub Actions'
-  ]
+  version: CURRENT_RELEASE.version,
+  buildNumber: CURRENT_RELEASE.buildNumber,
+  releaseDate: CURRENT_RELEASE.date,
+  releaseName: CURRENT_RELEASE.title,
+  changelog: CURRENT_RELEASE.highlights.map(h => h.text)
 };

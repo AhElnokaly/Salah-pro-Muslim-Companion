@@ -1,23 +1,23 @@
-const CACHE_NAME = 'hemmaty-app-cache-v1';
+const CACHE_NAME = 'hemmaty-app-cache-v2';
 const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './favicon.ico',
-  './apple-touch-icon.png',
-  './icon-192.png',
-  './icon-512.png',
-  './hemmaty_logo.jpg',
-  './muslim_companion_icon.jpg',
-  './audio/takbeer.mp3',
-  './audio/alsalatu-khayr.mp3',
-  './audio/hayya.mp3',
-  './audio/adhan.mp3',
-  './audio/salawat.mp3',
-  './audio/istighfar.mp3',
-  './audio/duaa.mp3',
-  './audio/reminder.mp3',
-  './audio/beep.mp3'
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/hemmaty_logo.jpg',
+  '/muslim_companion_icon.jpg',
+  '/audio/takbeer.mp3',
+  '/audio/alsalatu-khayr.mp3',
+  '/audio/hayya.mp3',
+  '/audio/adhan.mp3',
+  '/audio/salawat.mp3',
+  '/audio/istighfar.mp3',
+  '/audio/duaa.mp3',
+  '/audio/reminder.mp3',
+  '/audio/beep.mp3'
 ];
 
 // Install Event
@@ -83,7 +83,7 @@ self.addEventListener('fetch', (event) => {
             return cachedResponse;
           }
           if (isNavigation) {
-            return caches.match('./index.html') || caches.match('/');
+            return (await caches.match('/index.html')) || (await caches.match('/')) || (await caches.match('./index.html'));
           }
           return new Response('Offline', { status: 503, statusText: 'Offline' });
         })
