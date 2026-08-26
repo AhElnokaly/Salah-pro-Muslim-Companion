@@ -110,6 +110,8 @@ const SpiritualPortalModal = safeLazy(() => import('./components/SpiritualPortal
 const SpiritualSearchModal = safeLazy(() => import('./components/SpiritualSearchModal'));
 const PwaInstallModal = safeLazy(() => import('./components/PwaInstallModal'));
 const CustomAlarmOverlay = safeLazy(() => import('./components/CustomAlarmOverlay'));
+const VersionInfoModal = safeLazy(() => import('./components/VersionInfoModal'));
+import { APP_VERSION } from './version';
 
 import { PrayerKey } from './utils/adhkarCalc';
 
@@ -300,6 +302,7 @@ export default function App() {
   const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<SettingsSubTabId>('prayer');
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => localStorage.getItem('salah_show_post_onboarding_welcome') === 'true');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
@@ -483,6 +486,11 @@ export default function App() {
         id: 'isTourModalOpen',
         isOpen: isTourModalOpen,
         close: () => setIsTourModalOpen(false)
+      },
+      {
+        id: 'isVersionModalOpen',
+        isOpen: isVersionModalOpen,
+        close: () => setIsVersionModalOpen(false)
       },
       {
         id: 'showSpiritualModal',
@@ -1542,10 +1550,10 @@ export default function App() {
                   aria-label="التحكم والإعدادات السريعة"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
                       <Sliders className="w-4 h-4" />
                     </div>
-                    <div className="text-end">
+                    <div className="text-right">
                       <div className="text-xs font-black">التحكم والإعدادات السريعة ⚙️</div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">المظهر، خلفية البطاقات، المذهب والساعة</div>
                     </div>
@@ -1553,8 +1561,8 @@ export default function App() {
                 </button>
 
                 {/* Main Worship Navigation */}
-                <div className="space-y-2 text-end">
-                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">الأقسام والعبادات</span>
+                <div className="space-y-2 text-right">
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-right">الأقسام والعبادات</span>
                   <div className="grid grid-cols-1 gap-1">
                     {(
                       [
@@ -1581,13 +1589,13 @@ export default function App() {
                             setActiveTab(item.id);
                             setIsSidebarOpen(false);
                           }}
-                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-end transition-all cursor-pointer w-full ${
+                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
                             isSelected
                               ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-black'
                               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                           }`}
                         >
-                          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450" />
+                          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
                           <span>{item.label}</span>
                         </button>
                       );
@@ -1596,8 +1604,8 @@ export default function App() {
                 </div>
 
                 {/* Dedicated Settings Pages Section */}
-                <div className="space-y-2 text-end">
-                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">إعدادات وضبط التطبيق</span>
+                <div className="space-y-2 text-right">
+                  <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-right">إعدادات وضبط التطبيق</span>
                   <div className="grid grid-cols-1 gap-1">
                     {(
                       [
@@ -1622,13 +1630,13 @@ export default function App() {
                             setActiveSettingsSubTab(item.id);
                             setIsSidebarOpen(false);
                           }}
-                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-end transition-all cursor-pointer w-full ${
+                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
                             isSelected
                               ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-black border border-amber-500/20'
                               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                           }`}
                         >
-                          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450" />
+                          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
                           <span>{item.label}</span>
                         </button>
                       );
@@ -1637,12 +1645,12 @@ export default function App() {
                 </div>
 
                 {/* Feature Discovery Tour Launch Card inside Sidebar */}
-                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-end">
+                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-right">
                   <div className="flex items-center gap-2">
-                    <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+                    <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse shrink-0" />
                     <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">دليل وجولة مزايا التطبيق 💡</span>
                   </div>
-                  <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                  <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
                     تعرف على كافة الخدمات المميزة خطوة بخطوة عبر جولة تفاعلية سريعة وشاملة.
                   </p>
                   <button
@@ -1658,12 +1666,12 @@ export default function App() {
                 </div>
 
                 {/* Share App Action inside Sidebar */}
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-end">
+                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-right">
                   <div className="flex items-center gap-2">
-                    <Share2 className="w-4 h-4 text-indigo-500 animate-pulse" />
+                    <Share2 className="w-4 h-4 text-indigo-500 animate-pulse shrink-0" />
                     <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">نشر الخير ومشاركة التطبيق</span>
                   </div>
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
                     الدال على الخير كفاعله. شارك تطبيق هِمَّتِي مع أصدقائك وعائلتك ليكتب الله لك الأجر! 🤍
                   </p>
                   <button
@@ -1680,12 +1688,12 @@ export default function App() {
 
                 {/* PWA Install Promo inside Sidebar */}
                 {!isInstalled && (
-                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-end">
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-right">
                     <div className="flex items-center gap-2">
-                      <Download className="w-4 h-4 text-amber-500 animate-bounce" />
+                      <Download className="w-4 h-4 text-amber-500 animate-bounce shrink-0" />
                       <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل تطبيق هِمَّتِي كـ App</span>
                     </div>
-                    <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold">
+                    <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
                       ثبّت التطبيق على جهازك للوصول السريع، وتلقي تنبيهات الأذان حتى بدون إنترنت!
                     </p>
                     <button
@@ -1703,10 +1711,24 @@ export default function App() {
 
               </div>
 
-              {/* Sidebar Footer */}
-              <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4 text-center">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">هِمَّتِي 🤍</span>
-                <span className="text-[9px] text-slate-400/80 dark:text-slate-500/80 block mt-0.5">يعمل بالكامل دون خوادم لخصوصية تامة</span>
+              {/* Sidebar Footer with App Version Badge */}
+              <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4 text-center space-y-2">
+                {/* App Version Tag Trigger */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVersionModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full text-[10px] font-black border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer active:scale-95"
+                  title="عرض تفاصيل الإصدار وسجل التحديثات"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>هِمَّتِي v{APP_VERSION.version} (بناء {APP_VERSION.buildNumber})</span>
+                </button>
+
+                <span className="text-[9px] text-slate-400/80 dark:text-slate-500/80 block">
+                  يعمل بالكامل دون خوادم لخصوصية تامة 🤍
+                </span>
               </div>
             </motion.div>
           </>
@@ -1977,6 +1999,12 @@ export default function App() {
           onClose={() => setIsSpiritualSearchOpen(false)}
           setActiveTab={setActiveTab}
           setToastMessage={setToastMessage}
+        />
+
+        {/* Version Information & Changelog Modal */}
+        <VersionInfoModal
+          isOpen={isVersionModalOpen}
+          onClose={() => setIsVersionModalOpen(false)}
         />
       </Suspense>
 

@@ -317,7 +317,7 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.92, y: 15 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="bg-white dark:bg-[#131922] w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-end"
+          className="bg-white dark:bg-[#131922] w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-right"
         >
           {/* Header Banner */}
           <div className={`p-4 sm:p-5 bg-gradient-to-r ${currentStep.color.gradient} text-white relative flex items-center justify-between shrink-0`}>
@@ -325,7 +325,7 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
               <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 shadow-inner">
                 <Icon className="w-6 h-6 text-white" />
               </div>
-              <div>
+              <div className="text-right">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] bg-white/20 font-extrabold px-2 py-0.5 rounded-full border border-white/20">
                     خطوة {currentStepIndex + 1} من {TOUR_STEPS.length}
@@ -342,7 +342,7 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
 
             <button
               onClick={onClose}
-              className="p-2 bg-black/20 hover:bg-black/40 text-white/90 hover:text-white rounded-full transition-all cursor-pointer"
+              className="p-2 bg-black/20 hover:bg-black/40 text-white/90 hover:text-white rounded-full transition-all cursor-pointer shrink-0"
               title="إغلاق الجولة"
             >
               <X className="w-5 h-5" />
@@ -350,32 +350,37 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
           </div>
 
           {/* Modal Body */}
-          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
-            {/* Subtitle / Category */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                الفئة: <strong className="text-slate-700 dark:text-slate-300">{currentStep.category}</strong>
-              </span>
-              <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar text-right">
+            {/* Category & Subtitle */}
+            <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-slate-800 pb-3 text-right">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                  الفئة:
+                </span>
+                <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                  {currentStep.category}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
                 {currentStep.subtitle}
-              </span>
+              </p>
             </div>
 
             {/* Main Description */}
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium text-right">
               {currentStep.description}
             </p>
 
             {/* Bullet Highlights */}
-            <div className={`p-4 rounded-2xl ${currentStep.color.bg} border ${currentStep.color.border} space-y-2.5`}>
-              <h4 className={`text-xs font-black ${currentStep.color.text} flex items-center gap-1.5`}>
+            <div className={`p-4 rounded-2xl ${currentStep.color.bg} border ${currentStep.color.border} space-y-2.5 text-right`}>
+              <h4 className={`text-xs font-black ${currentStep.color.text} flex items-center gap-2 justify-start`}>
                 <Zap className="w-4 h-4 shrink-0" />
                 <span>أبرز المميزات والوظائف المتاحة:</span>
               </h4>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {currentStep.highlights.map((item, idx) => (
-                  <li key={idx} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300 flex items-start gap-2 leading-tight">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${currentStep.color.text} shrink-0 mt-0.5`} />
+                  <li key={idx} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300 flex items-start gap-2.5 leading-relaxed text-right">
+                    <CheckCircle2 className={`w-4 h-4 ${currentStep.color.text} shrink-0 mt-0.5`} />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -383,10 +388,10 @@ export default function FeatureTourModal({ isOpen, onClose, onSelectTab }: Featu
             </div>
 
             {/* Pro Tip Box */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-2 font-medium">
+            <div className="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-2.5 font-medium text-right">
               <span className="text-amber-500 text-base shrink-0">💡</span>
-              <p>
-                <strong>نصيحة استكشاف:</strong> {currentStep.tips}
+              <p className="leading-relaxed">
+                <strong className="text-slate-800 dark:text-slate-200">نصيحة استكشاف:</strong> {currentStep.tips}
               </p>
             </div>
           </div>

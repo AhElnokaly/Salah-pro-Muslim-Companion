@@ -129,194 +129,66 @@ export const ThemeCardThumbnail = memo(function ThemeCardThumbnail({
     case 'classic':
       // Islamic Arch / Mihrab Arabesque Artwork
       return (
-        <div className="w-full h-full bg-gradient-to-b from-[#1b4332] via-[#081c15] to-[#1b4332] relative overflow-hidden select-none flex items-center justify-center">
-          <svg viewBox="0 0 200 150" className="w-full h-full object-cover">
-            <defs>
-              <linearGradient id="mihrab-gold" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#fef08a" />
-                <stop offset="50%" stopColor="#d97706" />
-                <stop offset="100%" stopColor="#78350f" />
-              </linearGradient>
-              <pattern id="arabesque-tile" width="20" height="20" patternUnits="userSpaceOnUse">
-                <path d="M 10,0 L 20,10 L 10,20 L 0,10 Z" fill="none" stroke="#2d6a4f" strokeWidth="0.8" opacity="0.6" />
-                <circle cx="10" cy="10" r="3" fill="none" stroke="#d97706" strokeWidth="0.5" opacity="0.7" />
-              </pattern>
-            </defs>
-            {/* Tile Background */}
-            <rect width="200" height="150" fill="url(#arabesque-tile)" />
-            {/* Outer Frame */}
-            <rect x="15" y="10" width="170" height="130" rx="6" fill="none" stroke="url(#mihrab-gold)" strokeWidth="2.5" />
-            {/* Mihrab Arch */}
-            <path
-              d="M 40,140 L 40,65 Q 40,25 100,18 Q 160,25 160,65 L 160,140 Z"
-              fill="#081c15"
-              stroke="url(#mihrab-gold)"
-              strokeWidth="2"
-            />
-            {/* Inner Multi-cusp Arch */}
-            <path
-              d="M 55,140 L 55,75 Q 75,45 100,38 Q 125,45 145,75 L 145,140 Z"
-              fill="#1b4332"
-              fillOpacity="0.8"
-              stroke="#fbbf24"
-              strokeWidth="1.2"
-              strokeDasharray="4 2"
-            />
-            {/* Hanging Lantern */}
-            <line x1="100" y1="38" x2="100" y2="70" stroke="#f59e0b" strokeWidth="1" />
-            <polygon points="100,70 108,82 100,92 92,82" fill="#fef08a" stroke="#d97706" strokeWidth="1" />
-            <circle cx="100" cy="82" r="3" fill="#ffffff" />
-          </svg>
+        <div className="w-full h-full relative overflow-hidden select-none bg-slate-900">
+          <img
+            src="/images/classic_theme.jpg"
+            alt="الكلاسيكي الفاخر"
+            className="w-full h-full object-cover shrink-0"
+            referrerPolicy="no-referrer"
+          />
         </div>
       );
 
     case 'madinah':
       // The Prophet's Mosque Green Dome & White Minarets
       return (
-        <div className="w-full h-full bg-gradient-to-b from-[#e0f2fe] via-[#bae6fd] to-[#f8fafc] relative overflow-hidden select-none flex items-center justify-center">
-          <svg viewBox="0 0 200 150" className="w-full h-full object-cover">
-            {/* Sky Tint */}
-            <rect width="200" height="150" fill="#e0f2fe" />
-            {/* Palm Silhouettes */}
-            <path d="M 15,130 Q 30,90 20,80 Q 35,95 40,85 Q 40,110 35,130 Z" fill="#047857" opacity="0.6" />
-            <path d="M 185,130 Q 170,90 180,80 Q 165,95 160,85 Q 160,110 165,130 Z" fill="#047857" opacity="0.6" />
-            {/* Mosque White Courtyard Base */}
-            <rect x="0" y="105" width="200" height="45" fill="#f1f5f9" />
-            <line x1="0" y1="105" x2="200" y2="105" stroke="#cbd5e1" strokeWidth="1.5" />
-            {/* Left Nabawi Minaret */}
-            <rect x="35" y="30" width="10" height="75" fill="#ffffff" stroke="#94a3b8" strokeWidth="0.8" />
-            <polygon points="40,10 35,30 45,30" fill="#047857" stroke="#065f46" strokeWidth="0.8" />
-            <circle cx="40" cy="8" r="1.5" fill="#fbbf24" />
-            {/* Right Nabawi Minaret */}
-            <rect x="155" y="30" width="10" height="75" fill="#ffffff" stroke="#94a3b8" strokeWidth="0.8" />
-            <polygon points="160,10 155,30 165,30" fill="#047857" stroke="#065f46" strokeWidth="0.8" />
-            <circle cx="160" cy="8" r="1.5" fill="#fbbf24" />
-            {/* White Small Dome */}
-            <path d="M 62,105 Q 62,80 77,80 Q 92,80 92,105 Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
-            {/* Iconic Green Dome */}
-            <g transform="translate(100, 50)">
-              <path
-                d="M -30,55 L -30,28 Q -30,0 0,-12 Q 30,0 30,28 L 30,55 Z"
-                fill="#047857"
-                stroke="#065f46"
-                strokeWidth="1.5"
-              />
-              {/* Crescent Spire */}
-              <line x1="0" y1="-12" x2="0" y2="-24" stroke="#fbbf24" strokeWidth="1.8" />
-              <circle cx="0" cy="-24" r="3" fill="#fbbf24" />
-            </g>
-            {/* Mosque Arched Windows */}
-            {[50, 75, 100, 125, 150].map((cx, i) => (
-              <path key={i} d={`M ${cx - 5},125 L ${cx - 5},115 Q ${cx},110 ${cx + 5},115 L ${cx + 5},125 Z`} fill="#0f172a" opacity="0.75" />
-            ))}
-          </svg>
+        <div className="w-full h-full relative overflow-hidden select-none bg-sky-900">
+          <img
+            src="/images/madinah_mosque.jpg"
+            alt="المسجد النبوي الشريف"
+            className="w-full h-full object-cover shrink-0"
+            referrerPolicy="no-referrer"
+          />
         </div>
       );
 
     case 'kaaba':
       // The Holy Kaaba with Illuminated Night Glow
       return (
-        <div className="w-full h-full bg-gradient-to-b from-[#020617] via-[#090d16] to-[#020617] relative overflow-hidden select-none flex items-center justify-center">
-          <svg viewBox="0 0 200 150" className="w-full h-full object-cover">
-            <defs>
-              <radialGradient id="kaaba-halo" cx="50%" cy="55%" r="45%">
-                <stop offset="0%" stopColor="#fef08a" stopOpacity="0.4" />
-                <stop offset="60%" stopColor="#d97706" stopOpacity="0.15" />
-                <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            {/* Glow Behind Kaaba */}
-            <circle cx="100" cy="80" r="70" fill="url(#kaaba-halo)" />
-            {/* Haram Illuminated Arches & Minarets in Background */}
-            <g opacity="0.6">
-              <rect x="55" y="15" width="8" height="85" fill="#f8fafc" stroke="#fbbf24" strokeWidth="0.8" />
-              <polygon points="59,3 55,15 63,15" fill="#fbbf24" />
-              <rect x="137" y="15" width="8" height="85" fill="#f8fafc" stroke="#fbbf24" strokeWidth="0.8" />
-              <polygon points="141,3 137,15 145,15" fill="#fbbf24" />
-              {/* Colonnade */}
-              <rect x="20" y="65" width="160" height="40" fill="#1e293b" opacity="0.8" />
-              {[30, 50, 70, 90, 110, 130, 150, 170].map((x, i) => (
-                <path key={i} d={`M ${x},85 Q ${x + 6},75 ${x + 12},85 L ${x + 12},105 L ${x},105 Z`} fill="#fef08a" opacity="0.85" />
-              ))}
-            </g>
-            {/* White Marble Mataf Floor */}
-            <rect x="0" y="100" width="200" height="50" fill="#f8fafc" />
-            <ellipse cx="100" cy="115" rx="80" ry="25" fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 3" />
-            {/* Holy Kaaba Structure */}
-            <g transform="translate(70, 55)">
-              <rect x="0" y="0" width="60" height="58" rx="2" fill="#09090b" stroke="#27272a" strokeWidth="1.5" />
-              {/* Golden Kiswa Belt */}
-              <rect x="0" y="10" width="60" height="6" fill="#fbbf24" stroke="#d97706" strokeWidth="0.5" />
-              <line x1="0" y1="12" x2="60" y2="12" stroke="#ffffff" strokeWidth="0.5" strokeDasharray="2 1" />
-              {/* Golden Door (Bab al-Kaaba) */}
-              <rect x="38" y="20" width="15" height="28" rx="1" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" />
-              <path d="M 40,24 L 51,24 M 40,30 L 51,30 M 40,36 L 51,36" stroke="#92400e" strokeWidth="0.6" />
-              {/* Hijr Ismail Arc */}
-              <path d="M -8,50 Q -16,40 -16,28" fill="none" stroke="#d97706" strokeWidth="1.2" />
-            </g>
-          </svg>
+        <div className="w-full h-full relative overflow-hidden select-none bg-slate-950">
+          <img
+            src="/images/makkah_kaaba.jpg"
+            alt="المسجد الحرام والكعبة"
+            className="w-full h-full object-cover shrink-0"
+            referrerPolicy="no-referrer"
+          />
         </div>
       );
 
     case 'aqsa':
       // The Golden Dome of the Rock (Qubbat As-Sakhrah)
       return (
-        <div className="w-full h-full bg-gradient-to-b from-[#0e7490] via-[#155e75] to-[#164e63] relative overflow-hidden select-none flex items-center justify-center">
-          <svg viewBox="0 0 200 150" className="w-full h-full object-cover">
-            {/* Sky */}
-            <rect width="200" height="150" fill="url(#aqsa-sky)" />
-            <defs>
-              <linearGradient id="aqsa-sky" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#0891b2" />
-                <stop offset="100%" stopColor="#155e75" />
-              </linearGradient>
-              <linearGradient id="gold-dome" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#fef08a" />
-                <stop offset="40%" stopColor="#fbbf24" />
-                <stop offset="100%" stopColor="#b45309" />
-              </linearGradient>
-            </defs>
-            {/* Courtyard Floor */}
-            <rect x="0" y="115" width="200" height="35" fill="#f8fafc" />
-            {/* Octagonal Base Building */}
-            <g transform="translate(50, 65)">
-              {/* Lower Marble Section */}
-              <rect x="10" y="32" width="80" height="25" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-              {/* Upper Turquoise Ceramic Tile Band */}
-              <rect x="10" y="16" width="80" height="16" fill="#0284c7" stroke="#0369a1" strokeWidth="0.8" />
-              {[18, 30, 42, 54, 66, 78].map((x, i) => (
-                <rect key={i} x={x} y="19" width="6" height="10" rx="1" fill="#0f172a" />
-              ))}
-              {/* Iconic Golden Dome */}
-              <path
-                d="M 15,16 Q 10,-28 50,-38 Q 90,-28 85,16 Z"
-                fill="url(#gold-dome)"
-                stroke="#d97706"
-                strokeWidth="1.5"
-              />
-              {/* Golden Crescent Finial */}
-              <line x1="50" y1="-38" x2="50" y2="-48" stroke="#fef08a" strokeWidth="1.8" />
-              <circle cx="50" cy="-48" r="2.5" fill="#fbbf24" />
-            </g>
-            {/* Famous Mawazin (Scale Arches) of Al-Aqsa */}
-            <g transform="translate(10, 80)" opacity="0.8">
-              <path d="M 0,35 L 0,10 Q 15,0 30,10 L 30,35" fill="none" stroke="#f8fafc" strokeWidth="1.8" />
-              <path d="M 150,35 L 150,10 Q 165,0 180,10 L 180,35" fill="none" stroke="#f8fafc" strokeWidth="1.8" />
-            </g>
-          </svg>
+        <div className="w-full h-full relative overflow-hidden select-none bg-cyan-900">
+          <img
+            src="/images/aqsa_mosque.jpg"
+            alt="المسجد الأقصى المبارك"
+            className="w-full h-full object-cover shrink-0"
+            referrerPolicy="no-referrer"
+          />
         </div>
       );
 
     case 'friday':
       // The Friday Minbar & Luminous Mosque Interior
       return (
-        <div className="w-full h-full relative overflow-hidden select-none">
+        <div className="w-full h-full relative overflow-hidden select-none bg-emerald-950">
           <img 
-            src={fridayImg} 
-            alt="Friday Mosque Atmosphere" 
-            className="w-full h-full object-cover object-center transform scale-105" 
+            src="/images/friday_mosque.jpg" 
+            alt="الجمعة المباركة" 
+            className="w-full h-full object-cover shrink-0" 
+            referrerPolicy="no-referrer"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/70 via-transparent to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/60 via-transparent to-black/20" />
           <div className="absolute top-2 start-2 bg-emerald-500/80 backdrop-blur-xs text-white text-[9px] font-black px-1.5 py-0.5 rounded-md">
             سورة الكهف 📖
           </div>
@@ -324,20 +196,15 @@ export const ThemeCardThumbnail = memo(function ThemeCardThumbnail({
       );
 
     case 'gold':
-      // Royal Islamic Golden Ornament Medallions
+      // Royal Islamic Golden Ornament
       return (
-        <div className="w-full h-full relative overflow-hidden select-none bg-gradient-to-br from-amber-600 via-amber-400 to-amber-700">
+        <div className="w-full h-full relative overflow-hidden select-none bg-amber-950">
           <img 
-            src={darkMosqueImg} 
-            alt="Royal Gold Mosque" 
-            className="w-full h-full object-cover object-center mix-blend-multiply opacity-80" 
+            src="/images/gold_theme.jpg" 
+            alt="الذهبي الملكي" 
+            className="w-full h-full object-cover shrink-0" 
+            referrerPolicy="no-referrer"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-amber-950/80 via-transparent to-amber-900/40" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full border-2 border-amber-300/80 flex items-center justify-center bg-amber-500/20 backdrop-blur-xs shadow-lg">
-              <span className="text-2xl drop-shadow-md">👑</span>
-            </div>
-          </div>
         </div>
       );
 
@@ -399,14 +266,14 @@ export const SpiritualThemePicker: React.FC<SpiritualThemePickerProps> = ({
             </div>
 
             {/* Bottom Label and Subtitle Area */}
-            <div className="p-2.5 sm:p-3 flex flex-col items-center justify-center gap-0.5 min-h-[58px]">
-              <div className="flex items-center justify-center gap-1.5 w-full">
-                <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-white truncate">
+            <div className="p-2 sm:p-2.5 flex flex-col items-center justify-center gap-1 min-h-[66px] w-full text-center">
+              <div className="flex items-center justify-center gap-1 w-full flex-wrap">
+                <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-white leading-tight break-words text-center">
                   {theme.name}
                 </span>
-                {theme.icon && <span className="text-xs shrink-0">{theme.icon}</span>}
+                {theme.icon && <span className="text-xs shrink-0 select-none">{theme.icon}</span>}
               </div>
-              <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-400 line-clamp-1">
+              <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-tight break-words text-center">
                 {theme.desc}
               </span>
             </div>

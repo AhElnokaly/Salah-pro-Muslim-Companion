@@ -25,6 +25,28 @@ export function useAndroidBackButton({
   const isBackNavigationRef = useRef<boolean>(false);
   const lastBackPressTimeRef = useRef<number>(0);
 
+  // Keep latest references so Capacitor backButton listener does not need to rebind on every render
+  const overlaysRef = useRef<OverlayConfig[]>(overlays);
+  const activeTabRef = useRef<TabId>(activeTab);
+  const setActiveTabRef = useRef<(tab: TabId) => void>(setActiveTab);
+  const setToastMessageRef = useRef<((msg: string) => void) | undefined>(setToastMessage);
+
+  useEffect(() => {
+    overlaysRef.current = overlays;
+  }, [overlays]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    setActiveTabRef.current = setActiveTab;
+  }, [setActiveTab]);
+
+  useEffect(() => {
+    setToastMessageRef.current = setToastMessage;
+  }, [setToastMessage]);
+
   // Track tab navigation history
   useEffect(() => {
     if (isBackNavigationRef.current) {
@@ -59,7 +81,8 @@ export function useAndroidBackButton({
           }
 
           // 2. Check top-level overlays/modals in priority order
-          for (const overlay of overlays) {
+          const currentOverlays = overlaysRef.current;
+          for (const overlay of currentOverlays) {
             if (overlay.isOpen) {
               overlay.close();
               return;
@@ -68,15 +91,17 @@ export function useAndroidBackButton({
 
           // 3. Tab navigation history stack
           const history = tabHistoryRef.current;
+          const currentTab = activeTabRef.current;
+
           if (history.length > 1) {
             history.pop(); // Remove current tab
             const previousTab = history[history.length - 1] || 'home';
             isBackNavigationRef.current = true;
-            setActiveTab(previousTab);
+            setActiveTabRef.current(previousTab);
             return;
-          } else if (activeTab !== 'home') {
+          } else if (currentTab !== 'home') {
             isBackNavigationRef.current = true;
-            setActiveTab('home');
+            setActiveTabRef.current('home');
             return;
           }
 
@@ -86,10 +111,9 @@ export function useAndroidBackButton({
             CapacitorApp.exitApp();
           } else {
             lastBackPressTimeRef.current = now;
-            if (setToastMessage) {
-              setToastMessage('اضغط رجوع مرة أخرى للخروج');
-            } else {
-              alert('اضغط رجوع مرة أخرى للخروج');
+            const toast = setToastMessageRef.current;
+            if (toast) {
+              toast('اضغط رجوع مرة أخرى للخروج من التطبيق');
             }
           }
         });
@@ -105,5 +129,5 @@ export function useAndroidBackButton({
         listenerHandle.remove();
       }
     };
-  }, [activeTab, overlays, setActiveTab, setToastMessage]);
+  }, []);
 }
