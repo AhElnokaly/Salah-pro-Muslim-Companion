@@ -1,8 +1,9 @@
 {
-  "name": "رفيق المسلم",
-  "short_name": "رفيق المسلم",
+  "name": "هِمَّتِي Hemmaty",
+  "short_name": "هِمَّتِي",
   "description": "حقيبة المسلم اليومية - مواقيت الصلاة والأذكار والمصحف الشريف وتتبع العبادات والقبلة",
-  "start_url": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0c1017",
   "theme_color": "#0c1017",

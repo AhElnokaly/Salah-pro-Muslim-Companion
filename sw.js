@@ -1,20 +1,23 @@
-const CACHE_NAME = 'muslim-companion-cache-v5';
+const CACHE_NAME = 'hemmaty-app-cache-v2';
 const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './favicon.ico',
-  './apple-touch-icon.png',
-  './icon-192.png',
-  './icon-512.png',
-  './muslim_companion_icon.jpg',
-  './audio/azan1.mp3',
-  './audio/azan2.mp3',
-  './audio/azan3.mp3',
-  './audio/azan4.mp3',
-  './audio/azan8.mp3',
-  './audio/azan20.mp3',
-  './audio/azan22.mp3'
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/hemmaty_logo.jpg',
+  '/muslim_companion_icon.jpg',
+  '/audio/takbeer.mp3',
+  '/audio/alsalatu-khayr.mp3',
+  '/audio/hayya.mp3',
+  '/audio/adhan.mp3',
+  '/audio/salawat.mp3',
+  '/audio/istighfar.mp3',
+  '/audio/duaa.mp3',
+  '/audio/reminder.mp3',
+  '/audio/beep.mp3'
 ];
 
 // Install Event
@@ -23,7 +26,7 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Pre-caching offline assets');
       return cache.addAll(PRECACHE_ASSETS).catch(err => {
-        console.error('[Service Worker] Pre-cache failed:', err);
+        console.warn('[Service Worker] Pre-cache non-fatal warning:', err);
       });
     }).then(() => self.skipWaiting())
   );
@@ -45,46 +48,69 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event
+// Fetch Event - Network First with Cache Fallback for navigation & HTML/JS
 self.addEventListener('fetch', (event) => {
   // Only handle local GET requests
   if (event.request.method !== 'GET') return;
   
   const url = new URL(event.request.url);
   
-  // Ignore chrome-extension or other non-http schemes
+  // Ignore non-http schemes and development/cloud-run environments
   if (!url.protocol.startsWith('http')) return;
+  if (url.hostname.includes('run.app') || url.hostname.includes('aistudio') || url.hostname === 'localhost') {
+    return; // Pass through completely untouched
+  }
+
+  const isNavigation = event.request.mode === 'navigate' || event.request.destination === 'document';
 
   if (url.origin === self.location.origin) {
+    // Network-First with Cache Fallback
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          const fetchPromise = fetch(event.request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              cache.put(event.request, networkResponse.clone());
-            }
-            return networkResponse;
-          }).catch(() => {
-            // Silence network errors when offline
-          });
-          
-          return cachedResponse || fetchPromise;
-        });
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          // If offline or network error, fallback to cache
+          const cachedResponse = await caches.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (isNavigation) {
+            return (await caches.match('/index.html')) || (await caches.match('/')) || (await caches.match('./index.html'));
+          }
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        })
     );
   } else {
-    // For external assets (like google fonts/unsplash images), try network first, then cache
+    // For external assets, try network first, then cache
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(event.request);
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
     );
   }
 });
 
 // Push Event
 self.addEventListener('push', (event) => {
-  let data = { title: 'رفيق المسلم 🕌', body: 'تنبيه طاعة جديد!' };
+  let data = { title: 'هِمَّتِي 🕌', body: 'تنبيه طاعة جديد!' };
   try {
     if (event.data) {
       data = event.data.json();

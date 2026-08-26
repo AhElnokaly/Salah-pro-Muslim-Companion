@@ -3,43 +3,87 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>رفيق المسلم - Muslim Companion</title>
+    <title>هِمَّتِي Hemmaty</title>
     <meta name="theme-color" content="#0c1017" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="رفيق المسلم" />
+    <meta name="apple-mobile-web-app-title" content="هِمَّتِي" />
     
-    <link rel="icon" type="image/x-icon" href="/Salah-pro-Muslim-Companion/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/Salah-pro-Muslim-Companion/icon-192.png" />
-    <link rel="apple-touch-icon" href="/Salah-pro-Muslim-Companion/apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/Salah-pro-Muslim-Companion/apple-touch-icon.png" />
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     
-    <link rel="manifest" href="/Salah-pro-Muslim-Companion/manifest.json" />
-    <script type="text/javascript">
-      // Single Page Apps for GitHub Pages routing restoration
-      // https://github.com/rafgraph/spa-github-pages
-      (function(l) {
-        if (l.search[1] === 'p') {
-          var decoded = l.search.slice(1).split('&').reduce(function(q, v) {
-            var a = v.split('=');
-            q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');
-            return q;
-          }, {});
-          if (decoded.p !== undefined) {
-            window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + (decoded.p || '') +
-              (decoded.q ? ('?' + decoded.q) : '') +
-              l.hash
-            );
+    <link rel="manifest" href="./manifest.json" />
+    <script type="module" crossorigin src="./assets/index-BtDsNIw0.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vendor-libs-Bb8JjhAW.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-core-I6uCUXxG.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-CAzbkKaE.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-_cu3q_3t.css">
+  </head>
+  <body class="bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
+    <div id="root">
+      <div id="boot-loader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #faf7f0; color: #0f172a; font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 20px;" dir="rtl">
+        <div style="width: 44px; height: 44px; border: 3.5px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: bootSpin 1s linear infinite; margin-bottom: 16px;"></div>
+        <div style="font-weight: 800; font-size: 19px; color: #047857; margin-bottom: 6px; letter-spacing: -0.01em;">هِمَّتِي — جاري التشغيل...</div>
+        <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">لحظات وتفتح معك لوحة العبادات والأذكار</div>
+
+        <div id="recovery-box" style="display: none; margin-top: 14px; max-width: 320px;">
+          <p style="font-size: 12px; color: #059669; margin-bottom: 10px; line-height: 1.5; font-weight: 600;">استغرق التحميل وقتاً أطول من المعتاد. يمكنك تحديث الذاكرة المخبئية بضغطة واحدة:</p>
+          <button onclick="clearAndReload()" style="background-color: #059669; color: #ffffff; font-weight: 700; font-size: 13px; padding: 10px 22px; border-radius: 9999px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">تحديد وتحديث التشغيل 🔄</button>
+        </div>
+
+        <style>@keyframes bootSpin { to { transform: rotate(360deg); } }</style>
+      </div>
+    </div>
+    <script>
+      // Global resource error detection (catches 404/503 on JS/CSS modules)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          console.error('[BootGuard] Failed loading essential asset:', e.target.src || e.target.href);
+          var box = document.getElementById('recovery-box');
+          if (box) {
+            box.style.display = 'block';
           }
         }
-      }(window.location));
+      }, true);
+
+      setTimeout(function() {
+        var box = document.getElementById('recovery-box');
+        if (box && document.getElementById('boot-loader')) {
+          box.style.display = 'block';
+        }
+      }, 2500);
+
+      function clearAndReload() {
+        var btn = document.querySelector('#recovery-box button');
+        if (btn) {
+          btn.innerText = 'جاري التحديث والتنظيف... ⏳';
+          btn.disabled = true;
+        }
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            var promises = [];
+            for (var i = 0; i < regs.length; i++) {
+              promises.push(regs[i].unregister());
+            }
+            return Promise.all(promises);
+          }).then(function() {
+            if ('caches' in window) {
+              return caches.keys().then(function(keys) {
+                var cachePromises = [];
+                for (var key of keys) cachePromises.push(caches.delete(key));
+                return Promise.all(cachePromises);
+              });
+            }
+          }).finally(function() {
+            window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
+          });
+        } else {
+          window.location.href = window.location.origin + window.location.pathname + '?nocache=' + Date.now();
+        }
+      }
     </script>
-    <script type="module" crossorigin src="/Salah-pro-Muslim-Companion/assets/index-DYv3h2kb.js"></script>
-    <link rel="stylesheet" crossorigin href="/Salah-pro-Muslim-Companion/assets/index-DD5NKurl.css">
-  </head>
-  <body>
-    <div id="root"></div>
   </body>
 </html>
 
