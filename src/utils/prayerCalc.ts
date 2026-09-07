@@ -417,6 +417,23 @@ export function getArabicPrayerName(name: PrayerName, date: Date | string = new 
   return map[name] || name;
 }
 
+export function isPrayerInFuture(pName: PrayerName, now: Date, times: PrayerTimes): boolean {
+  if (pName === 'Sunrise') return false;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const fajrMins = times.Fajr ? parseTimeToMinutes(times.Fajr) : 270;
+  
+  // Late night / early morning before Fajr (between 00:00 and Fajr time):
+  // All daily prayers (Fajr, Dhuhr, Asr, Maghrib, Isha) from the night session are past and loggable.
+  if (nowMins < fajrMins) {
+    return false;
+  }
+
+  // Daytime / evening (after Fajr):
+  const timeStr = times[pName as keyof PrayerTimes];
+  const prayerMins = timeStr ? parseTimeToMinutes(timeStr) : 0;
+  return nowMins < prayerMins;
+}
+
 export function runPrayerCalcGoldenTests(): boolean {
   try {
     const testDate = new Date('2026-08-25T12:00:00Z');

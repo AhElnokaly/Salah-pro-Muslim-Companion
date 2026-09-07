@@ -1,37 +1,15 @@
 import { useState, useEffect, useRef, useCallback, MutableRefObject } from 'react';
 import { PrayerName, AppSettings } from '../types';
 import { getArabicPrayerName } from '../utils/prayerCalc';
-import { defaultMuezzins, archiveMuezzins, getAudioUrl, getCustomAudios, AudioTrack, LOCAL_FALLBACK_AUDIO } from '../utils/audioStorage';
-import { safeSetItem } from '../utils/storage';
+import { defaultMuezzins, archiveMuezzins, getAudioUrl, AudioTrack, LOCAL_FALLBACK_AUDIO, revokeAudioBlobUrl } from '../utils/audioStorage';
+import { showAppNotification } from '../utils/pushNotificationService';
+import { safeSetItem, safeGetItem } from '../utils/storage';
 import { formatDateKey } from '../utils/prayerDayBoundary';
+import { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
+import { useMuezzinSettings } from './useMuezzinSettings';
+import { useAudioUnlocker } from './useAudioUnlocker';
 
-export const athanPhrases = [
-  { text: 'الله أكبر، الله أكبر', duration: 10 },
-  { text: 'الله أكبر، الله أكبر', duration: 10 },
-  { text: 'أشهد أن لا إله إلا الله', duration: 12 },
-  { text: 'أشهد أن لا إله إلا الله', duration: 12 },
-  { text: 'أشهد أن محمداً رسول الله', duration: 12 },
-  { text: 'أشهد أن محمداً رسول الله', duration: 12 },
-  { text: 'حي على الصلاة', duration: 10 },
-  { text: 'حي على الصلاة', duration: 10 },
-  { text: 'حي على الفلاح', duration: 10 },
-  { text: 'حي على الفلاح', duration: 10 },
-  { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
-  { text: 'الصلاة خير من النوم', duration: 15, isFajrOnly: true },
-  { text: 'الله أكبر، الله أكبر', duration: 10 },
-  { text: 'لا إله إلا الله', duration: 10 },
-];
-
-export function computePhraseTimings(isFajr: boolean): { text: string; start: number; end: number }[] {
-  const activePhrases = athanPhrases.filter(p => !p.isFajrOnly || isFajr);
-  let accumulatedTime = 0;
-  return activePhrases.map(p => {
-    const start = accumulatedTime;
-    const end = accumulatedTime + p.duration;
-    accumulatedTime += p.duration;
-    return { text: p.text, start, end };
-  });
-}
+export { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 
 export interface UseAthanPlayerReturn {
   globalAudioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -61,6 +39,8 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   const globalAudioRef = useRef<HTMLAudioElement | null>(null);
   const prevListenersRef = useRef<{ play?: () => void; pause?: () => void; ended?: () => void; timeupdate?: () => void } | null>(null);
   const userDismissedRef = useRef<boolean>(false);
+  const stallTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
 
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
@@ -68,89 +48,50 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [pendingAthanPrayer, setPendingAthanPrayer] = useState<PrayerName | null>(null);
-  const [customMuezzins, setCustomMuezzins] = useState<AudioTrack[]>([]);
+  const pendingAthanTimestampRef = useRef<number>(0);
+
+  const {
+    audioVolume,
+    setAudioVolume,
+    currentMuezzin,
+    setCurrentMuezzin,
+    fajrMuezzin,
+    setFajrMuezzin,
+    customMuezzins,
+  } = useMuezzinSettings(globalAudioRef);
+
+  // Global Audio Unlocker on first user gesture
+  useAudioUnlocker();
 
   const markAthanDismissed = useCallback(() => {
     userDismissedRef.current = true;
   }, []);
 
-  const [audioVolume, setAudioVolumeState] = useState<number>(() => {
-    const saved = localStorage.getItem('salah_audio_volume');
-    return saved ? parseFloat(saved) : 0.8;
-  });
-
-  const [currentMuezzin, setCurrentMuezzinState] = useState<string>(() => {
-    return localStorage.getItem('salah_general_muezzin') || 'makkah';
-  });
-
-  const [fajrMuezzin, setFajrMuezzinState] = useState<string>(() => {
-    return localStorage.getItem('salah_fajr_muezzin') || 'fajr_yusuf';
-  });
-
-  const setAudioVolume = useCallback((vol: number) => {
-    setAudioVolumeState(vol);
-    safeSetItem('salah_audio_volume', vol.toString());
-    if (globalAudioRef.current) {
-      globalAudioRef.current.volume = vol;
-    }
-  }, []);
-
-  const setCurrentMuezzin = useCallback((muezzin: string) => {
-    setCurrentMuezzinState(muezzin);
-    safeSetItem('salah_general_muezzin', muezzin);
-  }, []);
-
-  const setFajrMuezzin = useCallback((muezzin: string) => {
-    setFajrMuezzinState(muezzin);
-    safeSetItem('salah_fajr_muezzin', muezzin);
-  }, []);
-
-  // Global Audio Unlocker on first user gesture
-  useEffect(() => {
-    const unlockAudio = () => {
-      try {
-        const silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
-        silentAudio.volume = 0.01;
-        silentAudio.play().then(() => {
-          console.log('[AudioUnlocker] Audio session successfully unlocked by user gesture.');
-        }).catch(err => {
-          console.warn('[AudioUnlocker] Could not unlock silent audio snippet:', err);
-        });
-      } catch (err) {
-        console.warn('[AudioUnlocker] Exception during audio unlock:', err);
-      }
-    };
-
-    window.addEventListener('pointerdown', unlockAudio, { once: true });
-    window.addEventListener('touchstart', unlockAudio, { once: true });
-    window.addEventListener('click', unlockAudio, { once: true });
-    window.addEventListener('keydown', unlockAudio, { once: true });
-
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-    };
-  }, []);
-
-  // Fetch custom muezzins on mount
-  useEffect(() => {
-    getCustomAudios().then(tracks => {
-      setCustomMuezzins(tracks);
-    }).catch(err => {
-      console.error('Failed to load custom muezzins in useAthanPlayer:', err);
-    });
-  }, []);
-
-  // Auto-play pending Adhan on first user interaction if browser blocked autoplay
+  // Auto-play pending Adhan on first user interaction if browser blocked autoplay (valid only during the Adhan duration ~3.5 minutes)
   useEffect(() => {
     if (!pendingAthanPrayer) return;
 
-    const handleFirstUserInteraction = () => {
-      const prayerToPlay = pendingAthanPrayer;
+    // Auto-expire pending adhan after 210 seconds (duration of adhan call)
+    const MAX_ATHAN_PENDING_MS = 210000;
+    const elapsed = Date.now() - pendingAthanTimestampRef.current;
+    const remainingMs = Math.max(0, MAX_ATHAN_PENDING_MS - elapsed);
+
+    const expiryTimer = setTimeout(() => {
+      console.log('[useAthanPlayer] انقضى وقت الأذان الفعلي — تم إلغاء تشغيل الأذان المعلق تجنباً للإزعاج المتأخر.');
       setPendingAthanPrayer(null);
-      window.dispatchEvent(new CustomEvent('trigger-athan-simulation', { detail: { prayerName: prayerToPlay } }));
+      setAudioError(null);
+    }, remainingMs);
+
+    const handleFirstUserInteraction = () => {
+      const nowElapsed = Date.now() - pendingAthanTimestampRef.current;
+      if (nowElapsed <= MAX_ATHAN_PENDING_MS) {
+        const prayerToPlay = pendingAthanPrayer;
+        setPendingAthanPrayer(null);
+        window.dispatchEvent(new CustomEvent('trigger-athan-simulation', { detail: { prayerName: prayerToPlay } }));
+      } else {
+        setPendingAthanPrayer(null);
+        setAudioError(null);
+      }
     };
 
     window.addEventListener('click', handleFirstUserInteraction, { once: true });
@@ -158,6 +99,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     window.addEventListener('pointerdown', handleFirstUserInteraction, { once: true });
 
     return () => {
+      clearTimeout(expiryTimer);
       window.removeEventListener('click', handleFirstUserInteraction);
       window.removeEventListener('touchstart', handleFirstUserInteraction);
       window.removeEventListener('pointerdown', handleFirstUserInteraction);
@@ -167,6 +109,14 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   // Audio cleanup on unmount
   useEffect(() => {
     return () => {
+      if (stallTimeoutRef.current) {
+        clearTimeout(stallTimeoutRef.current);
+        stallTimeoutRef.current = null;
+      }
+      if (currentBlobUrlRef.current) {
+        revokeAudioBlobUrl(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
       if (globalAudioRef.current) {
         if (prevListenersRef.current) {
           if (prevListenersRef.current.play) globalAudioRef.current.removeEventListener('play', prevListenersRef.current.play);
@@ -197,6 +147,11 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       return;
     }
 
+    if (stallTimeoutRef.current) {
+      clearTimeout(stallTimeoutRef.current);
+      stallTimeoutRef.current = null;
+    }
+
     let audio = globalAudioRef.current;
 
     // Remove previous listeners if audio and listener references exist
@@ -208,9 +163,19 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       prevListenersRef.current = null;
     }
 
+    // Revoke previous blob URL if it was a blob
+    if (currentBlobUrlRef.current && currentBlobUrlRef.current !== srcUrl) {
+      revokeAudioBlobUrl(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
+
     let safeUrl = srcUrl;
     if (!safeUrl || typeof safeUrl !== 'string' || safeUrl.trim() === '' || safeUrl.startsWith('db://')) {
       safeUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+    }
+
+    if (safeUrl.startsWith('blob:')) {
+      currentBlobUrlRef.current = safeUrl;
     }
 
     if (audio) {
@@ -247,9 +212,17 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     const handleEnded = () => {
       setIsAthanPlaying(false);
       setCurrentPhraseIdx(-1);
+      if (currentBlobUrlRef.current) {
+        revokeAudioBlobUrl(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
     };
 
     const handleTimeUpdate = () => {
+      if (stallTimeoutRef.current) {
+        clearTimeout(stallTimeoutRef.current);
+        stallTimeoutRef.current = null;
+      }
       const time = audio.currentTime;
       const activeIdx = phraseTimings.findIndex(p => time >= p.start && time < p.end);
       setCurrentPhraseIdx(activeIdx);
@@ -300,9 +273,9 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       }
 
       // تأكيد إن الصوت فعلاً بيشتغل (مش بس الـ Promise نجح)، خلال 3 ثواني
-      const stallCheckTimeout = setTimeout(() => {
+      stallTimeoutRef.current = setTimeout(() => {
         if (userDismissedRef.current) return;
-        if (audio.currentTime === 0 && !audio.paused) {
+        if (audio && audio.currentTime === 0 && !audio.paused) {
           console.warn('[Audio Stall] لا تقدم فعلي بعد 3 ثواني — تحويل للملف المحلي');
           audio.pause();
           const localFallback = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
@@ -311,14 +284,13 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
           }
         }
       }, 3000);
-
-      audio.addEventListener('timeupdate', () => clearTimeout(stallCheckTimeout), { once: true });
     }).catch((e: Error) => {
       if (userDismissedRef.current) return;
       if (srcUrl !== onlineFallback && e.name !== 'NotAllowedError') {
         console.warn(`[Audio Play Catch Fallback]: Attempting online fallback:`, e);
         playAudioTrack(onlineFallback, isFajr, prayer, vol);
       } else {
+        pendingAthanTimestampRef.current = Date.now();
         setPendingAthanPrayer(prayer);
         if (e.name === 'NotAllowedError') {
           setAudioError('حظر المتصفح التشغيل التلقائي للصوت (Autoplay Policy). انقر في أي مكان على الشاشة أو اضغط زر المحاولة لفتح الصوت.');
@@ -347,7 +319,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     userDismissedRef.current = false;
     const prayerToUse = overridePrayer || athanOverlayPrayer;
     const isFajr = prayerToUse === 'Fajr';
-    const savedMuezzin = localStorage.getItem(`salah_muezzin_${prayerToUse}`);
+    const savedMuezzin = safeGetItem(`salah_muezzin_${prayerToUse}`);
     const activeMuezzinId = muezzinId || savedMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
 
     if (isAthanPlaying && !overridePrayer) {
@@ -376,7 +348,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     userDismissedRef.current = false;
     setAudioError(null);
     const isFajr = athanOverlayPrayer === 'Fajr';
-    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
+    const activeMuezzinId = safeGetItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
     const fallbackUrl = isFajr 
@@ -403,17 +375,15 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     setAthanOverlayPrayer(prayer);
     setShowAthanOverlay(true);
 
-    // 1. Native Browser Notification
+    // 1. Native Browser Notification (Safe for Android & ServiceWorker)
     if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)} 🕌`, {
-          body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
-          icon: '/favicon.ico',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error('Native notification error:', e);
-      }
+      showAppNotification(`حان الآن موعد صلاة ${getArabicPrayerName(prayer)} 🕌`, {
+        body: `حسب توقيت مدينة ${settings.cityName || 'القاهرة'}. تقبل الله صلاتكم.`,
+        icon: '/icon-192.png',
+        dir: 'rtl'
+      }).catch((e) => {
+        console.warn('Notification display non-fatal warning:', e);
+      });
     }
 
     // 2. Interactive In-App Toast Alert
@@ -422,7 +392,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     }
 
     const isFajr = prayer === 'Fajr';
-    const activeMuezzinId = localStorage.getItem(`salah_muezzin_${prayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
+    const activeMuezzinId = safeGetItem(`salah_muezzin_${prayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
 

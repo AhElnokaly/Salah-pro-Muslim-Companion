@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -80,11 +81,15 @@ class AthanForegroundService : Service() {
             }
 
             if (resId == 0) {
-                Log.e(TAG, "Raw audio resource not found in R.raw!")
-                return
+                Log.w(TAG, "Raw athan audio not found in R.raw, falling back to system alarm ringtone")
+                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                mediaPlayer = MediaPlayer.create(this, alarmUri)
+            } else {
+                mediaPlayer = MediaPlayer.create(this, resId)
             }
 
-            mediaPlayer = MediaPlayer.create(this, resId)?.apply {
+            mediaPlayer?.apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -136,6 +141,7 @@ class AthanForegroundService : Service() {
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(openAppPendingIntent)
+            .setFullScreenIntent(openAppPendingIntent, true)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
                 "إيقاف الأذان",

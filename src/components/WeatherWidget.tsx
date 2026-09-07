@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { safeSetItem } from '../utils/storage';
+import { safeSetJSON, safeGetJSON } from '../utils/storage';
 import { Sun, CloudSun, Cloud, CloudRain, CloudLightning, CloudFog, Snowflake, Thermometer } from 'lucide-react';
 
 interface WeatherWidgetProps {
@@ -17,15 +17,8 @@ interface WeatherData {
 
 export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ lat, lng }) => {
   const [weather, setWeather] = useState<WeatherData | null>(() => {
-    try {
-      const cached = localStorage.getItem('hemmaty_weather_cache') || localStorage.getItem('muslim_companion_weather_cache');
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch {
-      // ignore
-    }
-    return null;
+    return safeGetJSON<WeatherData | null>('hemmaty_weather_cache', null) ||
+           safeGetJSON<WeatherData | null>('muslim_companion_weather_cache', null);
   });
 
   const [loading, setLoading] = useState<boolean>(!weather);
@@ -58,7 +51,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ lat, lng }) => {
 
           if (isMounted) {
             setWeather(weatherObj);
-            safeSetItem('hemmaty_weather_cache', JSON.stringify(weatherObj));
+            safeSetJSON('hemmaty_weather_cache', weatherObj);
           }
         }
       } catch (err) {

@@ -18,7 +18,12 @@ export const CustomAlarmOverlay: React.FC<CustomAlarmOverlayProps> = ({
 
   return (
     <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in" dir="rtl">
-      <div className="bg-white dark:bg-[#161d26] border border-indigo-500/30 w-full max-w-sm rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden">
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-label="تنبيه المنبه المخصص"
+        className="bg-white dark:bg-[#161d26] border border-indigo-500/30 w-full max-w-sm rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden"
+      >
         <div className="absolute top-0 start-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -translate-x-5 -translate-y-5" />
         
         <div className="mx-auto w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 animate-bounce">
@@ -26,8 +31,10 @@ export const CustomAlarmOverlay: React.FC<CustomAlarmOverlayProps> = ({
         </div>
 
         <div className="space-y-1.5">
-          <h3 className="text-base font-black text-slate-800 dark:text-white">تنبيه مخصص: {activeRingingAlarm.title}</h3>
-          <p className="text-xs text-indigo-600 dark:text-indigo-400 font-black font-mono">الوقت الحالي: {toArabicNumbers(activeRingingAlarm.time)}</p>
+          <h3 className="text-base font-black text-slate-800 dark:text-white">{activeRingingAlarm.title}</h3>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-black font-mono">
+            {activeRingingAlarm.time ? `الوقت: ${toArabicNumbers(activeRingingAlarm.time)}` : 'حان الموعد المبارك الآن ⏰'}
+          </p>
         </div>
 
         <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold leading-relaxed">

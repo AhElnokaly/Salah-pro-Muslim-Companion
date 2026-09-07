@@ -74,12 +74,22 @@ class ScheduleRenewalWorker(
                         Triple("isha", "العشاء", times.isha)
                     )
 
+                    val canonicalPrayerNames = mapOf(
+                        "fajr" to "Fajr",
+                        "sunrise" to "Sunrise",
+                        "dhuhr" to "Dhuhr",
+                        "asr" to "Asr",
+                        "maghrib" to "Maghrib",
+                        "isha" to "Isha"
+                    )
+
                     for (p in prayers) {
                         if (p.third > now) {
                             val exists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - p.third) < 60000L }
                             if (!exists) {
                                 val obj = JSONObject()
-                                obj.put("prayerKey", "renewed_${dayOffset}_${p.first}")
+                                val canonicalKey = canonicalPrayerNames[p.first] ?: p.first
+                                obj.put("prayerKey", canonicalKey)
                                 obj.put("prayerName", p.second)
                                 obj.put("timeMs", p.third)
                                 obj.put("isFajr", p.first == "fajr")

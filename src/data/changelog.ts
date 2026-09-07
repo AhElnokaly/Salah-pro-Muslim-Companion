@@ -1,3 +1,5 @@
+import { safeGetItem, safeSetItem } from '../utils/storage';
+
 export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
 
 export interface ChangelogItem {
@@ -48,19 +50,11 @@ export const CURRENT_RELEASE = RELEASE_HISTORY[0];
 const STORAGE_KEY = 'hemmaty_last_seen_version';
 
 export function getUnreadVersionStatus(): { isNew: boolean; lastSeenVersion: string | null } {
-  try {
-    const lastSeen = localStorage.getItem(STORAGE_KEY);
-    const isNew = lastSeen !== CURRENT_RELEASE.version;
-    return { isNew, lastSeenVersion: lastSeen };
-  } catch (e) {
-    return { isNew: false, lastSeenVersion: null };
-  }
+  const lastSeen = safeGetItem(STORAGE_KEY);
+  const isNew = lastSeen !== CURRENT_RELEASE.version;
+  return { isNew, lastSeenVersion: lastSeen };
 }
 
 export function markCurrentVersionAsSeen(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, CURRENT_RELEASE.version);
-  } catch (e) {
-    console.error('Failed to save last seen version', e);
-  }
+  safeSetItem(STORAGE_KEY, CURRENT_RELEASE.version);
 }

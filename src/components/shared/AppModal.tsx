@@ -60,6 +60,9 @@ export default function AppModal({ message, variant = 'info', onClose }: AppModa
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="نافذة تنبيه النظام"
         className={`bg-white dark:bg-[#18202c] border ${cfg.border} rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-end`}
         onClick={e => e.stopPropagation()}
       >

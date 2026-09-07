@@ -140,7 +140,7 @@ export async function detectUserLocation(): Promise<LocationResult> {
         source: 'gps',
         message: 'تم تحديد موقعك بدقة عالية عبر الـ GPS 📍'
       };
-    } catch (gpsError: any) {
+    } catch (gpsError: unknown) {
       console.warn('High accuracy GPS failed or denied, trying standard location:', gpsError);
       // Retry with standard accuracy before falling back to IP
       try {

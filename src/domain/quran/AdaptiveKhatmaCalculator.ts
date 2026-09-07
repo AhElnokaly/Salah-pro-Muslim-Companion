@@ -27,10 +27,10 @@ export class AdaptiveKhatmaCalculator {
 
     let remainingDays = Math.max(1, input.targetDays - input.daysPassed);
 
-    // If remaining days became too short (e.g. 1-2 days left for 200 pages), gently auto-extend plan
+    // If remaining days became too short (e.g. daily requirement exceeds 22 pages/day), gently auto-extend plan
     let adjustedTargetDays = input.targetDays;
-    if (remainingPages / remainingDays > 20) {
-      // Auto-extend plan by additional days to keep daily goal under 20 pages (1 Juz max)
+    if (remainingPages / remainingDays > 22) {
+      // Auto-extend plan by additional days to keep daily goal manageable (around 10-15 pages)
       const feasibleDays = Math.ceil(remainingPages / 10);
       remainingDays = Math.max(remainingDays, feasibleDays);
       adjustedTargetDays = input.daysPassed + remainingDays;

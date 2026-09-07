@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { RotateCcw, Download, Upload, FileUp } from 'lucide-react';
-import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, CustomDua, QuranSession, QuranKhatma } from '../../types';
-import { safeSetItem, safeGetJSON } from '../../utils/storage';
+import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, CustomDua, QuranSession, QuranKhatma, VoluntaryPrayerLog } from '../../types';
+import { safeSetItem, safeGetJSON, safeGetItem } from '../../utils/storage';
 import { formatDateKey } from '../../utils/prayerDayBoundary';
 import { getDashboardSectionsConfig } from '../dashboard/dashboardSections';
 
@@ -12,8 +12,8 @@ interface BackupSettingsTabProps {
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
   pendingQadaPrayers: PendingQadaPrayer[];
   setPendingQadaPrayers: React.Dispatch<React.SetStateAction<PendingQadaPrayer[]>>;
-  voluntaryPrayerLogs?: any[];
-  setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<any[]>>;
+  voluntaryPrayerLogs?: VoluntaryPrayerLog[];
+  setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<VoluntaryPrayerLog[]>>;
   fastingLogs: Record<string, { date: string; fasted: boolean; fastType: string }>;
   setFastingLogs: React.Dispatch<React.SetStateAction<Record<string, { date: string; fasted: boolean; fastType: string }>>>;
   ramadanQada: RamadanQadaTracker;
@@ -108,25 +108,25 @@ export default function BackupSettingsTab({
         spiritualAlerts: safeGetJSON('salah_alerts', null),
         soundModes: safeGetJSON('salah_sound_modes', null),
         audioPreferences: {
-          fajrMuezzin: localStorage.getItem('salah_fajr_muezzin') || fajrMuezzin,
-          generalMuezzin: localStorage.getItem('salah_general_muezzin') || generalMuezzin,
-          audioVolume: localStorage.getItem('salah_audio_volume') || audioVolume.toString(),
-          autoPlayAthan: localStorage.getItem('salah_auto_play_athan') !== 'false',
+          fajrMuezzin: safeGetItem('salah_fajr_muezzin') || fajrMuezzin,
+          generalMuezzin: safeGetItem('salah_general_muezzin') || generalMuezzin,
+          audioVolume: safeGetItem('salah_audio_volume') || audioVolume.toString(),
+          autoPlayAthan: safeGetItem('salah_auto_play_athan') !== 'false',
           prayerMuezzins: {
-            Fajr: localStorage.getItem('salah_muezzin_Fajr') || '',
-            Sunrise: localStorage.getItem('salah_muezzin_Sunrise') || '',
-            Dhuhr: localStorage.getItem('salah_muezzin_Dhuhr') || '',
-            Asr: localStorage.getItem('salah_muezzin_Asr') || '',
-            Maghrib: localStorage.getItem('salah_muezzin_Maghrib') || '',
-            Isha: localStorage.getItem('salah_muezzin_Isha') || ''
+            Fajr: safeGetItem('salah_muezzin_Fajr') || '',
+            Sunrise: safeGetItem('salah_muezzin_Sunrise') || '',
+            Dhuhr: safeGetItem('salah_muezzin_Dhuhr') || '',
+            Asr: safeGetItem('salah_muezzin_Asr') || '',
+            Maghrib: safeGetItem('salah_muezzin_Maghrib') || '',
+            Isha: safeGetItem('salah_muezzin_Isha') || ''
           }
         },
-        clockFace: localStorage.getItem('salah_clock_face') || 'classic',
-        tasbihColor: localStorage.getItem('salah_tasbih_color') || 'indigo',
+        clockFace: safeGetItem('salah_clock_face') || 'classic',
+        tasbihColor: safeGetItem('salah_tasbih_color') || 'indigo',
         dashboardSections: getDashboardSectionsConfig(),
-        pushSettings: JSON.parse(localStorage.getItem('hemmaty_push_settings') || 'null'),
-        featureAnalytics: JSON.parse(localStorage.getItem('rafiq_feature_analytics_v1') || 'null'),
-        womenExcuseActive: localStorage.getItem('rafiq_women_excuse_active_v1') === 'true'
+        pushSettings: safeGetJSON('hemmaty_push_settings', null),
+        featureAnalytics: safeGetJSON('rafiq_feature_analytics_v1', null),
+        womenExcuseActive: safeGetItem('rafiq_women_excuse_active_v1') === 'true'
       };
       const jsonStr = JSON.stringify(fullData, null, 2);
       setBackupText(jsonStr);

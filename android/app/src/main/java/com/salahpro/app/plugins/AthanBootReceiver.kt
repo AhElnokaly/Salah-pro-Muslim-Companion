@@ -29,6 +29,17 @@ class AthanBootReceiver : BroadcastReceiver() {
 
     private fun restoreAlarms(context: Context) {
         try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            if (alarmManager == null) {
+                Log.w(TAG, "AlarmManager service not available on boot")
+                return
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                Log.w(TAG, "Exact alarm permission missing on boot. Alarms will be scheduled when user opens app.")
+                return
+            }
+
             val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
             val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null) ?: return
 

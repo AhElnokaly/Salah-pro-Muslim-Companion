@@ -9,6 +9,8 @@ import { PrayerLog, VoluntaryPrayerLog } from '../types';
 import { toArabicNumbers, getHijriDate } from '../utils/hijri';
 import { formatDateKey } from '../utils/prayerDayBoundary';
 import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
+import { safeGetJSON } from '../utils/storage';
+import { safeUUID } from '../utils/uuid';
 
 export interface NightPrayersQuickLogModalProps {
   isOpen: boolean;
@@ -27,7 +29,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
   dateStr = formatDateKey(new Date()),
   prayerLogs,
   setPrayerLogs,
-  voluntaryPrayerLogs = [],
+  voluntaryPrayerLogs = [] as VoluntaryPrayerLog[],
   setVoluntaryPrayerLogs,
   onSuccess
 }) => {
@@ -71,19 +73,14 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
   let isBeforeIsha = false;
 
   if (isToday) {
-    const savedSettings = localStorage.getItem('salah_settings');
+    const parsed = safeGetJSON<Record<string, any>>('salah_settings', {});
     let lat = 30.0444, lng = 31.2357, calcMethod = 'Egypt', madhab: 'standard' | 'hanafi' = 'standard', offsets = {}, timezoneId: string | undefined;
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.latitude) lat = parsed.latitude;
-        if (parsed.longitude) lng = parsed.longitude;
-        if (parsed.calcMethod) calcMethod = parsed.calcMethod;
-        if (parsed.madhab) madhab = parsed.madhab;
-        if (parsed.prayerOffsets) offsets = parsed.prayerOffsets;
-        if (parsed.timezoneId) timezoneId = parsed.timezoneId;
-      } catch (e) {}
-    }
+    if (parsed.latitude) lat = parsed.latitude;
+    if (parsed.longitude) lng = parsed.longitude;
+    if (parsed.calcMethod) calcMethod = parsed.calcMethod;
+    if (parsed.madhab) madhab = parsed.madhab;
+    if (parsed.prayerOffsets) offsets = parsed.prayerOffsets;
+    if (parsed.timezoneId) timezoneId = parsed.timezoneId;
     const now = new Date();
     const tzOffset = getTimezoneOffsetForLocation(now, timezoneId);
     const times = calculatePrayerTimes(now, lat, lng, tzOffset, calcMethod, madhab, offsets);
@@ -98,7 +95,12 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
   if (isBeforeIsha && !allowTravelOverride) {
     return (
       <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" dir="rtl">
-        <div className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="تنبيه وقت صلاة العشاء والصلوات الليلية"
+          className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl p-6 border border-slate-100 dark:border-slate-800 shadow-2xl text-center space-y-4"
+        >
           <div className="w-14 h-14 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl">
             ✈️
           </div>
@@ -140,7 +142,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
     if (qiyamEnabled) {
       qiyamR = qiyamRakaat;
       newLogs.push({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         appPrayerDay: dateStr,
         type: 'qiyam',
         rakaat: qiyamRakaat,
@@ -150,7 +152,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
 
     if (shafiEnabled) {
       newLogs.push({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         appPrayerDay: dateStr,
         type: 'shafi',
         rakaat: 2,
@@ -162,7 +164,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
     if (witrEnabled) {
       witrR = witrRakaat;
       newLogs.push({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         appPrayerDay: dateStr,
         type: 'witr',
         rakaat: witrRakaat,
@@ -172,7 +174,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
 
     if (taraweehEnabled && hijri.month === 9) {
       newLogs.push({
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         appPrayerDay: dateStr,
         type: 'taraweeh',
         rakaat: taraweehRakaat,
@@ -215,7 +217,12 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
-      <div className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="نافذة تسجيل صلوات الليل والتهجد"
+        className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-base">
@@ -230,6 +237,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer"
+            aria-label="إغلاق نافذة تسجيل صلوات الليل والتهجد"
           >
             <X className="w-4 h-4" />
           </button>
@@ -262,6 +270,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
                     key={r}
                     type="button"
                     onClick={() => setQiyamRakaat(r)}
+                    aria-label={`تحديد ${r} ركعات لقيام الليل`}
                     className={`py-1.5 text-[10px] font-black rounded-xl border transition-all cursor-pointer ${
                       qiyamRakaat === r
                         ? 'bg-indigo-600 text-white border-indigo-600 font-black'
@@ -315,6 +324,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
                     key={r}
                     type="button"
                     onClick={() => setWitrRakaat(r)}
+                    aria-label={`تحديد ${r} ركعة لصلاة الوتر`}
                     className={`py-1.5 text-[10px] font-black rounded-xl border transition-all cursor-pointer ${
                       witrRakaat === r
                         ? 'bg-purple-600 text-white border-purple-600 font-black'
@@ -355,6 +365,7 @@ export const NightPrayersQuickLogModal: React.FC<NightPrayersQuickLogModalProps>
                       key={r}
                       type="button"
                       onClick={() => setTaraweehRakaat(r)}
+                      aria-label={`تحديد ${r} ركعة لصلاة التراويح`}
                       className={`py-1.5 text-[10px] font-black rounded-xl border transition-all cursor-pointer ${
                         taraweehRakaat === r
                           ? 'bg-emerald-600 text-white border-emerald-600 font-black'

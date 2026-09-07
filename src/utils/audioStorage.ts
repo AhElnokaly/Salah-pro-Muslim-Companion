@@ -384,6 +384,29 @@ export async function getAudioStorageStats(): Promise<{ count: number; totalMB: 
   }
 }
 
+// Active Blob URL registry for memory cleanup
+const activeBlobUrls = new Set<string>();
+
+export function revokeAudioBlobUrl(url: string | null | undefined): void {
+  if (url && typeof url === 'string' && url.startsWith('blob:')) {
+    try {
+      URL.revokeObjectURL(url);
+      activeBlobUrls.delete(url);
+    } catch (e) {
+      console.warn('[AudioStorage] Error revoking blob URL:', e);
+    }
+  }
+}
+
+export function revokeAllAudioBlobUrls(): void {
+  activeBlobUrls.forEach((url) => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
+  });
+  activeBlobUrls.clear();
+}
+
 async function getBlobUrlFromDb(id: string): Promise<string> {
   const db = await initAudioDB();
   return new Promise((resolve, reject) => {
@@ -395,6 +418,7 @@ async function getBlobUrlFromDb(id: string): Promise<string> {
       const record = request.result as DbTrackRecord | undefined;
       if (record && record.blob) {
         const objectUrl = URL.createObjectURL(record.blob);
+        activeBlobUrls.add(objectUrl);
         resolve(objectUrl);
       } else {
         reject(new Error(`Audio blob not found for ID: ${id}`));

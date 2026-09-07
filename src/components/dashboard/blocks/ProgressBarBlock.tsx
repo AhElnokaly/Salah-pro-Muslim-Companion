@@ -1,5 +1,5 @@
 import React from 'react';
-import { CardBlockSize, CardBlockAccent, PrayerName } from '../../../types';
+import { CardBlockSize, CardBlockAccent, PrayerName, DashboardTab } from '../../../types';
 
 interface ProgressBarBlockProps {
   size?: CardBlockSize;
@@ -10,7 +10,7 @@ interface ProgressBarBlockProps {
   getArabicPrayerName: (prayer: PrayerName, date?: Date) => string;
   toArabicNumbers: (str: string | number) => string;
   getPrayerProgressPercentage: () => number;
-  setActiveTab?: (tab: any) => void;
+  setActiveTab?: (tab: DashboardTab | string) => void;
   onNavigateTab?: (tab: string, subTab?: string) => void;
 }
 

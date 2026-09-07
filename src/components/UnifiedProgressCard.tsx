@@ -19,11 +19,10 @@ import {
 } from 'lucide-react';
 import { 
   calculateUnifiedProgress, 
-  ProgressItemData, 
-  ProgressTierInfo, 
   UnifiedPeriodProgress 
 } from '../utils/progressEngine';
 import BadgesShowcaseModal from './BadgesShowcaseModal';
+import { ProgressRowItem } from './progress/ProgressRowItem';
 import { PrayerLog, QuranSession, QuranKhatma, AppSettings } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 
@@ -131,9 +130,12 @@ export default function UnifiedProgressCard({
 
         {/* Period Selector Tabs (Daily, Weekly, Monthly, Show All) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 pb-1">
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 w-full sm:w-auto overflow-x-auto no-scrollbar">
+          <div role="tablist" aria-label="فترة الإنجاز" className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 w-full sm:w-auto overflow-x-auto no-scrollbar">
             <button
               type="button"
+              role="tab"
+              aria-selected={activePeriod === 'daily'}
+              aria-label="عرض الإنجاز اليومي"
               onClick={() => setActivePeriod('daily')}
               className={`flex-1 sm:flex-none px-2.5 py-1 rounded-xl text-[10.5px] sm:text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 activePeriod === 'daily'
@@ -146,6 +148,9 @@ export default function UnifiedProgressCard({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activePeriod === 'weekly'}
+              aria-label="عرض الإنجاز الأسبوعي"
               onClick={() => setActivePeriod('weekly')}
               className={`flex-1 sm:flex-none px-2.5 py-1 rounded-xl text-[10.5px] sm:text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 activePeriod === 'weekly'
@@ -158,6 +163,9 @@ export default function UnifiedProgressCard({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activePeriod === 'monthly'}
+              aria-label="عرض الإنجاز الشهري"
               onClick={() => setActivePeriod('monthly')}
               className={`flex-1 sm:flex-none px-2.5 py-1 rounded-xl text-[10.5px] sm:text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 activePeriod === 'monthly'
@@ -170,6 +178,9 @@ export default function UnifiedProgressCard({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activePeriod === 'all'}
+              aria-label="عرض الإنجاز الإجمالي للجميع"
               onClick={() => setActivePeriod('all')}
               className={`flex-1 sm:flex-none px-2.5 py-1 rounded-xl text-[10.5px] sm:text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 activePeriod === 'all'
@@ -297,182 +308,3 @@ export default function UnifiedProgressCard({
   );
 }
 
-// Single Circular Progress Item Card Component
-interface ProgressCircularItemProps {
-  key?: React.Key;
-  item: ProgressItemData;
-  isDark: boolean;
-  onNavigateTab?: (tab: string) => void;
-}
-
-function CircularProgressRing({
-  percentage,
-  tier,
-  icon,
-  onTimePercentage,
-  latePercentage
-}: {
-  percentage: number;
-  tier: ProgressTierInfo;
-  icon: string;
-  onTimePercentage?: number;
-  latePercentage?: number;
-}) {
-  const radius = 15;
-  const circumference = 2 * Math.PI * radius; // 94.24778
-
-  const hasDualBreakdown = onTimePercentage !== undefined && latePercentage !== undefined && latePercentage > 0;
-
-  const clampedPct = Math.min(100, Math.max(0, percentage));
-  const strokeDashoffset = circumference - (clampedPct / 100) * circumference;
-
-  const onTimePct = onTimePercentage !== undefined ? Math.min(100, Math.max(0, onTimePercentage)) : clampedPct;
-  const latePct = latePercentage !== undefined ? Math.min(100, Math.max(0, latePercentage)) : 0;
-  const totalPct = Math.min(100, onTimePct + latePct);
-
-  const onTimeOffset = circumference - (onTimePct / 100) * circumference;
-  const totalOffset = circumference - (totalPct / 100) * circumference;
-
-  const strokeColorMap: Record<number, string> = {
-    0: 'stroke-slate-300 dark:stroke-slate-700',
-    1: 'stroke-amber-700 dark:stroke-amber-600',
-    2: 'stroke-orange-600 dark:stroke-orange-500',
-    3: 'stroke-slate-400 dark:stroke-slate-300',
-    4: 'stroke-amber-400 dark:stroke-amber-400',
-    5: 'stroke-cyan-400 dark:stroke-cyan-300',
-    6: 'stroke-purple-400 dark:stroke-amber-300'
-  };
-
-  const strokeClass = strokeColorMap[tier.tierLevel] || 'stroke-emerald-500';
-
-  return (
-    <div className="relative w-10 h-10 xs:w-12 xs:h-12 sm:w-16 sm:h-16 flex items-center justify-center shrink-0 my-0.5">
-      <svg className="w-full h-full transform -rotate-90 overflow-visible" viewBox="0 0 36 36">
-        {/* Background Track Circle */}
-        <circle
-          cx="18"
-          cy="18"
-          r={radius}
-          className="stroke-slate-200/80 dark:stroke-slate-800"
-          strokeWidth="3"
-          fill="transparent"
-        />
-
-        {hasDualBreakdown ? (
-          <>
-            {/* Total Completion Arc (Amber / Gold for Late Segment) */}
-            <circle
-              cx="18"
-              cy="18"
-              r={radius}
-              className="stroke-amber-400 dark:stroke-amber-400 transition-all duration-1000 ease-out"
-              strokeWidth="3"
-              strokeDasharray={circumference}
-              strokeDashoffset={totalOffset}
-              strokeLinecap="round"
-              fill="transparent"
-            />
-            {/* On Time Arc (Emerald Green on Top) */}
-            <circle
-              cx="18"
-              cy="18"
-              r={radius}
-              className="stroke-emerald-500 dark:stroke-emerald-400 transition-all duration-1000 ease-out"
-              strokeWidth="3"
-              strokeDasharray={circumference}
-              strokeDashoffset={onTimeOffset}
-              strokeLinecap="round"
-              fill="transparent"
-            />
-          </>
-        ) : (
-          /* Standard Single Arc */
-          <circle
-            cx="18"
-            cy="18"
-            r={radius}
-            className={`${strokeClass} transition-all duration-1000 ease-out`}
-            strokeWidth="3"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            fill="transparent"
-          />
-        )}
-      </svg>
-
-      {/* Icon and percentage in center */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-0.5 pointer-events-none">
-        <span className="text-[11px] xs:text-xs sm:text-base leading-none drop-shadow-xs">{icon}</span>
-        <span className="text-[8px] xs:text-[9px] sm:text-[10px] font-black font-mono text-slate-800 dark:text-slate-100 leading-tight mt-0.5">
-          {toArabicNumbers(percentage)}%
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressCircularItemProps) {
-  const tier: ProgressTierInfo = item.tier;
-
-  const handleClick = () => {
-    if (!onNavigateTab) return;
-    if (item.id === 'salah' || item.id === 'sunnah') {
-      window.dispatchEvent(new CustomEvent('navigate-salah-subtab', { detail: 'worship' }));
-      onNavigateTab('salah');
-    }
-    else if (item.id === 'adhkar') onNavigateTab('adhkar');
-    else if (item.id === 'fasting') onNavigateTab('fasting');
-    else if (item.id === 'quran') onNavigateTab('quran');
-  };
-
-  const hasLatePrayers = item.id === 'salah' && (item.lateValue || 0) > 0;
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className={`p-1.5 xs:p-2 sm:p-3 rounded-2xl sm:rounded-3xl border transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer group flex flex-col items-center justify-between text-center relative shadow-xs focus:outline-none w-full min-h-[140px] xs:min-h-[150px] sm:min-h-[165px] ${
-        isDark ? 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]' : 'bg-slate-50/90 border-slate-200/80 hover:bg-white hover:shadow-md'
-      }`}
-    >
-      {/* Top Badge Pill */}
-      <div className={`px-1.5 py-0.5 rounded-full text-[7.5px] xs:text-[8.5px] sm:text-[9.5px] font-black flex items-center justify-center gap-0.5 shadow-2xs ${tier.colorClasses.badgeBg} ${tier.colorClasses.glow}`}>
-        <span className="text-[8.5px] xs:text-[9.5px]">{tier.badgeSymbol}</span>
-        <span className="text-[7.5px] xs:text-[8.5px] font-black">{tier.shortLabel.split(' ')[0]}</span>
-      </div>
-
-      {/* Responsive SVG Circular Ring */}
-      <CircularProgressRing
-        percentage={item.percentage}
-        tier={tier}
-        icon={item.icon}
-        onTimePercentage={item.onTimePercentage}
-        latePercentage={item.latePercentage}
-      />
-
-      {/* Titles & Details */}
-      <div className="space-y-0.5 w-full flex flex-col items-center justify-center text-center mt-auto">
-        <h4 className="text-[10.5px] xs:text-[11.5px] sm:text-xs font-black text-slate-900 dark:text-slate-100 leading-tight">
-          {item.categoryName}
-        </h4>
-        <p className="text-[8px] xs:text-[8.5px] sm:text-[10px] text-slate-600 dark:text-slate-300 font-bold leading-tight px-0.5 max-w-full break-words">
-          {toArabicNumbers(item.detailText)}
-        </p>
-
-        {hasLatePrayers && (
-          <div className="flex flex-col xs:flex-row items-center justify-center gap-0.5 mt-1 w-full">
-            <span className="inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/90 text-emerald-800 dark:text-emerald-300 text-[7px] xs:text-[8px] font-black leading-none whitespace-nowrap">
-              <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-              {toArabicNumbers(item.onTimeValue || 0)} حاضراً
-            </span>
-            <span className="inline-flex items-center justify-center gap-0.5 px-1 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/90 text-amber-800 dark:text-amber-300 text-[7px] xs:text-[8px] font-black leading-none whitespace-nowrap">
-              <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />
-              {toArabicNumbers(item.lateValue || 0)} متأخر
-            </span>
-          </div>
-        )}
-      </div>
-    </button>
-  );
-}

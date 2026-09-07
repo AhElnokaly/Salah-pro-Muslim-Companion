@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <application
         android:allowBackup="true"
@@ -53,10 +56,19 @@
         </receiver>
 
         <receiver
+            android:name=".plugins.KhushuRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.salahpro.app.ACTION_RESTORE_KHUSHU" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.SalahWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.salahpro.app.widget.ACTION_TOGGLE_KHUSHU" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

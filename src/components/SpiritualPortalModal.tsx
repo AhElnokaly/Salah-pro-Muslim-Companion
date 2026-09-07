@@ -76,7 +76,10 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
   const playSpiritualChime = (pitch: number = 523.25) => {
     try {
       if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          audioCtxRef.current = new AudioCtx();
+        }
       }
       if (audioCtxRef.current.state === 'suspended') {
         audioCtxRef.current.resume();
@@ -141,6 +144,9 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
     <AnimatePresence>
       <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="بوابة النفحات الإيمانية والسكينة"
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -153,7 +159,9 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
           {/* Header inside Modal */}
           <div className="w-full flex items-center justify-between z-10">
             <button
+              type="button"
               onClick={onClose}
+              aria-label="إغلاق بوابة النفحات الإيمانية"
               className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 flex items-center justify-center text-slate-300 transition-all cursor-pointer active:scale-95 text-sm font-black"
             >
               ✕
@@ -172,7 +180,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
               className="absolute inset-0 bg-emerald-500/10 rounded-full blur-md"
             />
             
-            <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400/40 bg-[#121d2a] shadow-lg relative">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-400/40 bg-[#121d2a] shadow-lg relative shrink-0">
               <img 
                 src={companionIcon} 
                 alt="هِمَّتِي" 
@@ -277,12 +285,14 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
             
             <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-emerald-500/10">
               <button 
+                type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(`${SPIRITUAL_CAPSULES[currentCapsuleIndex].text} - ${SPIRITUAL_CAPSULES[currentCapsuleIndex].source}`);
                   if (setToastMessage) {
                     setToastMessage("تم نسخ النفحة الإيمانية بنجاح 📋");
                   }
                 }}
+                aria-label="نسخ نص النفحة الإيمانية"
                 className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 active:scale-95 rounded-xl transition-all cursor-pointer"
                 title="نسخ النفحة الإيمانية 📋"
               >

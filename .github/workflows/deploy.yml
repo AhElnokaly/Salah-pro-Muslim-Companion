@@ -5,13 +5,16 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build-and-deploy:
-    concurrency: ci-${{ github.ref }}
+    concurrency:
+      group: deploy-pages-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +28,10 @@ jobs:
           cache: npm
 
       - name: Install Dependencies 📦
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
+
+      - name: Type-Check & Quality Gate 🛡️
+        run: npm run lint
 
       - name: Build Project 🏗️
         run: npm run build

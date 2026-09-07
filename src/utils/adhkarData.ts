@@ -1484,7 +1484,8 @@ export function isDhikrItemVisible(item: DhikrItem, prayerKey?: string): boolean
     return true;
   }
   if (!prayerKey) return true;
-  return item.applicablePrayers.includes(prayerKey as any);
+  const normalizedKey = prayerKey.toLowerCase() as 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+  return item.applicablePrayers.includes(normalizedKey);
 }
 
 export function getDhikrItemRequiredCount(item: DhikrItem, prayerKey?: string): number {

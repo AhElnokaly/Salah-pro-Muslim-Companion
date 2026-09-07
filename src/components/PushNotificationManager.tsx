@@ -62,7 +62,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
     }
   };
 
-  const handleSettingToggle = (key: keyof PushNotificationSettings, value: any) => {
+  const handleSettingToggle = <K extends keyof PushNotificationSettings>(key: K, value: PushNotificationSettings[K]) => {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     savePushSettings(updated);
@@ -102,7 +102,9 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
 
           {onClose && (
             <button
+              type="button"
               onClick={onClose}
+              aria-label="إغلاق نافذة إدارة الإشعارات الفورية"
               className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -161,7 +163,12 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
           {testStatusMsg && (
             <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-extrabold flex items-center justify-between">
               <span>{testStatusMsg}</span>
-              <button onClick={() => setTestStatusMsg(null)} className="text-indigo-500 hover:text-indigo-700">
+              <button
+                type="button"
+                onClick={() => setTestStatusMsg(null)}
+                aria-label="إغلاق رسالة نتيجة فحص الإشعارات"
+                className="text-indigo-500 hover:text-indigo-700 p-1 cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>

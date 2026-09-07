@@ -178,4 +178,39 @@
 
     </LinearLayout>
 
+    <!-- Khushu Mode Quick Action & Status Bar -->
+    <LinearLayout
+        android:id="@+id/widget_khushu_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="#0f172a"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="6dp">
+
+        <TextView
+            android:id="@+id/widget_khushu_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="وضع الخشوع: هدوء وسكون"
+            android:textColor="#94a3b8"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_khushu_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#059669"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="تفعيل الخشوع 🔕"
+            android:textColor="#ffffff"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
 </LinearLayout>

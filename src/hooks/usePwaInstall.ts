@@ -36,7 +36,7 @@ export function usePwaInstall(): UsePwaInstallReturn {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone) {
+    if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
       setIsInstalled(true);
     }
 

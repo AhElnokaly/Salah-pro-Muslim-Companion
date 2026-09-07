@@ -11,11 +11,15 @@ import android.widget.RemoteViews
 import com.salahpro.app.MainActivity
 import com.salahpro.app.R
 import com.salahpro.app.plugins.AthanAlarmPlugin
+import com.salahpro.app.plugins.KhushuRestoreReceiver
 import org.json.JSONObject
 
 class SalahWidgetProvider : AppWidgetProvider() {
 
     companion object {
+        const val ACTION_TOGGLE_KHUSHU = "com.salahpro.app.widget.ACTION_TOGGLE_KHUSHU"
+        private const val KHUSHU_TOGGLE_REQUEST_CODE = 1001
+
         fun updateAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, SalahWidgetProvider::class.java)
@@ -41,6 +45,18 @@ class SalahWidgetProvider : AppWidgetProvider() {
             }
             val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
             views.setOnClickPendingIntent(R.id.widget_title, pendingIntent)
+
+            // Khushu quick toggle PendingIntent
+            val toggleIntent = Intent(context, SalahWidgetProvider::class.java).apply {
+                action = ACTION_TOGGLE_KHUSHU
+            }
+            val togglePendingIntent = PendingIntent.getBroadcast(
+                context,
+                KHUSHU_TOGGLE_REQUEST_CODE,
+                toggleIntent,
+                flags
+            )
+            views.setOnClickPendingIntent(R.id.widget_khushu_btn, togglePendingIntent)
 
             // Read stored times from SharedPreferences
             val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
@@ -70,6 +86,19 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 }
             }
 
+            // Update Khushu Mode state & button text
+            val isKhushuActive = KhushuRestoreReceiver.isKhushuActive(context)
+            val remainingMin = KhushuRestoreReceiver.getRemainingMinutes(context)
+            if (isKhushuActive) {
+                views.setTextViewText(R.id.widget_khushu_status, "الخشوع نشط: هدوء وسكون (متبقي $remainingMin د)")
+                views.setTextViewText(R.id.widget_khushu_btn, "إنهاء الخشوع 🔔")
+                views.setTextColor(R.id.widget_khushu_status, 0xFF34D399.toInt()) // emerald-400
+            } else {
+                views.setTextViewText(R.id.widget_khushu_status, "وضع الخشوع: هدوء وسكون")
+                views.setTextViewText(R.id.widget_khushu_btn, "تفعيل الخشوع 🔕")
+                views.setTextColor(R.id.widget_khushu_status, 0xFF94A3B8.toInt()) // slate-400
+            }
+
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }
     }
@@ -83,4 +112,19 @@ class SalahWidgetProvider : AppWidgetProvider() {
             updateWidget(context, appWidgetManager, appWidgetId)
         }
     }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_TOGGLE_KHUSHU) {
+            val isActive = KhushuRestoreReceiver.isKhushuActive(context)
+            if (isActive) {
+                KhushuRestoreReceiver.restoreOriginalState(context)
+            } else {
+                KhushuRestoreReceiver.activateKhushuDirectly(context, "silent", 30)
+            }
+            updateAllWidgets(context)
+        } else {
+            super.onReceive(context, intent)
+        }
+    }
 }
+

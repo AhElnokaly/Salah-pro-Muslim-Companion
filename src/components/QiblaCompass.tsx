@@ -19,16 +19,20 @@ import {
   Navigation
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AppSettings } from '../types';
+import { AppSettings, DashboardTab } from '../types';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
 import { detectUserLocation } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
 import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
+import { QiblaCompassDial } from './qibla/QiblaCompassDial';
+import { KaabaIsometricIcon } from './qibla/KaabaIsometricIcon';
+import { QiblaReadingsPanel } from './qibla/QiblaReadingsPanel';
+import { QiblaModals } from './qibla/QiblaModals';
 
 interface QiblaCompassProps {
   settings: AppSettings;
   setSettings?: React.Dispatch<React.SetStateAction<AppSettings>>;
-  setActiveTab?: React.Dispatch<React.SetStateAction<any>>;
+  setActiveTab?: React.Dispatch<React.SetStateAction<DashboardTab | string>>;
 }
 
 type SensorStatus = 'inactive' | 'requesting' | 'active' | 'error';
@@ -82,10 +86,11 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
       let heading: number | null = null;
+      const webkitEvent = e as DeviceOrientationEventWithWebkit;
       
       // 1. iOS absolute compass heading
-      if ((e as any).webkitCompassHeading !== undefined) {
-        heading = (e as any).webkitCompassHeading;
+      if (webkitEvent.webkitCompassHeading !== undefined) {
+        heading = webkitEvent.webkitCompassHeading;
       } 
       // 2. Android device orientation absolute alpha (if absolute is true)
       else if (e.alpha !== null && e.alpha !== undefined) {
@@ -103,7 +108,7 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
       }
     };
 
-    const handleAbsoluteOrientation = (e: any) => {
+    const handleAbsoluteOrientation = (e: DeviceOrientationEvent) => {
       if (e.alpha !== null && e.alpha !== undefined) {
         const heading = (360 - e.alpha) % 360;
         processHeading(heading);
@@ -115,11 +120,10 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
     };
 
     // Register both to ensure we catch whatever the browser fires
-    const win = window as any;
-    if ('ondeviceorientationabsolute' in win) {
-      win.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation, true);
+    if ('ondeviceorientationabsolute' in window) {
+      window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
     }
-    win.addEventListener('deviceorientation', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
 
     // Fallback detection: if no events fire after 1500ms, set as inactive (simulation fallback)
     const timeout = setTimeout(() => {
@@ -130,10 +134,10 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
 
     return () => {
       clearTimeout(timeout);
-      if ('ondeviceorientationabsolute' in win) {
-        win.removeEventListener('deviceorientationabsolute', handleAbsoluteOrientation, true);
+      if ('ondeviceorientationabsolute' in window) {
+        window.removeEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
       }
-      win.removeEventListener('deviceorientation', handleOrientation, true);
+      window.removeEventListener('deviceorientation', handleOrientation, true);
     };
   }, []);
 
@@ -177,7 +181,7 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
     setErrorMessage('');
     setSensorStatus('requesting');
     
-    const DeviceOrientation = (window as any).DeviceOrientationEvent;
+    const DeviceOrientation = window.DeviceOrientationEvent;
     
     if (!DeviceOrientation) {
       setSensorStatus('error');
@@ -251,53 +255,6 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
     ? 'transition-none' 
     : 'transition-transform duration-300 ease-out';
 
-  // Tick generator for Compass Dial (SVG format)
-  const renderCompassTicks = () => {
-    return Array.from({ length: 72 }).map((_, index) => {
-      const angle = index * 5;
-      const isMajor = angle % 30 === 0;
-      const isCardinal = angle % 90 === 0;
-      const tickLength = isCardinal ? 8 : isMajor ? 6 : 4;
-      const strokeWidth = isCardinal ? 1.2 : isMajor ? 0.8 : 0.5;
-      const strokeColor = isCardinal 
-        ? 'rgba(255, 255, 255, 0.85)' 
-        : isMajor 
-        ? 'rgba(255, 255, 255, 0.5)' 
-        : 'rgba(255, 255, 255, 0.2)';
-      
-      const r1 = 96;
-      const r2 = 96 - tickLength;
-      const rad = (angle * Math.PI) / 180;
-      const x1 = 100 + r1 * Math.sin(rad);
-      const y1 = 100 - r1 * Math.cos(rad);
-      const x2 = 100 + r2 * Math.sin(rad);
-      const y2 = 100 - r2 * Math.cos(rad);
-      
-      return (
-        <line
-          key={index}
-          x1={x1}
-          y1={y1}
-          x2={x2}
-          y2={y2}
-          stroke={strokeColor}
-          strokeWidth={strokeWidth}
-        />
-      );
-    });
-  };
-
-  const cardinalLabels = [
-    { text: 'N', angle: 0, isMajor: true },
-    { text: 'NE', angle: 45, isMajor: false },
-    { text: 'E', angle: 90, isMajor: true },
-    { text: 'SE', angle: 135, isMajor: false },
-    { text: 'S', angle: 180, isMajor: true },
-    { text: 'SW', angle: 225, isMajor: false },
-    { text: 'W', angle: 270, isMajor: true },
-    { text: 'NW', angle: 315, isMajor: false },
-  ];
-
   return (
     <motion.div 
       id="qibla-immersive-screen"
@@ -320,7 +277,7 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
       {/* 1. Top Bar: Title & Close Button */}
       <div className="flex items-center justify-between w-full relative z-10 px-2">
         <div className="flex items-center gap-2">
-          <Compass className="w-5 h-5 text-amber-300 animate-spin-slow" />
+          <Compass className="w-5 h-5 text-amber-300 animate-spin-slow" aria-hidden="true" />
           <span className="text-xs font-black tracking-wide text-white/85">بوصلة اتجاه القبلة</span>
         </div>
         {setActiveTab && (
@@ -328,28 +285,16 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
             onClick={() => setActiveTab('home')}
             className="p-2 rounded-full bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white cursor-pointer"
             title="إغلاق والعودة"
+            aria-label="إغلاق شاشة القبلة والعودة للرئيسية"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         )}
       </div>
 
       {/* 2. Top Center Kaaba minimalist 3D isometric representation */}
       <div className="flex flex-col items-center justify-center my-2 relative z-10">
-        <svg className="w-12 h-12 text-white/95 drop-shadow-[0_0_15px_rgba(255,255,255,0.15)]" viewBox="0 0 100 100" fill="none">
-          {/* Isometric Kaaba representation */}
-          {/* Top of Cube */}
-          <path d="M50 25 L75 35 L50 45 L25 35 Z" fill="#2c3540" stroke="#424f5e" strokeWidth="0.5" />
-          {/* Left wall */}
-          <path d="M25 35 L50 45 L50 72 L25 62 Z" fill="#151921" />
-          {/* Right wall */}
-          <path d="M50 45 L75 35 L75 62 L50 72 Z" fill="#0d1015" />
-          {/* Gold Belt (Kiswah gold band) */}
-          <path d="M25 43 L50 53 L50 55.5 L25 45.5 Z" fill="#d4af37" />
-          <path d="M50 53 L75 43 L75 45.5 L50 55.5 Z" fill="#bfa130" />
-          {/* Door of Kaaba */}
-          <path d="M57 50.5 L64 47.5 L64 58 L57 61 Z" fill="#d4af37" opacity="0.9" />
-        </svg>
+        <KaabaIsometricIcon />
       </div>
 
       {/* 3. Central Interactive Compass Area */}
@@ -379,63 +324,11 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
           } ${deviceHeading === null ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
         >
           {/* Compass Rotating Disk */}
-          <div 
-            className={`w-52 h-52 sm:w-60 sm:h-60 rounded-full border border-white/5 bg-[#050e14] shadow-inner flex items-center justify-center pointer-events-none relative ${dialTransitionClass}`}
-            style={{
-              transform: `rotate(${dialRotation}deg)`
-            }}
-          >
-            {/* SVG Tick Marks and Cardinal Directions */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 200">
-              {/* Ticks */}
-              {renderCompassTicks()}
-              
-              {/* English Cardinal Text Labels exactly rotating with the dial */}
-              {cardinalLabels.map((lbl, idx) => {
-                const rad = (lbl.angle * Math.PI) / 180;
-                const r = 76; // outer padding for labels
-                const x = 100 + r * Math.sin(rad);
-                const y = 100 - r * Math.cos(rad);
-                return (
-                  <text
-                    key={idx}
-                    x={x}
-                    y={y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className={`font-sans tracking-tighter ${
-                      lbl.isMajor 
-                        ? 'text-[11px] font-extrabold fill-white/90' 
-                        : 'text-[7.5px] font-bold fill-white/40'
-                    }`}
-                    transform={`rotate(${lbl.angle}, ${x}, ${y})`}
-                  >
-                    {lbl.text}
-                  </text>
-                );
-              })}
-
-              {/* Gold marker for Qibla direction inside the dial */}
-              {(() => {
-                const qRad = (qiblaAngle * Math.PI) / 180;
-                const qr = 54;
-                const qx = 100 + qr * Math.sin(qRad);
-                const qy = 100 - qr * Math.cos(qRad);
-                return (
-                  <g transform={`rotate(${qiblaAngle}, ${qx}, ${qy})`}>
-                    {/* Pulsing Qibla Pointer circle */}
-                    <circle cx={qx} cy={qy} r="6" className="fill-amber-400" />
-                    <text x={qx} y={qy} textAnchor="middle" dominantBaseline="middle" className="text-[7px] fill-slate-950 font-black">🕋</text>
-                  </g>
-                );
-              })()}
-            </svg>
-
-            {/* Subtle center background circle decoration */}
-            <div className="w-20 h-20 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center">
-              <span className="text-xl opacity-20">✨</span>
-            </div>
-          </div>
+          <QiblaCompassDial
+            dialRotation={dialRotation}
+            dialTransitionClass={dialTransitionClass}
+            qiblaAngle={qiblaAngle}
+          />
 
           {/* Stationary White / Green Triangle Pointer at the Bottom center, pointing inwards */}
           <div className="absolute bottom-1.5 flex flex-col items-center pointer-events-none transition-colors duration-500">
@@ -457,84 +350,37 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
       </div>
 
       {/* 4. Display Info & Readings */}
-      <div className="flex flex-col items-center justify-center space-y-2 relative z-10">
-        {/* Real-time Dynamic Big Digit Heading */}
-        <div className="text-5xl sm:text-6xl font-sans font-black tracking-tight text-white drop-shadow-md select-all">
-          {Math.round(currentHeading)}
-        </div>
-
-        {/* Descriptive Direction details */}
-        <div className="space-y-1.5 flex flex-col items-center">
-          <p className="text-white/65 text-xs font-semibold tracking-wide">
-            الاتجاه التقريبي للقبلة في
-          </p>
-          <div className="flex items-center gap-2">
-            <p className="text-white text-base sm:text-lg font-black tracking-wide">
-              {settings.cityName} {toArabicNumbers(Math.round(qiblaAngle))}°
-            </p>
-            {setSettings && (
-              <button
-                type="button"
-                disabled={isSyncingLoc}
-                onClick={async () => {
-                  setIsSyncingLoc(true);
-                  setLocFeedback('');
-                  try {
-                    const res = await detectUserLocation();
-                    setSettings(prev => ({
-                      ...prev,
-                      latitude: res.latitude,
-                      longitude: res.longitude,
-                      cityName: res.cityName
-                    }));
-                    setLocFeedback(`تم التحديث: ${res.cityName}`);
-                  } catch (e) {
-                    setLocFeedback('فشل المزامنة الحية');
-                  } finally {
-                    setIsSyncingLoc(false);
-                  }
-                }}
-                className="p-1.5 bg-white/10 hover:bg-white/20 text-emerald-300 rounded-full transition-all cursor-pointer border border-white/10 active:scale-95 text-xs flex items-center gap-1"
-                title="مزامنة الموقع الحالي عبر GPS / شبكة IP"
-              >
-                {isSyncingLoc ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
-                ) : (
-                  <Navigation className="w-3.5 h-3.5 text-emerald-300" />
-                )}
-              </button>
-            )}
-          </div>
-
-          {locFeedback && (
-            <p className="text-[10px] font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-              {locFeedback}
-            </p>
-          )}
-          
-          {isAligned && (
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="text-emerald-400 text-xs font-black flex items-center justify-center gap-1 mt-1 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shadow-xs"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>أنت الآن باتجاه القبلة الشريفة 🕋</span>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Help button for Brave/Chrome sensor issues */}
-        {deviceHeading === null && (
-          <button
-            onClick={() => setShowBraveHelp(true)}
-            className="text-[10px] font-bold text-cyan-300 hover:text-cyan-200 cursor-pointer underline underline-offset-2 flex items-center justify-center gap-1 mx-auto mt-2 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20 active:scale-95 transition-all"
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span>مشكلة في تفعيل المستشعر؟ اضغط هنا</span>
-          </button>
-        )}
-      </div>
+      <QiblaReadingsPanel
+        currentHeading={currentHeading}
+        qiblaAngle={qiblaAngle}
+        angleDiff={normalizedDiff}
+        settings={settings}
+        setSettings={setSettings}
+        isSyncingLoc={isSyncingLoc}
+        locFeedback={locFeedback}
+        isAligned={isAligned}
+        deviceHeading={deviceHeading}
+        onSyncLocation={async () => {
+          if (!setSettings) return;
+          setIsSyncingLoc(true);
+          setLocFeedback('');
+          try {
+            const res = await detectUserLocation();
+            setSettings(prev => ({
+              ...prev,
+              latitude: res.latitude,
+              longitude: res.longitude,
+              cityName: res.cityName
+            }));
+            setLocFeedback(`تم التحديث: ${res.cityName}`);
+          } catch (e) {
+            setLocFeedback('فشل المزامنة الحية');
+          } finally {
+            setIsSyncingLoc(false);
+          }
+        }}
+        onShowBraveHelp={() => setShowBraveHelp(true)}
+      />
 
       {/* 5. Bottom Status and calibration trigger */}
       <div className="flex items-center justify-between w-full border-t border-white/10 pt-4 px-2 mt-4 relative z-10">
@@ -548,6 +394,7 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
               setShowCalibrateModal(true);
             }
           }}
+          aria-label={deviceHeading === null ? 'تشغيل مستشعر بوصلة الهاتف' : 'بدء معايرة بوصلة الهاتف'}
           className="text-xs font-bold text-amber-300 hover:text-amber-200 cursor-pointer active:scale-95 transition-all bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-xl border border-white/5"
         >
           {deviceHeading === null ? 'تشغيل المستشعر' : 'معايرة'}
@@ -567,120 +414,13 @@ export default function QiblaCompass({ settings, setSettings, setActiveTab }: Qi
 
       </div>
 
-      {/* 6. Calibration Guidance Modal Overlay */}
-      <AnimatePresence>
-        {showCalibrateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 cursor-pointer" 
-              onClick={() => setShowCalibrateModal(false)}
-            />
-
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-end flex flex-col gap-4 text-white"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <RotateCw className="w-5 h-5 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
-                  <h3 className="text-sm font-black text-amber-400">طريقة معايرة البوصلة</h3>
-                </div>
-                <button
-                  onClick={() => setShowCalibrateModal(false)}
-                  className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3.5 text-xs font-semibold leading-relaxed text-white/95">
-                <p>لضمان الحصول على أدق اتجاه للقبلة الشريفة، يرجى اتباع الآتي:</p>
-                <ol className="list-decimal list-inside space-y-2 pe-1 text-[11px] text-white/80">
-                  <li>ضع الهاتف بشكل <span className="text-amber-300 font-bold">مستوٍ وموازٍ للأرض</span> تماماً في كف يدك.</li>
-                  <li>قم بتحريك هاتفك في الهواء برسم مسار دائري متقاطع على شكل رقم ثمانية بالإنجليزية (<span className="text-amber-300 font-black">∞</span>) عدة مرات.</li>
-                  <li>تجنب التواجد بالقرب من الأجهزة الإلكترونية أو الأجسام المعدنية والمغناطيسية لأنها تسبب تشتيت المستشعر.</li>
-                </ol>
-              </div>
-
-              {/* Animated Infinity SVG calibration pattern */}
-              <div className="flex justify-center py-2">
-                <svg className="w-24 h-12 text-amber-400/35" viewBox="0 0 100 50" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M 25 25 C 10 5, 5 45, 25 25 C 45 5, 50 45, 25 25 Z" className="animate-dash" strokeDasharray="100" strokeDashoffset="100" style={{ animation: 'dash 3s linear infinite' }} />
-                  <circle cx="25" cy="25" r="3" className="fill-amber-300 animate-pulse" />
-                </svg>
-              </div>
-
-              <button
-                onClick={() => setShowCalibrateModal(false)}
-                className="w-full py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-all active:scale-95 text-center shadow-md shadow-amber-500/10"
-              >
-                حسناً، فهمت
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 7. Brave / Chrome Sensor Activation Help Modal */}
-      <AnimatePresence>
-        {showBraveHelp && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 cursor-pointer" 
-              onClick={() => setShowBraveHelp(false)}
-            />
-
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-end flex flex-col gap-4 text-white"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="w-5 h-5 text-cyan-400" />
-                  <h3 className="text-sm font-black text-cyan-400">تفعيل بوصلة الهاتف (Brave / Chrome)</h3>
-                </div>
-                <button
-                  onClick={() => setShowBraveHelp(false)}
-                  className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs font-semibold leading-relaxed text-white/95">
-                <p>متصفحات مثل <span className="text-amber-400 font-bold">Brave</span> و <span className="text-amber-400 font-bold">Chrome</span> تقوم بحظر حساسات الهاتف افتراضياً لحمايتك. لتشغيل البوصلة تلقائياً، يرجى اتباع هذه الخطوة البسيطة:</p>
-                <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2 text-end">
-                  <p className="font-bold text-amber-300">من شريط العنوان بالمتصفح (في الأعلى أو الأسفل):</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-white/80">
-                    <li>اضغط على <span className="text-white font-bold">أيقونة القفل 🔒</span> أو <span className="text-white font-bold">أيقونة الإعدادات ⚙️</span> الموجودة بجانب رابط الموقع.</li>
-                    <li>ابحث عن إذن <span className="text-white font-bold">"المسشعر" (Sensors)</span> أو <span className="text-white font-bold">"الحركة والاتجاه" (Motion)</span>.</li>
-                    <li>قم بتغيير الإعداد إلى <span className="text-emerald-400 font-bold">"سماح" (Allow)</span>.</li>
-                    <li>أعد تحميل الصفحة، وستعمل البوصلة تلقائياً بنسبة 100%!</li>
-                  </ol>
-                </div>
-                <p className="text-[10px] text-white/60 text-center">أو يمكنك تدوير البوصلة يدوياً الآن بالمسح والسحب بإصبعك على شاشة الهاتف!</p>
-              </div>
-
-              <button
-                onClick={() => setShowBraveHelp(false)}
-                className="w-full py-2 bg-cyan-400 hover:bg-cyan-500 text-slate-950 font-black text-xs rounded-xl cursor-pointer transition-all active:scale-95 text-center shadow-md"
-              >
-                فهمت، شكراً لك
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* 6 & 7. Calibration Guidance & Browser Sensor Help Modals */}
+      <QiblaModals
+        showCalibrateModal={showCalibrateModal}
+        setShowCalibrateModal={setShowCalibrateModal}
+        showBraveHelp={showBraveHelp}
+        setShowBraveHelp={setShowBraveHelp}
+      />
 
     </motion.div>
   );

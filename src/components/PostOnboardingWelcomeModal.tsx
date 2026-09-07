@@ -16,7 +16,12 @@ export default function PostOnboardingWelcomeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in" dir="rtl">
-      <div className="bg-white dark:bg-[#131922] w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-end space-y-5 relative overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="نافذة الترحيب وبدء استخدام تطبيق هِمَّتِي"
+        className="bg-white dark:bg-[#131922] w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-end space-y-5 relative overflow-hidden"
+      >
         {/* Glow decoration */}
         <div className="absolute top-0 start-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -translate-x-10 -translate-y-10" />
 

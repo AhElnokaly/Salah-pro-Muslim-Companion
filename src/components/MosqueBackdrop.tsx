@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { BackdropType, BackdropRenderMode } from '../types';
 import { resolveRenderMode, getBackdropImagePath } from '../utils/backdropAssets';
+import { safeGetJSON } from '../utils/storage';
 
 export type { BackdropType };
 
@@ -402,19 +403,12 @@ function MosqueBackdropComponent({
   let effectiveOpacity = opacity ?? 75;
 
   if (typeof window !== 'undefined') {
-    try {
-      const saved = localStorage.getItem('salah_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!renderMode && parsed.backdropRenderMode) {
-          effectivePreference = parsed.backdropRenderMode;
-        }
-        if (opacity === undefined && parsed.backdropOpacity !== undefined) {
-          effectiveOpacity = parsed.backdropOpacity;
-        }
-      }
-    } catch (e) {
-      // ignore parse error
+    const parsed = safeGetJSON<Record<string, any>>('salah_settings', {});
+    if (!renderMode && parsed.backdropRenderMode) {
+      effectivePreference = parsed.backdropRenderMode;
+    }
+    if (opacity === undefined && parsed.backdropOpacity !== undefined) {
+      effectiveOpacity = parsed.backdropOpacity;
     }
   }
 

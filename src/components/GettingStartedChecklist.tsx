@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { safeSetItem } from '../utils/storage';
+import { safeSetItem, safeGetItem } from '../utils/storage';
 import { CheckCircle2, Circle, Sparkles, ChevronDown, ChevronUp, Compass, BookOpen, Clock, Heart } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
 
@@ -19,7 +19,7 @@ export default function GettingStartedChecklist({
   onNavigateTab
 }: GettingStartedChecklistProps) {
   const [isDismissed, setIsDismissed] = useState(() => {
-    return localStorage.getItem('salah_getting_started_dismissed') === 'true';
+    return safeGetItem('salah_getting_started_dismissed') === 'true';
   });
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -98,12 +98,15 @@ export default function GettingStartedChecklist({
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
+            aria-label={isExpanded ? 'طي قائمة خطوات البداية السريعة' : 'توسيع قائمة خطوات البداية السريعة'}
             className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl cursor-pointer"
           >
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           <button
+            type="button"
             onClick={() => {
               setIsDismissed(true);
               safeSetItem('salah_getting_started_dismissed', 'true');

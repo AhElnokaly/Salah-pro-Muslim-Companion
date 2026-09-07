@@ -25,9 +25,9 @@ export default function ThemeSettingsTab({
         
         <div className="grid grid-cols-3 gap-2">
           {[
-            { id: 'light', name: 'مضيء', icon: Sun },
-            { id: 'dark', name: 'ليلي', icon: Moon },
-            { id: 'system', name: 'تلقائي', icon: Monitor }
+            { id: 'light' as const, name: 'مضيء', icon: Sun },
+            { id: 'dark' as const, name: 'ليلي', icon: Moon },
+            { id: 'system' as const, name: 'تلقائي', icon: Monitor }
           ].map((t) => {
             const Icon = t.icon;
             const isSelected = settings.theme === t.id || (!settings.theme && t.id === 'system');
@@ -35,7 +35,7 @@ export default function ThemeSettingsTab({
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setSettings(prev => ({ ...prev, theme: t.id as any }))}
+                onClick={() => setSettings(prev => ({ ...prev, theme: t.id }))}
                 className={`p-3.5 rounded-2xl border flex flex-col items-center gap-1.5 font-black text-xs cursor-pointer transition-all ${
                   isSelected
                     ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-350'
@@ -140,15 +140,15 @@ export default function ThemeSettingsTab({
         </p>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { id: 'faith-bright', name: 'النمط الإيماني 🕌', desc: 'ألوان مشرقة مستوحاة من كسوة الكعبة والزخارف الذهبية' },
-            { id: 'glass-dark', name: 'النمط الزجاجي 🌌', desc: 'مظهر زجاجي شفاف مع تدرجات داكنة وهادئة ومريحة' }
+            { id: 'faith-bright' as const, name: 'النمط الإيماني 🕌', desc: 'ألوان مشرقة مستوحاة من كسوة الكعبة والزخارف الذهبية' },
+            { id: 'glass-dark' as const, name: 'النمط الزجاجي 🌌', desc: 'مظهر زجاجي شفاف مع تدرجات داكنة وهادئة ومريحة' }
           ].map((style) => {
             const isSelected = (settings.appStyle || 'glass-dark') === style.id;
             return (
               <button
                 key={style.id}
                 type="button"
-                onClick={() => setSettings(prev => ({ ...prev, appStyle: style.id as any }))}
+                onClick={() => setSettings(prev => ({ ...prev, appStyle: style.id }))}
                 className={`p-3 rounded-2xl border text-end flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer ${
                   isSelected
                     ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 ring-2 ring-indigo-400/20 shadow-xs'
@@ -242,7 +242,7 @@ export default function ThemeSettingsTab({
           <SpiritualThemePicker
             currentThemeId={settings.backdropStyle || 'auto'}
             onSelectTheme={(themeId) => {
-              setSettings(prev => ({ ...prev, backdropStyle: themeId as any }));
+              setSettings(prev => ({ ...prev, backdropStyle: themeId as AppSettings['backdropStyle'] }));
             }}
             columns={2}
           />

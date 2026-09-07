@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Dispatch, SetStateAction } from 'react';
-import { safeSetItem } from '../utils/storage';
+import { StorageFacade } from '../domain/storage/StorageFacade';
+import { DEFAULT_APP_SETTINGS } from '../config/defaultSettings';
 import { 
   AppSettings, 
   PrayerLog, 
@@ -13,25 +14,7 @@ import {
   VoluntaryPrayerLog
 } from '../types';
 
-export const DEFAULT_SETTINGS: AppSettings = {
-  latitude: 30.0444,
-  longitude: 31.2357,
-  cityName: 'القاهرة',
-  calcMethod: 'Egypt',
-  madhab: 'standard',
-  hijriOffset: 0,
-  adhanEnabled: {
-    Fajr: true,
-    Sunrise: false,
-    Dhuhr: true,
-    Asr: true,
-    Maghrib: true,
-    Isha: true
-  },
-  hasCompletedOnboarding: false,
-  backdropStyle: 'auto',
-  clockStyle: 'digital'
-};
+export const DEFAULT_SETTINGS: AppSettings = DEFAULT_APP_SETTINGS;
 
 export interface UseSpiritualStateReturn {
   settings: AppSettings;
@@ -58,8 +41,9 @@ export interface UseSpiritualStateReturn {
   storageWriteError: boolean;
 }
 
-function sanitizePrayerLogs(rawLogs: any): Record<string, Record<string, PrayerLog>> {
+function sanitizePrayerLogs(rawLogs: unknown): Record<string, Record<string, PrayerLog>> {
   if (!rawLogs || typeof rawLogs !== 'object') return {};
+  const logsObj = rawLogs as Record<string, unknown>;
   const cleaned: Record<string, Record<string, PrayerLog>> = {};
   const mapKey: Record<string, PrayerName> = {
     fajr: 'Fajr',
@@ -75,17 +59,17 @@ function sanitizePrayerLogs(rawLogs: any): Record<string, Record<string, PrayerL
     Sunrise: 'Sunrise',
   };
 
-  for (const dateKey of Object.keys(rawLogs)) {
+  for (const dateKey of Object.keys(logsObj)) {
     cleaned[dateKey] = {};
-    const day = rawLogs[dateKey] || {};
+    const day = (logsObj[dateKey] && typeof logsObj[dateKey] === 'object') ? logsObj[dateKey] as Record<string, unknown> : {};
     for (const pKey of Object.keys(day)) {
       const canonicalKey = mapKey[pKey] || mapKey[pKey.toLowerCase()] || pKey;
       const log = day[pKey];
       if (log && typeof log === 'object') {
-        const rawStatus = log.status;
-        const status = rawStatus === 'done' ? 'A' : (rawStatus || 'not_yet');
+        const rawStatus = (log as Record<string, unknown>).status;
+        const status = rawStatus === 'done' ? 'A' : ((rawStatus as PrayerLog['status']) || 'not_yet');
         cleaned[dateKey][canonicalKey] = {
-          ...log,
+          ...(log as PrayerLog),
           status
         };
       }
@@ -114,174 +98,147 @@ export function useSpiritualState(): UseSpiritualStateReturn {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [storageWriteError, setStorageWriteError] = useState<boolean>(false);
 
-  // 1. Load data from LocalStorage on mount
+  // 1. Load data synchronously on mount for zero-flash initial render, then verify with IndexedDB
   useEffect(() => {
     try {
-      const storedSettings = localStorage.getItem('mc_settings');
-      const storedPrayerLogs = localStorage.getItem('mc_prayer_logs');
-      const storedPendingQada = localStorage.getItem('mc_pending_qada');
-      const storedVoluntary = localStorage.getItem('mc_voluntary_prayer_logs');
-      const storedFasting = localStorage.getItem('mc_fasting_logs');
-      const storedRamadanQada = localStorage.getItem('mc_ramadan_qada');
-      const storedQuranSessions = localStorage.getItem('mc_quran_sessions');
-      const storedKhatmat = localStorage.getItem('mc_khatmat');
-      const storedDhikrLogs = localStorage.getItem('mc_dhikr_logs');
-      const storedCustomDuas = localStorage.getItem('mc_custom_duas');
+      const storedSettings = StorageFacade.getSettings<Partial<AppSettings>>({});
+      if (storedSettings && Object.keys(storedSettings).length > 0) {
+        setSettings(prev => ({ ...prev, ...storedSettings }));
+      }
 
-      if (storedSettings) {
-        try {
-          const parsed = JSON.parse(storedSettings);
-          setSettings(prev => ({ ...prev, ...parsed }));
-        } catch (e) {
-          console.error('Failed parsing mc_settings:', e);
-        }
+      const storedPrayerLogs = StorageFacade.getPrayerLogsSync<Record<string, unknown>>({});
+      if (storedPrayerLogs && Object.keys(storedPrayerLogs).length > 0) {
+        setPrayerLogs(sanitizePrayerLogs(storedPrayerLogs));
       }
-      if (storedPrayerLogs) {
-        try {
-          const parsed = JSON.parse(storedPrayerLogs);
-          setPrayerLogs(sanitizePrayerLogs(parsed));
-        } catch (e) {
-          console.error('Failed parsing mc_prayer_logs:', e);
-        }
+
+      const storedPendingQada = StorageFacade.getPendingQadaSync<PendingQadaPrayer[]>([]);
+      if (storedPendingQada.length > 0) {
+        setPendingQadaPrayers(storedPendingQada);
       }
-      if (storedPendingQada) {
-        try {
-          setPendingQadaPrayers(JSON.parse(storedPendingQada));
-        } catch (e) {
-          console.error('Failed parsing mc_pending_qada:', e);
-        }
+
+      const storedVoluntary = StorageFacade.getVoluntaryPrayersSync<VoluntaryPrayerLog[]>([]);
+      if (storedVoluntary.length > 0) {
+        setVoluntaryPrayerLogs(storedVoluntary);
       }
-      if (storedVoluntary) {
-        try {
-          setVoluntaryPrayerLogs(JSON.parse(storedVoluntary));
-        } catch (e) {
-          console.error('Failed parsing mc_voluntary_prayer_logs:', e);
-        }
+
+      const storedFasting = StorageFacade.getFastingLogsSync<Record<string, FastingLog>>({});
+      if (storedFasting && Object.keys(storedFasting).length > 0) {
+        setFastingLogs(storedFasting);
       }
-      if (storedFasting) {
-        try {
-          setFastingLogs(JSON.parse(storedFasting));
-        } catch (e) {
-          console.error('Failed parsing mc_fasting_logs:', e);
-        }
+
+      const storedRamadanQada = StorageFacade.getRamadanQadaSync<Partial<RamadanQadaTracker>>({});
+      if (storedRamadanQada && Object.keys(storedRamadanQada).length > 0) {
+        setRamadanQada(prev => ({
+          daysOwed: typeof storedRamadanQada.daysOwed === 'number' ? storedRamadanQada.daysOwed : prev.daysOwed,
+          daysCompleted: typeof storedRamadanQada.daysCompleted === 'number' ? storedRamadanQada.daysCompleted : prev.daysCompleted,
+          trackMode: storedRamadanQada.trackMode || prev.trackMode,
+          fidyaTarget: typeof storedRamadanQada.fidyaTarget === 'number' ? storedRamadanQada.fidyaTarget : prev.fidyaTarget,
+          fidyaCompleted: typeof storedRamadanQada.fidyaCompleted === 'number' ? storedRamadanQada.fidyaCompleted : prev.fidyaCompleted,
+        }));
       }
-      if (storedRamadanQada) {
-        try {
-          const parsed = JSON.parse(storedRamadanQada);
-          setRamadanQada(prev => ({
-            daysOwed: typeof parsed.daysOwed === 'number' ? parsed.daysOwed : prev.daysOwed,
-            daysCompleted: typeof parsed.daysCompleted === 'number' ? parsed.daysCompleted : prev.daysCompleted,
-            trackMode: parsed.trackMode || prev.trackMode,
-            fidyaTarget: typeof parsed.fidyaTarget === 'number' ? parsed.fidyaTarget : prev.fidyaTarget,
-            fidyaCompleted: typeof parsed.fidyaCompleted === 'number' ? parsed.fidyaCompleted : prev.fidyaCompleted,
-          }));
-        } catch (e) {
-          console.error('Failed parsing mc_ramadan_qada:', e);
-        }
+
+      const storedQuranSessions = StorageFacade.getQuranSessionsSync<QuranSession[]>([]);
+      if (storedQuranSessions.length > 0) {
+        setQuranSessions(storedQuranSessions);
       }
-      if (storedQuranSessions) {
-        try {
-          setQuranSessions(JSON.parse(storedQuranSessions));
-        } catch (e) {
-          console.error('Failed parsing mc_quran_sessions:', e);
-        }
+
+      const storedKhatmat = StorageFacade.getKhatmatSync<QuranKhatma[]>([]);
+      if (storedKhatmat.length > 0) {
+        setKhatmat(storedKhatmat);
       }
-      if (storedKhatmat) {
-        try {
-          setKhatmat(JSON.parse(storedKhatmat));
-        } catch (e) {
-          console.error('Failed parsing mc_khatmat:', e);
-        }
+
+      const storedDhikrLogs = StorageFacade.getDhikrLogsSync<Record<string, Record<string, number>>>({});
+      if (storedDhikrLogs && Object.keys(storedDhikrLogs).length > 0) {
+        setDhikrLogs(storedDhikrLogs);
       }
-      if (storedDhikrLogs) {
-        try {
-          setDhikrLogs(JSON.parse(storedDhikrLogs));
-        } catch (e) {
-          console.error('Failed parsing mc_dhikr_logs:', e);
-        }
+
+      const storedCustomDuas = StorageFacade.getCustomDuasSync<CustomDua[]>([]);
+      if (storedCustomDuas.length > 0) {
+        setCustomDuas(storedCustomDuas);
       }
-      if (storedCustomDuas) {
+
+      // Background IndexedDB reconciliation: if local data was cleared or empty, hydrate from IndexedDB
+      StorageFacade.initAndMigrate().then(async () => {
         try {
-          setCustomDuas(JSON.parse(storedCustomDuas));
-        } catch (e) {
-          console.error('Failed parsing mc_custom_duas:', e);
+          if (!storedPrayerLogs || Object.keys(storedPrayerLogs).length === 0) {
+            const idbLogs = await StorageFacade.getPrayerLogs<Record<string, unknown>>({});
+            if (idbLogs && Object.keys(idbLogs).length > 0) {
+              setPrayerLogs(sanitizePrayerLogs(idbLogs));
+            }
+          }
+          if (storedPendingQada.length === 0) {
+            const idbQada = await StorageFacade.getQadaLedger<PendingQadaPrayer[]>([]);
+            if (idbQada && idbQada.length > 0) {
+              setPendingQadaPrayers(idbQada);
+            }
+          }
+          if (storedQuranSessions.length === 0) {
+            const idbSessions = await StorageFacade.getQuranSessions<QuranSession[]>([]);
+            if (idbSessions && idbSessions.length > 0) {
+              setQuranSessions(idbSessions);
+            }
+          }
+        } catch (reconcileErr) {
+          console.warn('[useSpiritualState] Background IDB hydration error:', reconcileErr);
         }
-      }
+      });
     } catch (e) {
-      console.error('Error loading states from localStorage', e);
+      console.error('Error loading states from StorageFacade', e);
     }
     setIsLoaded(true);
   }, []);
 
-  // 2. Persist state changes to LocalStorage
+  // 2. Persist state changes through StorageFacade (IndexedDB + localStorage fallback)
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_settings', JSON.stringify(settings))) {
+    if (!StorageFacade.saveSettings(settings)) {
       setStorageWriteError(true);
     }
   }, [settings, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_prayer_logs', JSON.stringify(prayerLogs))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.savePrayerLogs(prayerLogs).catch(() => setStorageWriteError(true));
   }, [prayerLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_pending_qada', JSON.stringify(pendingQadaPrayers))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveQadaLedger(pendingQadaPrayers).catch(() => setStorageWriteError(true));
   }, [pendingQadaPrayers, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_voluntary_prayer_logs', JSON.stringify(voluntaryPrayerLogs))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveVoluntaryPrayers(voluntaryPrayerLogs).catch(() => setStorageWriteError(true));
   }, [voluntaryPrayerLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_fasting_logs', JSON.stringify(fastingLogs))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveFastingLogs(fastingLogs).catch(() => setStorageWriteError(true));
   }, [fastingLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_ramadan_qada', JSON.stringify(ramadanQada))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveRamadanQada(ramadanQada).catch(() => setStorageWriteError(true));
   }, [ramadanQada, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_quran_sessions', JSON.stringify(quranSessions))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveQuranSessions(quranSessions).catch(() => setStorageWriteError(true));
   }, [quranSessions, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_khatmat', JSON.stringify(khatmat))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveKhatmat(khatmat).catch(() => setStorageWriteError(true));
   }, [khatmat, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_dhikr_logs', JSON.stringify(dhikrLogs))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveDhikrHistory(dhikrLogs).catch(() => setStorageWriteError(true));
   }, [dhikrLogs, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!safeSetItem('mc_custom_duas', JSON.stringify(customDuas))) {
-      setStorageWriteError(true);
-    }
+    StorageFacade.saveCustomDuas(customDuas).catch(() => setStorageWriteError(true));
   }, [customDuas, isLoaded]);
 
   return {

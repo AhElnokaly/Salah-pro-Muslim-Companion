@@ -1,4 +1,5 @@
-import { safeSetItem } from './storage';
+import { safeSetItem, safeGetJSON, safeSetJSON } from './storage';
+import { PrayerTimes } from '../types';
 
 const CACHE_KEY = 'salah_location_prayer_cache_v2';
 const MAX_LOCATION_ENTRIES = 3; // Store up to 3 most recent locations (LRU)
@@ -6,7 +7,7 @@ export const SUBSTANTIAL_DISTANCE_THRESHOLD_KM = 25; // 25km threshold
 
 export interface DailyScheduleEntry {
   dateStr: string; // 'YYYY-MM-DD'
-  timesMap: Record<string, string>;
+  timesMap: Record<string, string> | PrayerTimes;
 }
 
 export interface CachedLocationSchedule {
@@ -67,28 +68,18 @@ function getOffsetsKey(offsets: Record<string, number>): string {
 }
 
 function loadCacheStore(): CacheStore {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return { locations: [] };
-    const parsed = JSON.parse(raw);
-    return { locations: Array.isArray(parsed.locations) ? parsed.locations : [] };
-  } catch (err) {
-    console.warn('[LocationCache] Error loading cache store:', err);
-    return { locations: [] };
-  }
+  const parsed = safeGetJSON<CacheStore | null>(CACHE_KEY, null);
+  if (!parsed || !Array.isArray(parsed.locations)) return { locations: [] };
+  return { locations: parsed.locations };
 }
 
 function saveCacheStore(store: CacheStore): void {
-  try {
-    // Sort locations by timestamp descending (most recent first) and keep top 3 (LRU)
-    const sorted = [...store.locations]
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, MAX_LOCATION_ENTRIES);
+  // Sort locations by timestamp descending (most recent first) and keep top 3 (LRU)
+  const sorted = [...store.locations]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, MAX_LOCATION_ENTRIES);
 
-    safeSetItem(CACHE_KEY, JSON.stringify({ locations: sorted }));
-  } catch (err) {
-    console.warn('[LocationCache] Error saving cache store:', err);
-  }
+  safeSetJSON(CACHE_KEY, { locations: sorted });
 }
 
 /**
@@ -133,7 +124,7 @@ export function saveLocationSchedule(
   calcMethod: string,
   madhab: string,
   prayerOffsets: Record<string, number>,
-  daysList: Array<{ date: Date; timesMap: Record<string, string> }>,
+  daysList: Array<{ date: Date; timesMap: Record<string, string> | PrayerTimes }>,
   cityName?: string
 ): CachedLocationSchedule {
   const store = loadCacheStore();

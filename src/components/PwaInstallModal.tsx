@@ -27,6 +27,9 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 350 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="نافذة تثبيت تطبيق هِمَّتِي"
           className="bg-white dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-end flex flex-col gap-4 text-slate-800 dark:text-slate-100"
         >
           {/* Header */}
@@ -40,6 +43,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 transition-all cursor-pointer text-xs font-black"
+              aria-label="إغلاق نافذة تثبيت تطبيق هِمَّتِي"
             >
               ✕
             </button>

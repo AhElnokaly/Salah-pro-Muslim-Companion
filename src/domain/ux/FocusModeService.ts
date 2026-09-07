@@ -1,3 +1,5 @@
+import { safeGetJSON, safeSetJSON } from '../../utils/storage';
+
 /**
  * Focus Mode & Home Modes Manager
  */
@@ -16,44 +18,27 @@ const FOCUS_MODE_STORAGE_KEY = 'hemmaty_focus_mode_state';
 
 export class FocusModeService {
   static getFocusState(): FocusModeState {
-    if (typeof window === 'undefined') {
-      return {
-        isFocusModeActive: false,
-        homeLayoutMode: 'balanced',
-        largeTextEnabled: false,
-        reducedMotionEnabled: false,
-        highContrastEnabled: false,
-      };
-    }
-
-    try {
-      const raw = localStorage.getItem(FOCUS_MODE_STORAGE_KEY);
-      if (raw) {
-        return JSON.parse(raw);
-      }
-    } catch {
-      // ignore
-    }
-
-    return {
+    const defaultState: FocusModeState = {
       isFocusModeActive: false,
       homeLayoutMode: 'balanced',
       largeTextEnabled: false,
       reducedMotionEnabled: false,
       highContrastEnabled: false,
     };
+
+    if (typeof window === 'undefined') {
+      return defaultState;
+    }
+
+    return safeGetJSON<FocusModeState>(FOCUS_MODE_STORAGE_KEY, defaultState);
   }
 
   static saveFocusState(state: Partial<FocusModeState>): FocusModeState {
     const current = this.getFocusState();
     const updated = { ...current, ...state };
     if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(FOCUS_MODE_STORAGE_KEY, JSON.stringify(updated));
-        this.applyAccessibilityClasses(updated);
-      } catch {
-        // ignore
-      }
+      safeSetJSON(FOCUS_MODE_STORAGE_KEY, updated);
+      this.applyAccessibilityClasses(updated);
     }
     return updated;
   }

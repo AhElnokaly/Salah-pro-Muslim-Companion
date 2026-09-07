@@ -47,7 +47,12 @@ export default function CustomNoticeModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn" dir="rtl">
-      <div className={`bg-white dark:bg-[#18202c] border ${headerColorMap[type]} rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-end transition-all`}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`تنبيه: ${title}`}
+        className={`bg-white dark:bg-[#18202c] border ${headerColorMap[type]} rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-end transition-all`}
+      >
         <div className={`flex items-center gap-2.5 font-black text-base ${headerColorMap[type]}`}>
           {iconMap[type]}
           <h3>{title}</h3>

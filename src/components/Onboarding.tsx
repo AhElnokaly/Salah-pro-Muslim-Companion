@@ -233,6 +233,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     type="button"
                     onClick={() => setHijriOffset(prev => Math.max(-2, prev - 1))}
+                    aria-label="إنقاص يوم من التاريخ الهجري"
                     className="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-bold text-gray-600 border border-gray-200 hover:bg-gray-100 cursor-pointer"
                   >
                     -
@@ -243,6 +244,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     type="button"
                     onClick={() => setHijriOffset(prev => Math.min(2, prev + 1))}
+                    aria-label="زيادة يوم إلى التاريخ الهجري"
                     className="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-bold text-gray-600 border border-gray-200 hover:bg-gray-100 cursor-pointer"
                   >
                     +

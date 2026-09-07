@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { safeSetItem } from './storage';
+import { safeSetItem, safeGetJSON, safeSetJSON } from './storage';
 import { parseTimeToMinutes } from './prayerCalc';
 import { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
 
@@ -55,13 +55,9 @@ const SETTINGS_STORAGE_KEY = 'mc_push_settings_v1';
  * Read saved push settings
  */
 export function getPushSettings(): PushNotificationSettings {
-  try {
-    const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (saved) {
-      return { ...DEFAULT_PUSH_SETTINGS, ...JSON.parse(saved) };
-    }
-  } catch (e) {
-    console.error('Error reading push settings', e);
+  const saved = safeGetJSON<Partial<PushNotificationSettings> | null>(SETTINGS_STORAGE_KEY, null);
+  if (saved) {
+    return { ...DEFAULT_PUSH_SETTINGS, ...saved };
   }
   return DEFAULT_PUSH_SETTINGS;
 }
@@ -70,7 +66,7 @@ export function getPushSettings(): PushNotificationSettings {
  * Save push settings
  */
 export function savePushSettings(settings: PushNotificationSettings): void {
-  safeSetItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  safeSetJSON(SETTINGS_STORAGE_KEY, settings);
 }
 
 /**
@@ -126,27 +122,28 @@ export async function requestPushPermission(): Promise<NotificationPermission> {
   }
 }
 
+import { AppSettings } from '../types';
 import { syncUpcomingPrayerSchedule } from './prayerScheduleSync';
 
 /**
  * Sync calculated prayer schedule with Service Worker for background notifications when browser is minimized/closed
  */
-export async function syncPrayerScheduleWithSW(settings: any): Promise<void> {
+export async function syncPrayerScheduleWithSW(settings: AppSettings): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    let reg = await navigator.serviceWorker.getRegistration();
+    let reg: ServiceWorkerRegistration | null | undefined = await navigator.serviceWorker.getRegistration();
     if (!reg) {
       reg = await registerServiceWorker();
     }
     if (!reg) return;
 
     // Register periodic sync if supported
-    if ('periodicSync' in reg) {
+    if (reg.periodicSync) {
       try {
-        const tags = await (reg as any).periodicSync.getTags();
+        const tags = await reg.periodicSync.getTags();
         if (!tags.includes('prayer-check')) {
-          await (reg as any).periodicSync.register('prayer-check', {
+          await reg.periodicSync.register('prayer-check', {
             minInterval: 15 * 60 * 1000 // Every 15 mins
           });
         }
@@ -193,6 +190,62 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 }
 
 /**
+ * Display a notification safely across Mobile/Android (Chrome/PWA) and Desktop browsers.
+ * Uses ServiceWorkerRegistration.showNotification() when available, with a resilient fallback
+ * that prevents "Failed to construct 'Notification': Illegal constructor" crashes on Android.
+ */
+export async function showAppNotification(
+  title: string,
+  options?: NotificationOptions & { soundType?: string; url?: string }
+): Promise<boolean> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return false;
+  }
+
+  if (Notification.permission !== 'granted') {
+    return false;
+  }
+
+  const defaultOptions: NotificationOptions = {
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    dir: 'rtl',
+    lang: 'ar',
+    ...options,
+  };
+
+  // 1. Try Service Worker showNotification first (Mandatory for Android Chrome & Mobile PWAs)
+  if ('serviceWorker' in navigator) {
+    try {
+      let reg: ServiceWorkerRegistration | undefined = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<undefined>((r) => setTimeout(() => r(undefined), 2000))
+        ]) as ServiceWorkerRegistration | undefined;
+      }
+
+      if (reg && typeof reg.showNotification === 'function') {
+        await reg.showNotification(title, defaultOptions);
+        return true;
+      }
+    } catch (swErr) {
+      console.warn('[PushNotification] SW showNotification error:', swErr);
+    }
+  }
+
+  // 2. Fallback to desktop window Notification constructor
+  try {
+    new Notification(title, defaultOptions);
+    return true;
+  } catch (winNotifErr) {
+    // On Android Chrome, 'new Notification()' throws TypeError: Illegal constructor.
+    console.warn('[PushNotification] Window Notification constructor not supported on this platform:', winNotifErr);
+    return false;
+  }
+}
+
+/**
  * Trigger a Push Notification via Service Worker or Native Notification API
  */
 export async function sendPushNotification(
@@ -211,7 +264,7 @@ export async function sendPushNotification(
     return false;
   }
 
-  const defaultOptions: any = {
+  const defaultOptions: NotificationOptions & { soundType?: string; url?: string; vibrate?: number | number[] } = {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     dir: 'rtl',
@@ -221,22 +274,11 @@ export async function sendPushNotification(
   };
 
   try {
-    // Try via Service Worker first for better background support
-    if ('serviceWorker' in navigator) {
-      const swReadyPromise = navigator.serviceWorker.ready;
-      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 1500));
-      const reg = await Promise.race([swReadyPromise, timeoutPromise]);
-      if (reg && reg.showNotification) {
-        await reg.showNotification(title, defaultOptions);
-        triggerNotificationSound(options?.soundType, settings);
-        return true;
-      }
+    const shown = await showAppNotification(title, defaultOptions);
+    if (shown) {
+      triggerNotificationSound(options?.soundType, settings);
     }
-
-    // Fallback to Window Notification API
-    new Notification(title, defaultOptions);
-    triggerNotificationSound(options?.soundType, settings);
-    return true;
+    return shown;
   } catch (e) {
     console.error('[PushService] Error triggering notification:', e);
     return false;

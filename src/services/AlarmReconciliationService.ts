@@ -3,9 +3,9 @@
  * Compares desired upcoming prayer alarms with scheduled state and updates accordingly.
  */
 
-import AthanAlarm from './athanAlarmPlugin';
-import { AlarmIdentifier } from '../domain/notifications/AlarmIdentifier';
-import { calculatePrayerTimes } from '../utils/prayerCalc';
+import { UnifiedNotificationOrchestrator } from '../domain/notifications/UnifiedNotificationOrchestrator';
+import { NotificationScheduler } from './NotificationScheduler';
+import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { AppSettings, PrayerTimes } from '../types';
 
 export interface ReconciliationStatus {
@@ -13,46 +13,64 @@ export interface ReconciliationStatus {
   scheduledCount: number;
   missingCount: number;
   obsoleteCount: number;
+  retainedCount: number;
   success: boolean;
 }
 
 export class AlarmReconciliationService {
   /**
-   * Reconciles current alarms for today and tomorrow
+   * Reconciles current alarms for today and tomorrow with true state diffing
    */
   static async reconcileAlarms(settings: AppSettings): Promise<ReconciliationStatus> {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const getLocalFormattedDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const todayStr = getLocalFormattedDate(now);
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const tomorrowStr = getLocalFormattedDate(tomorrow);
+
+    const lat = settings.latitude ?? 30.0444;
+    const lng = settings.longitude ?? 31.2357;
+    const calcMethod = settings.calcMethod ?? 'Egypt';
+    const madhab = settings.madhab ?? 'standard';
+    const offsets = settings.prayerOffsets ?? {};
+
+    const todayTzOffset = getTimezoneOffsetForLocation(now, settings.timezoneId);
+    const tomorrowTzOffset = getTimezoneOffsetForLocation(tomorrow, settings.timezoneId);
 
     const todayTimes = calculatePrayerTimes(
       now,
-      settings.latitude,
-      settings.longitude,
-      0,
-      settings.calcMethod,
-      settings.madhab
+      lat,
+      lng,
+      todayTzOffset,
+      calcMethod,
+      madhab,
+      offsets
     );
 
     const tomorrowTimes = calculatePrayerTimes(
       tomorrow,
-      settings.latitude,
-      settings.longitude,
-      0,
-      settings.calcMethod,
-      settings.madhab
+      lat,
+      lng,
+      tomorrowTzOffset,
+      calcMethod,
+      madhab,
+      offsets
     );
 
     const desiredAlarms: Array<{ key: string; name: string; timeMs: number; dateStr: string }> = [];
 
-    const processTimes = (dateStr: string, times: PrayerTimes) => {
+    const processTimes = (dateObj: Date, dateStr: string, times: PrayerTimes) => {
       const keys = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
       for (const key of keys) {
         if (!settings.adhanEnabled?.[key] || !times[key]) continue;
-        const [hours, mins] = times[key].split(':').map(Number);
-        const triggerDate = new Date(`${dateStr}T${times[key]}:00`);
+        const timeStr = times[key];
+        const minutes = parseTimeToMinutes(timeStr);
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        const triggerDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hours, mins, 0, 0);
+
         if (!isNaN(triggerDate.getTime()) && triggerDate.getTime() > now.getTime()) {
           desiredAlarms.push({
             key,
@@ -64,32 +82,63 @@ export class AlarmReconciliationService {
       }
     };
 
-    processTimes(todayStr, todayTimes);
-    processTimes(tomorrowStr, tomorrowTimes);
+    processTimes(now, todayStr, todayTimes);
+    processTimes(tomorrow, tomorrowStr, tomorrowTimes);
 
     try {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-        const timesForNative = desiredAlarms.map((item) => ({
-          prayerKey: item.key,
-          prayerName: item.name,
-          timeMs: item.timeMs,
-          isFajr: item.key === 'Fajr',
-        }));
+      // 1. Fetch currently active scheduled alarms from native layer
+      const scheduledState = await UnifiedNotificationOrchestrator.getScheduledAlarms();
+      const currentAlarms = scheduledState.alarms || [];
 
-        await AthanAlarm.scheduleAthanAlarms({
-          times: timesForNative,
-          lat: settings.latitude,
-          lng: settings.longitude,
-          calcMethod: settings.calcMethod,
-          madhab: settings.madhab,
-        });
+      // 2. Compute Real Diff: Missing, Obsolete, and Retained
+      // Match by prayerKey and time within 60-second window
+      let retainedCount = 0;
+      let missingCount = 0;
+
+      for (const desired of desiredAlarms) {
+        const isMatched = currentAlarms.some(curr => 
+          curr.prayerKey.toLowerCase() === desired.key.toLowerCase() &&
+          Math.abs(curr.timeMs - desired.timeMs) < 60000
+        );
+        if (isMatched) {
+          retainedCount++;
+        } else {
+          missingCount++;
+        }
       }
+
+      let obsoleteCount = 0;
+      for (const curr of currentAlarms) {
+        const isStillDesired = desiredAlarms.some(desired => 
+          desired.key.toLowerCase() === curr.prayerKey.toLowerCase() &&
+          Math.abs(desired.timeMs - curr.timeMs) < 60000
+        );
+        if (!isStillDesired) {
+          obsoleteCount++;
+        }
+      }
+
+      // 3. Execute reconciliation through Unified Notification Orchestrator
+      const enabledPrayers = (settings.adhanEnabled || {}) as Record<string, boolean>;
+      await UnifiedNotificationOrchestrator.syncAllNotificationChannels(
+        settings,
+        todayStr,
+        todayTimes,
+        enabledPrayers
+      );
+      await UnifiedNotificationOrchestrator.syncAllNotificationChannels(
+        settings,
+        tomorrowStr,
+        tomorrowTimes,
+        enabledPrayers
+      );
 
       return {
         lastReconciledAt: new Date().toISOString(),
         scheduledCount: desiredAlarms.length,
-        missingCount: 0,
-        obsoleteCount: 0,
+        missingCount,
+        obsoleteCount,
+        retainedCount,
         success: true,
       };
     } catch (err) {
@@ -99,6 +148,7 @@ export class AlarmReconciliationService {
         scheduledCount: 0,
         missingCount: desiredAlarms.length,
         obsoleteCount: 0,
+        retainedCount: 0,
         success: false,
       };
     }
@@ -110,29 +160,14 @@ export class AlarmReconciliationService {
   static async scheduleTestAlarm(seconds = 60): Promise<boolean> {
     const triggerAt = Date.now() + seconds * 1000;
     try {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-        await AthanAlarm.scheduleAthanAlarms({
-          times: [
-            {
-              prayerKey: 'Test',
-              prayerName: 'تجربة الأذان',
-              timeMs: triggerAt,
-            },
-          ],
-        });
-        return true;
-      } else if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'granted') {
-          setTimeout(() => {
-            new Notification('تجربة الأذان - هِمَّتِي', {
-              body: 'تنبيه الأذان التجريبي يعمل بنجاح!',
-              icon: '/icon-192.png',
-            });
-          }, seconds * 1000);
-          return true;
-        }
-      }
-      return false;
+      // Reserved test-alarm ID range [1,999] — never use for real prayer alarms (those use [1000, 10000999] via getDeterministicRequestCode).
+      return await NotificationScheduler.schedule({
+        id: 1,
+        title: 'تجربة الأذان',
+        body: 'تنبيه الأذان التجريبي يعمل بنجاح!',
+        triggerAt,
+        tag: 'Test',
+      });
     } catch (err) {
       console.error('[AlarmReconciliationService] Test alarm error:', err);
       return false;

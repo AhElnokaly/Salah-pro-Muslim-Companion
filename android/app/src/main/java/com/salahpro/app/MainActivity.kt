@@ -7,6 +7,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.getcapacitor.BridgeActivity
 import com.salahpro.app.plugins.AthanAlarmPlugin
+import com.salahpro.app.plugins.KhushuModePlugin
 import com.salahpro.app.plugins.ScheduleRenewalWorker
 import java.util.concurrent.TimeUnit
 
@@ -14,6 +15,7 @@ class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         registerPlugin(AthanAlarmPlugin::class.java)
+        registerPlugin(KhushuModePlugin::class.java)
 
         try {
             val renewalWorkRequest = PeriodicWorkRequestBuilder<ScheduleRenewalWorker>(3, TimeUnit.DAYS).build()

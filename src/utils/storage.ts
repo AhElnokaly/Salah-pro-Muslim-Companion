@@ -3,6 +3,7 @@
  * Returns true if the write succeeded, or false if it threw an error (e.g., quota exceeded).
  */
 export function safeSetItem(key: string, value: string): boolean {
+  if (typeof localStorage === 'undefined') return false;
   try {
     localStorage.setItem(key, value);
     return true;
@@ -16,6 +17,7 @@ export function safeSetItem(key: string, value: string): boolean {
  * Safely reads a value from localStorage with error handling.
  */
 export function safeGetItem(key: string): string | null {
+  if (typeof localStorage === 'undefined') return null;
   try {
     return localStorage.getItem(key);
   } catch (err) {
@@ -28,6 +30,7 @@ export function safeGetItem(key: string): string | null {
  * Safely removes a key from localStorage with error handling.
  */
 export function safeRemoveItem(key: string): boolean {
+  if (typeof localStorage === 'undefined') return false;
   try {
     localStorage.removeItem(key);
     return true;
@@ -62,4 +65,32 @@ export function safeGetJSON<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
+
+/**
+ * Safely reads a value from sessionStorage with error handling.
+ */
+export function safeSessionGetItem(key: string): string | null {
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    return sessionStorage.getItem(key);
+  } catch (err) {
+    console.error(`[safeSessionGetItem] Failed to read key "${key}" from sessionStorage:`, err);
+    return null;
+  }
+}
+
+/**
+ * Safely writes a value to sessionStorage with error handling.
+ */
+export function safeSessionSetItem(key: string, value: string): boolean {
+  try {
+    if (typeof sessionStorage === 'undefined') return false;
+    sessionStorage.setItem(key, value);
+    return true;
+  } catch (err) {
+    console.error(`[safeSessionSetItem] Failed to write key "${key}" to sessionStorage:`, err);
+    return false;
+  }
+}
+
 

@@ -1,5 +1,6 @@
 import AthanAlarm from './athanAlarmPlugin';
 import { sendPushNotification } from '../utils/pushNotificationService';
+import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
 
 export interface ScheduleNotificationParams {
   id: number | string;
@@ -12,6 +13,8 @@ export interface ScheduleNotificationParams {
 }
 
 export class NotificationScheduler {
+  private static activeWebTimeouts = new Map<string | number, ReturnType<typeof setTimeout>>();
+
   /**
    * Schedule a notification across available native/browser mechanisms
    */
@@ -26,12 +29,13 @@ export class NotificationScheduler {
 
     try {
       // 1. Android Native Alarm Plugin via Capacitor
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-        const numericId = typeof params.id === 'number' ? params.id : Math.abs(this.hashString(String(params.id)));
+      if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform()) {
+        const rawTag = params.tag || 'custom';
+        const prayerKey = prayerCanonicalNames[rawTag.toLowerCase()] || rawTag;
         await AthanAlarm.scheduleAthanAlarms({
           times: [
             {
-              prayerKey: params.tag || 'custom',
+              prayerKey,
               prayerName: params.title,
               timeMs: timestamp,
             },
@@ -43,13 +47,22 @@ export class NotificationScheduler {
       // 2. Fallback to ServiceWorker or Timeout scheduling in web
       const delayMs = timestamp - now;
       if (delayMs > 0 && delayMs < 2147483647) { // Max 32-bit timeout limit
-        setTimeout(() => {
+        // Cancel existing web timeout if any
+        if (this.activeWebTimeouts.has(params.id)) {
+          clearTimeout(this.activeWebTimeouts.get(params.id)!);
+          this.activeWebTimeouts.delete(params.id);
+        }
+
+        const timer = setTimeout(() => {
+          this.activeWebTimeouts.delete(params.id);
           this.triggerImmediate({
             title: params.title,
             body: params.body,
             tag: params.tag,
           });
         }, delayMs);
+
+        this.activeWebTimeouts.set(params.id, timer);
         return true;
       }
 
@@ -72,12 +85,28 @@ export class NotificationScheduler {
   }
 
   /**
-   * Cancel a scheduled notification
+   * Cancel a scheduled notification or specific alarm
    */
   static async cancel(id: number | string): Promise<boolean> {
     try {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
-        await AthanAlarm.cancelAllAlarms();
+      // Cancel Web Timeout if active
+      if (this.activeWebTimeouts.has(id)) {
+        clearTimeout(this.activeWebTimeouts.get(id)!);
+        this.activeWebTimeouts.delete(id);
+      }
+      const stringId = String(id);
+      if (this.activeWebTimeouts.has(stringId)) {
+        clearTimeout(this.activeWebTimeouts.get(stringId)!);
+        this.activeWebTimeouts.delete(stringId);
+      }
+
+      if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform()) {
+        const numericId = typeof id === 'number' ? id : parseInt(id, 10);
+        if (!isNaN(numericId)) {
+          await AthanAlarm.cancelAlarm({ requestCode: numericId });
+        } else {
+          await AthanAlarm.cancelAlarm({ alarmId: String(id) });
+        }
       }
       return true;
     } catch (err) {

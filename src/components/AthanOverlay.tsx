@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
-import { safeSetItem } from '../utils/storage';
+import { safeSetItem, safeGetItem } from '../utils/storage';
 import { defaultMuezzins, getCustomAudios, archiveMuezzins, getDownloadedTrackIds, AudioTrack } from '../utils/audioStorage';
 import type { MuezzinOption } from '../types';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
@@ -69,7 +69,7 @@ export default function AthanOverlay({
     'العشاء': 'Isha',
   };
   const pKey = prayerKeyMap[prayerName] || prayerName;
-  const savedPrayerMuezzin = localStorage.getItem(`salah_muezzin_${pKey}`);
+  const savedPrayerMuezzin = safeGetItem(`salah_muezzin_${pKey}`);
   const activeMuezzinId = savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
 
   const activeMuezzin = React.useMemo(() => {
@@ -233,6 +233,7 @@ export default function AthanOverlay({
             onClick={() => setIsMuted(!isMuted)}
             className="p-2.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.05] cursor-pointer transition-colors text-white/70 hover:text-white"
             title={isMuted ? "إلغاء الكتم" : "كتم الصوت"}
+            aria-label={isMuted ? "إلغاء كتم صوت الأذان" : "كتم صوت الأذان"}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
           </button>
@@ -245,6 +246,7 @@ export default function AthanOverlay({
             }}
             className="p-2.5 rounded-full bg-white/[0.04] hover:bg-rose-500/10 border border-white/[0.05] hover:border-rose-500/20 cursor-pointer transition-colors text-white/70 hover:text-rose-400"
             title="إغلاق"
+            aria-label="إغلاق نافذة الأذان"
           >
             <X className="w-4 h-4" />
           </button>

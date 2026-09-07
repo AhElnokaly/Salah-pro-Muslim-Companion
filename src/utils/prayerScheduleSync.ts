@@ -5,7 +5,8 @@
 
 import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from './prayerCalc';
 import { ScheduledAthanItem } from '../types/pushSchedule';
-import { safeSetItem } from './storage';
+import { AppSettings } from '../types';
+import { safeSetItem, safeGetItem, safeGetJSON, safeSetJSON } from './storage';
 
 const SCHEDULE_STORAGE_KEY = 'mc_scheduled_athans_v1';
 const LAST_SYNC_KEY = 'mc_scheduled_athans_last_sync';
@@ -14,22 +15,14 @@ const LAST_SYNC_KEY = 'mc_scheduled_athans_last_sync';
  * Get locally saved scheduled athan items
  */
 export function getStoredScheduledAthans(): ScheduledAthanItem[] {
-  try {
-    const saved = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.error('Error reading stored scheduled athans:', e);
-  }
-  return [];
+  return safeGetJSON<ScheduledAthanItem[]>(SCHEDULE_STORAGE_KEY, []);
 }
 
 /**
  * Save scheduled athan items locally
  */
 export function saveScheduledAthans(items: ScheduledAthanItem[]): void {
-  safeSetItem(SCHEDULE_STORAGE_KEY, JSON.stringify(items));
+  safeSetJSON(SCHEDULE_STORAGE_KEY, items);
   safeSetItem(LAST_SYNC_KEY, new Date().toISOString());
 }
 
@@ -37,14 +30,10 @@ export function saveScheduledAthans(items: ScheduledAthanItem[]): void {
  * Check if the schedule needs a refresh (if last sync > 7 days ago or missing)
  */
 export function isScheduleSyncNeeded(): boolean {
-  try {
-    const lastSync = localStorage.getItem(LAST_SYNC_KEY);
-    if (!lastSync) return true;
-    const diffDays = (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60 * 24);
-    return diffDays >= 7;
-  } catch {
-    return true;
-  }
+  const lastSync = safeGetItem(LAST_SYNC_KEY);
+  if (!lastSync) return true;
+  const diffDays = (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays >= 7;
 }
 
 /**
@@ -100,14 +89,14 @@ export function generate30DayPrayerSchedule(
 /**
  * Sync upcoming 30-day prayer schedule into local storage and return payload
  */
-export function syncUpcomingPrayerSchedule(settings: any): ScheduledAthanItem[] {
+export function syncUpcomingPrayerSchedule(settings: AppSettings): ScheduledAthanItem[] {
   const schedule = generate30DayPrayerSchedule(
     new Date(),
     settings.latitude ?? 30.0444,
     settings.longitude ?? 31.2357,
     settings.calcMethod ?? 'Egypt',
     settings.madhab ?? 'standard',
-    settings.manualOffsets ?? {},
+    settings.prayerOffsets ?? {},
     30,
     settings.timezoneId
   );

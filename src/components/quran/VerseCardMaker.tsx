@@ -53,7 +53,7 @@ export default function VerseCardMaker({
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
-  const currentSurah = SURAHS_LIST.find(s => s.number === selectedSurahNumber) || SURAHS_LIST[93];
+  const currentSurah = SURAHS_LIST.find(s => s.number === selectedSurahNumber) || SURAHS_LIST[0];
 
   const handleSelectSample = (sample: SampleAyah) => {
     setSelectedSurahNumber(sample.surahNumber);

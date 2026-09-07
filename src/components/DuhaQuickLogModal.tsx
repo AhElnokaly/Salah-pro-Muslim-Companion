@@ -9,6 +9,8 @@ import { PrayerLog, VoluntaryPrayerLog } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 import { formatDateKey } from '../utils/prayerDayBoundary';
 import { defaultMuezzins, getAudioUrlSync } from '../utils/audioStorage';
+import { safeGetItem } from '../utils/storage';
+import { safeUUID } from '../utils/uuid';
 
 export interface DuhaQuickLogModalProps {
   isOpen: boolean;
@@ -27,7 +29,7 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
   dateStr = formatDateKey(new Date()),
   prayerLogs,
   setPrayerLogs,
-  voluntaryPrayerLogs = [],
+  voluntaryPrayerLogs = [] as VoluntaryPrayerLog[],
   setVoluntaryPrayerLogs,
   onSuccess
 }) => {
@@ -63,7 +65,7 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
       }
       setIsPlayingAudio(false);
     } else {
-      const sunriseMuezzinKey = localStorage.getItem('salah_muezzin_Sunrise') || 'mishary';
+      const sunriseMuezzinKey = safeGetItem('salah_muezzin_Sunrise') || 'mishary';
       const muezzinObj = defaultMuezzins.find(m => m.id === sunriseMuezzinKey) || defaultMuezzins[0];
       const audioUrl = getAudioUrlSync(muezzinObj?.url || './audio/azan1.mp3');
 
@@ -86,7 +88,7 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
       setVoluntaryPrayerLogs(prev => [
         ...prev.filter(l => !(l.appPrayerDay === dateStr && l.type === 'duha')),
         ...(rakaat > 0 ? [{
-          id: crypto.randomUUID(),
+          id: safeUUID(),
           appPrayerDay: dateStr,
           type: 'duha' as const,
           rakaat,
@@ -122,7 +124,12 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/65 dark:bg-black/85 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in" dir="rtl">
-      <div className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-t-[2.2rem] sm:rounded-[2.2rem] p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="نافذة تسجيل صلاة الضحى والشروق"
+        className="bg-white dark:bg-[#161d26] w-full max-w-md rounded-t-[2.2rem] sm:rounded-[2.2rem] p-6 border border-slate-200/80 dark:border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+      >
         
         {/* Header & Top Action Bar */}
         <div className="flex items-center justify-between">
@@ -133,7 +140,7 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
             type="button"
             onClick={onClose}
             className="p-2 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-slate-500 hover:text-slate-800 dark:hover:text-white transition-all cursor-pointer hover:scale-105 active:scale-95"
-            aria-label="إغلاق"
+            aria-label="إغلاق نافذة تسجيل صلاة الضحى"
           >
             <X className="w-4 h-4" />
           </button>

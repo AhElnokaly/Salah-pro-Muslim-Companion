@@ -6,6 +6,7 @@
 export interface MoonPhaseInfo {
   name: string;
   enName: string;
+  phase: string;
   illumination: number;
   age: number; // 1 to 30
   icon: string; // Emoji
@@ -21,6 +22,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'المحاق',
       enName: 'New Moon',
+      phase: 'New Moon',
       illumination: 2,
       age: day,
       icon: '🌑',
@@ -31,6 +33,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'الهلال المتزايد',
       enName: 'Waxing Crescent',
+      phase: 'Waxing Crescent',
       illumination: Math.round((day / 15) * 50),
       age: day,
       icon: '🌒',
@@ -41,6 +44,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'التربيع الأول',
       enName: 'First Quarter',
+      phase: 'First Quarter',
       illumination: 50,
       age: day,
       icon: '🌓',
@@ -51,6 +55,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'الأحدب المتزايد',
       enName: 'Waxing Gibbous',
+      phase: 'Waxing Gibbous',
       illumination: Math.round(50 + ((day - 7) / 7) * 45),
       age: day,
       icon: '🌔',
@@ -61,6 +66,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'البدر المكتمل',
       enName: 'Full Moon',
+      phase: 'Full Moon',
       illumination: 100,
       age: day,
       icon: '🌕',
@@ -72,6 +78,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'الأحدب المتناقص',
       enName: 'Waning Gibbous',
+      phase: 'Waning Gibbous',
       illumination: Math.round(95 - ((day - 15) / 7) * 45),
       age: day,
       icon: '🌖',
@@ -82,6 +89,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'التربيع الأخير',
       enName: 'Third Quarter',
+      phase: 'Third Quarter',
       illumination: 50,
       age: day,
       icon: '🌗',
@@ -92,6 +100,7 @@ export function getMoonPhaseInfo(hijriDay: number): MoonPhaseInfo {
     return {
       name: 'العرجون القديم',
       enName: 'Waning Crescent',
+      phase: 'Waning Crescent',
       illumination: Math.max(3, Math.round(50 - ((day - 22) / 7) * 45)),
       age: day,
       icon: '🌘',

@@ -65,7 +65,12 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 text-slate-100 shadow-2xl">
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-label="نافذة فحص وتشخيص تنبيهات الصلاة"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 text-slate-100 shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center space-x-3 space-x-reverse">
@@ -78,7 +83,9 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="إغلاق نافذة فحص وتشخيص تنبيهات الصلاة"
             className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors touch-target"
           >
             <X className="w-5 h-5" />
@@ -139,21 +146,42 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
             <p className="text-xs text-slate-400">المدينة: {settings.cityName} | المذهب: {settings.madhab}</p>
           </div>
 
-          {/* Active Reconciliation Count */}
-          <div className="p-4 bg-slate-800/60 rounded-xl border border-slate-700/50 flex items-center justify-between">
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">التنبيهات المجدولة حالياً</h4>
-              <p className="text-sm font-medium mt-0.5">
-                {reconcileStatus ? `${reconcileStatus.scheduledCount} تنبيه مجدول للصلوات القادمة` : 'جاري الفحص...'}
-              </p>
+          {/* Active Reconciliation Count & Diff Stats */}
+          <div className="p-4 bg-slate-800/60 rounded-xl border border-slate-700/50 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">التنبيهات وحالة التوفيق (Reconciliation)</h4>
+                <p className="text-sm font-medium mt-0.5">
+                  {reconcileStatus ? `${reconcileStatus.scheduledCount} تنبيه مجدول للصلوات القادمة` : 'جاري الفحص...'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={runDiagnostics}
+                disabled={isReconciling}
+                aria-label="إعادة فحص وتشخيص التنبيهات"
+                className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${isReconciling ? 'animate-spin' : ''}`} />
+              </button>
             </div>
-            <button
-              onClick={runDiagnostics}
-              disabled={isReconciling}
-              className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              <RefreshCw className={`w-4 h-4 ${isReconciling ? 'animate-spin' : ''}`} />
-            </button>
+
+            {reconcileStatus && (
+              <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-700/40 text-center">
+                <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
+                  <div className="text-xs text-slate-400">محتفظ به</div>
+                  <div className="text-sm font-bold text-emerald-400 mt-0.5">{reconcileStatus.retainedCount}</div>
+                </div>
+                <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
+                  <div className="text-xs text-slate-400">تمت إضافته</div>
+                  <div className="text-sm font-bold text-blue-400 mt-0.5">{reconcileStatus.missingCount}</div>
+                </div>
+                <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
+                  <div className="text-xs text-slate-400">ملغي قديم</div>
+                  <div className="text-sm font-bold text-amber-400 mt-0.5">{reconcileStatus.obsoleteCount}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Battery Guidance Notice */}

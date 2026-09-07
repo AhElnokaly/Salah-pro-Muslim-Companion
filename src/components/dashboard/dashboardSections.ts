@@ -76,38 +76,33 @@ export const DASHBOARD_SECTION_REGISTRY: Record<DashboardSectionId, DashboardSec
 
 const STORAGE_KEY = 'salah_dashboard_sections_v1';
 
+import { safeGetJSON, safeSetJSON } from '../../utils/storage';
+
 export function getDashboardSectionsConfig(): Record<DashboardSectionId, boolean> {
-  if (typeof window === 'undefined') {
-    return Object.fromEntries(
-      Object.entries(DASHBOARD_SECTION_REGISTRY).map(([id, cfg]) => [id, cfg.defaultEnabled])
-    ) as Record<DashboardSectionId, boolean>;
-  }
-
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        heroCard: true,
-        progressCard: true,
-        quranSummary: parsed.quranSummary ?? DASHBOARD_SECTION_REGISTRY.quranSummary.defaultEnabled,
-        khushuSummary: parsed.khushuSummary ?? DASHBOARD_SECTION_REGISTRY.khushuSummary.defaultEnabled,
-        companionInsights: parsed.companionInsights ?? DASHBOARD_SECTION_REGISTRY.companionInsights.defaultEnabled,
-        sacredHours: parsed.sacredHours ?? DASHBOARD_SECTION_REGISTRY.sacredHours.defaultEnabled,
-        featureDiscovery: parsed.featureDiscovery ?? DASHBOARD_SECTION_REGISTRY.featureDiscovery.defaultEnabled,
-        pinnedFavorite: parsed.pinnedFavorite ?? DASHBOARD_SECTION_REGISTRY.pinnedFavorite.defaultEnabled
-      };
-    }
-  } catch (err) {
-    console.error('Failed to parse dashboard section config:', err);
-  }
-
-  return Object.fromEntries(
+  const defaults = Object.fromEntries(
     Object.entries(DASHBOARD_SECTION_REGISTRY).map(([id, cfg]) => [id, cfg.defaultEnabled])
   ) as Record<DashboardSectionId, boolean>;
-}
 
-import { safeSetJSON } from '../../utils/storage';
+  if (typeof window === 'undefined') {
+    return defaults;
+  }
+
+  const parsed = safeGetJSON<Record<string, boolean> | null>(STORAGE_KEY, null);
+  if (parsed) {
+    return {
+      heroCard: true,
+      progressCard: true,
+      quranSummary: parsed.quranSummary ?? DASHBOARD_SECTION_REGISTRY.quranSummary.defaultEnabled,
+      khushuSummary: parsed.khushuSummary ?? DASHBOARD_SECTION_REGISTRY.khushuSummary.defaultEnabled,
+      companionInsights: parsed.companionInsights ?? DASHBOARD_SECTION_REGISTRY.companionInsights.defaultEnabled,
+      sacredHours: parsed.sacredHours ?? DASHBOARD_SECTION_REGISTRY.sacredHours.defaultEnabled,
+      featureDiscovery: parsed.featureDiscovery ?? DASHBOARD_SECTION_REGISTRY.featureDiscovery.defaultEnabled,
+      pinnedFavorite: parsed.pinnedFavorite ?? DASHBOARD_SECTION_REGISTRY.pinnedFavorite.defaultEnabled
+    };
+  }
+
+  return defaults;
+}
 
 export function saveDashboardSectionsConfig(config: Record<DashboardSectionId, boolean>): void {
   safeSetJSON(STORAGE_KEY, config);

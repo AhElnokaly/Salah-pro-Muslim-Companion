@@ -80,7 +80,7 @@ export default function SmartAdhkarSuggestions({
       if (navigator.vibrate) navigator.vibrate(20);
 
       try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (AudioContextClass) {
           const ctx = new AudioContextClass();
           const osc = ctx.createOscillator();

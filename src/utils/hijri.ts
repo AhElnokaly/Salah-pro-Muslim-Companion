@@ -9,13 +9,15 @@ export function toArabicNumbers(num: number | string | null | undefined): string
   return num.toString().replace(/\d/g, (d) => arabicDigits[parseInt(d)]);
 }
 
-export function getHijriDate(date: Date = new Date(), offsetDays: number = 0): {
+export interface HijriDateInfo {
   day: number;
   month: number;
   year: number;
   monthName: string;
   fullString: string;
-} {
+}
+
+export function getHijriDate(date: Date = new Date(), offsetDays: number = 0): HijriDateInfo {
   // Apply manual offset in days
   const workingDate = new Date(date.getTime());
   workingDate.setDate(workingDate.getDate() + offsetDays);

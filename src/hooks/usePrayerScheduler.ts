@@ -1,51 +1,24 @@
-import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction, MutableRefObject } from 'react';
-import { PrayerName, AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
+import { useState, useEffect, useCallback, Dispatch, SetStateAction, MutableRefObject } from 'react';
+import { PrayerName, AppSettings, AlarmConfig, SpiritualAlerts, PrayerTimes, RelativePrayerTarget } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
-import { safeSetItem } from '../utils/storage';
-import { scheduleNativeAthanAlarms, updateNativeWidgetData } from '../services/athanAlarmPlugin';
-import { playSpiritualSound, playSpiritualSpeech } from '../utils/spiritualAudio';
+import { safeSetItem, safeGetItem, safeGetJSON, safeSetJSON, safeSessionGetItem, safeSessionSetItem } from '../utils/storage';
+import { UnifiedNotificationOrchestrator } from '../domain/notifications/UnifiedNotificationOrchestrator';
+import {
+  DEFAULT_WORSHIP_ALARMS,
+  calculateTriggerMinutes,
+  FIVE_PRAYERS_ONLY
+} from '../utils/alarmUtils';
 import {
   findNearestLocationCache,
   saveLocationSchedule,
   getLastCachedLocationSchedule,
 } from '../utils/locationCache';
+import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
+import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
+import { useCachedPrayerTimes } from './useCachedPrayerTimes';
 
-export const getLocalDateStr = (d: Date): string => {
-  const year = d.getFullYear();
-  const month = (d.getMonth() + 1).toString().padStart(2, '0');
-  const day = d.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-export function cleanupOldTrackingKeys(): void {
-  try {
-    const nowMs = Date.now();
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const prefixes = ['salah_played_', 'salah_triggered_', 'alert_before_', 'alert_after_', 'alert_duha_'];
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-
-      const matchedPrefix = prefixes.find(p => key.startsWith(p));
-      if (!matchedPrefix) continue;
-
-      const match = key.match(/\b\d{4}-\d{2}-\d{2}\b/);
-      if (match) {
-        const dateStr = match[0];
-        const keyDate = new Date(dateStr);
-        if (!isNaN(keyDate.getTime())) {
-          if (nowMs - keyDate.getTime() > sevenDaysMs) {
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Error cleaning up old tracking keys:', e);
-  }
-}
+export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
 export interface UsePrayerSchedulerProps {
   settings: AppSettings;
@@ -75,25 +48,52 @@ export function usePrayerScheduler({
   setToastMessage
 }: UsePrayerSchedulerProps): UsePrayerSchedulerReturn {
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
-    const saved = localStorage.getItem('salah_custom_alarms');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse salah_custom_alarms from localStorage:', e);
-      }
+    const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
+    if (saved !== null && Array.isArray(saved)) {
+      return saved;
     }
-    return [];
+
+    // Initialize with canonical default alarms and migrate old salah_alerts if customized
+    const oldAlerts = safeGetJSON<any>('salah_alerts', null);
+    let defaults = [...DEFAULT_WORSHIP_ALARMS];
+    if (oldAlerts) {
+      defaults = defaults.map(def => {
+        if (def.id === 'alarm_before_salah' && oldAlerts.before) {
+          return {
+            ...def,
+            enabled: Boolean(oldAlerts.before.enabled),
+            offsetMinutes: oldAlerts.before.minutes || 10,
+            days: oldAlerts.before.days || def.days,
+            prayers: oldAlerts.before.prayers || def.prayers
+          };
+        }
+        if (def.id === 'alarm_after_salah' && oldAlerts.after) {
+          return {
+            ...def,
+            enabled: Boolean(oldAlerts.after.enabled),
+            offsetMinutes: oldAlerts.after.minutes || 15,
+            days: oldAlerts.after.days || def.days,
+            prayers: oldAlerts.after.prayers || def.prayers
+          };
+        }
+        if (def.id === 'alarm_duha' && oldAlerts.duha) {
+          return {
+            ...def,
+            enabled: Boolean(oldAlerts.duha.enabled),
+            offsetMinutes: oldAlerts.duha.minutes || 15,
+            days: oldAlerts.duha.days || def.days
+          };
+        }
+        return def;
+      });
+    }
+    return defaults;
   });
 
   const [alerts, setAlerts] = useState<SpiritualAlerts>(() => {
-    const saved = localStorage.getItem('salah_alerts');
+    const saved = safeGetJSON<SpiritualAlerts | null>('salah_alerts', null);
     if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse salah_alerts from localStorage:', e);
-      }
+      return saved;
     }
     return {
       before: { enabled: true, minutes: 10, days: [0, 1, 2, 3, 4, 5, 6], prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] },
@@ -105,105 +105,55 @@ export function usePrayerScheduler({
   const [activeRingingAlarm, setActiveRingingAlarm] = useState<AlarmConfig | null>(null);
 
   useEffect(() => {
-    safeSetItem('salah_custom_alarms', JSON.stringify(customAlarms));
+    safeSetJSON('salah_custom_alarms', customAlarms);
   }, [customAlarms]);
 
   useEffect(() => {
-    safeSetItem('salah_alerts', JSON.stringify(alerts));
+    safeSetJSON('salah_alerts', alerts);
   }, [alerts]);
 
-  const triggerCustomAlarm = useCallback((alarm: AlarmConfig) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`تنبيه مخصص: ${alarm.title}`, {
-          body: `حان الآن موعد: ${alarm.title} (${toArabicNumbers(alarm.time)})`,
-          icon: '/icon-192.png',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
+  const { triggerCustomAlarm } = useCustomAlarmTrigger({
+    globalAudioRef,
+    audioVolume,
+    setActiveRingingAlarm,
+    setToastMessage,
+  });
 
-    playSpiritualSound(alarm.soundType || 'speech', alarm.title, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
-
-    setActiveRingingAlarm(alarm);
-  }, [globalAudioRef, audioVolume]);
-
-  const triggerSpiritualAlert = useCallback((title: string, body: string) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body: body,
-          icon: '/icon-192.png',
-          dir: 'rtl'
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    // Play spiritual Arabic voice reminder instead of generic beep
-    playSpiritualSpeech(`${title}.. ${body}`, audioVolume);
-
-    if (setToastMessage) {
-      setToastMessage(`⏰ ${title}: ${body}`);
-    }
-  }, [audioVolume, setToastMessage]);
-
-  const prayerTimesCacheRef = useRef<{ key: string; times: Record<PrayerName | 'Sunrise', string> } | null>(null);
-
-  const getCachedPrayerTimes = useCallback((checkDate: Date) => {
-    const todayStr = getLocalDateStr(checkDate);
-    const key = `${todayStr}_${settings.latitude}_${settings.longitude}_${settings.calcMethod}_${settings.madhab}_${JSON.stringify(settings.prayerOffsets || {})}`;
-
-    if (prayerTimesCacheRef.current && prayerTimesCacheRef.current.key === key) {
-      return prayerTimesCacheRef.current.times;
-    }
-
-    const tzOffset = getTimezoneOffsetForLocation(checkDate, settings.timezoneId);
-    const times = calculatePrayerTimes(
-      checkDate,
-      settings.latitude,
-      settings.longitude,
-      tzOffset,
-      settings.calcMethod,
-      settings.madhab,
-      settings.prayerOffsets || {}
-    );
-
-    prayerTimesCacheRef.current = { key, times };
-    return times;
-  }, [settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets]);
+  const getCachedPrayerTimes = useCachedPrayerTimes(settings);
 
   const checkTimesAndAlarms = useCallback((checkDate: Date, isCatchup = false) => {
     const currentHour = checkDate.getHours();
     const currentMin = checkDate.getMinutes();
     const currentDay = checkDate.getDay();
-    const timeKey = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+    const currentMins = currentHour * 60 + currentMin;
     const todayStr = getLocalDateStr(checkDate);
 
     // Get cached prayer times for checkDate (avoids running astronomical math every second)
     const currentTimes = getCachedPrayerTimes(checkDate);
 
     // 1. Check Adhans
-    const autoPlayAthanEnabled = localStorage.getItem('salah_auto_play_athan') !== 'false';
     const prayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
     for (const prayer of prayers) {
       if (settings.adhanEnabled[prayer] === false) continue;
       const prayerTimeStr = currentTimes[prayer];
       if (prayerTimeStr) {
         const prayerMins = parseTimeToMinutes(prayerTimeStr);
-        const currentMins = currentHour * 60 + currentMin;
-        const diff = currentMins - prayerMins;
+        let diff = currentMins - prayerMins;
+        if (diff < -720) diff += 1440;
+        if (diff > 720) diff -= 1440;
 
-        const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 20);
+        const playedKey = `salah_played_${todayStr}_${prayer}`;
+        const attemptedKey = `salah_attempted_${todayStr}_${prayer}`;
 
-        if (isMatch) {
-          const playedKey = `salah_played_${todayStr}_${prayer}`;
-          const attemptedKey = `salah_attempted_${todayStr}_${prayer}`;
-          if (!localStorage.getItem(playedKey) && !sessionStorage.getItem(attemptedKey)) {
-            sessionStorage.setItem(attemptedKey, 'true');
+        // Real-time: diff within [0..1]. Catchup when app wakes: diff within [0..3] (real live adhan duration)
+        const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 3);
+
+        if (diff > 3 && !safeGetItem(playedKey)) {
+          // Prayer call has ended; mark as expired so it never triggers late upon wake
+          safeSetItem(playedKey, 'expired');
+        } else if (isMatch) {
+          if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
+            safeSessionSetItem(attemptedKey, 'true');
             // Always trigger athan, which opens the full AthanOverlay screen and plays sound
             triggerAthan(prayer, currentTimes[prayer], settings, setToastMessage);
             break;
@@ -212,112 +162,70 @@ export function usePrayerScheduler({
       }
     }
 
-    // 2. Check Custom Alarms
+    // 2. Check Custom Alarms (Both Prayer-Relative & Fixed Times)
     customAlarms.forEach(alarm => {
       if (!alarm.enabled) return;
-      if (alarm.days.includes(currentDay)) {
-        let isMatch = false;
-        if (isCatchup) {
-          const alarmMins = parseTimeToMinutes(alarm.time);
-          const currentMins = currentHour * 60 + currentMin;
-          isMatch = currentMins >= alarmMins && currentMins <= alarmMins + 15;
-        } else {
-          isMatch = alarm.time === timeKey;
-        }
+      if (!alarm.days.includes(currentDay)) return;
 
-        if (isMatch) {
-          const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
-          if (!localStorage.getItem(triggeredKey)) {
+      const isRelative = alarm.type === 'prayer_relative' || (!alarm.type && !alarm.time && alarm.prayers);
+
+      if (isRelative) {
+        const targetPrayers = (alarm.prayers && alarm.prayers.length > 0) ? alarm.prayers : FIVE_PRAYERS_ONLY;
+        targetPrayers.forEach((pTarget: RelativePrayerTarget) => {
+          const prayerTimeStr = currentTimes[pTarget];
+          if (!prayerTimeStr) return;
+
+          const targetMins = calculateTriggerMinutes(alarm, prayerTimeStr);
+          if (targetMins === null) return;
+
+          let diff = currentMins - targetMins;
+          if (diff < -720) diff += 1440;
+          if (diff > 720) diff -= 1440;
+
+          const triggeredKey = `salah_triggered_${alarm.id}_${pTarget}_${todayStr}`;
+          const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);
+
+          if (diff > 2 && !safeGetItem(triggeredKey)) {
+            // Expired, mark handled so opening app late doesn't ring
+            safeSetItem(triggeredKey, 'expired');
+          } else if (isMatch && !safeGetItem(triggeredKey)) {
             safeSetItem(triggeredKey, 'true');
+            // Audio Mutex: If Adhan or other audio is already actively playing, don't overlap audio
+            const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
+            if (!isAudioBusy) {
+              triggerCustomAlarm(alarm, pTarget);
+            } else {
+              console.warn('[usePrayerScheduler] Audio is currently playing Adhan, triggering visual alarm notification only to prevent overlap');
+              triggerCustomAlarm({ ...alarm, soundType: 'silent' }, pTarget);
+            }
+          }
+        });
+      } else {
+        // Fixed Time Alarm
+        if (!alarm.time) return;
+        const alarmMins = parseTimeToMinutes(alarm.time);
+        let diff = currentMins - alarmMins;
+        if (diff < -720) diff += 1440;
+        if (diff > 720) diff -= 1440;
+
+        const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
+        const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);
+
+        if (diff > 2 && !safeGetItem(triggeredKey)) {
+          safeSetItem(triggeredKey, 'expired');
+        } else if (isMatch && !safeGetItem(triggeredKey)) {
+          safeSetItem(triggeredKey, 'true');
+          const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
+          if (!isAudioBusy) {
             triggerCustomAlarm(alarm);
+          } else {
+            console.warn('[usePrayerScheduler] Audio is busy, triggering silent alarm notification');
+            triggerCustomAlarm({ ...alarm, soundType: 'silent' });
           }
         }
       }
     });
-
-    // 3. Check Spiritual Alerts (Before/After/Duha)
-    if (alerts.before?.enabled && alerts.before.days.includes(currentDay)) {
-      alerts.before.prayers?.forEach((prayer: PrayerName) => {
-        const prayerTimeStr = currentTimes[prayer];
-        if (prayerTimeStr) {
-          const prayerMins = parseTimeToMinutes(prayerTimeStr);
-          const alertMins = prayerMins - alerts.before.minutes;
-          const currentMins = currentHour * 60 + currentMin;
-
-          let isMatch = false;
-          if (isCatchup) {
-            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-          } else {
-            isMatch = currentMins === alertMins;
-          }
-
-          if (isMatch) {
-            const triggeredKey = `alert_before_${prayer}_${todayStr}`;
-            if (!localStorage.getItem(triggeredKey)) {
-              safeSetItem(triggeredKey, 'true');
-              triggerSpiritualAlert(
-                `الاستعداد لصلاة ${getArabicPrayerName(prayer)}`, 
-                `حان موعد الاستعداد لصلاة ${getArabicPrayerName(prayer)} خلال ${alerts.before.minutes} دقائق.`
-              );
-            }
-          }
-        }
-      });
-    }
-
-    if (alerts.after?.enabled && alerts.after.days.includes(currentDay)) {
-      alerts.after.prayers?.forEach((prayer: PrayerName) => {
-        const prayerTimeStr = currentTimes[prayer];
-        if (prayerTimeStr) {
-          const prayerMins = parseTimeToMinutes(prayerTimeStr);
-          const alertMins = prayerMins + alerts.after.minutes;
-          const currentMins = currentHour * 60 + currentMin;
-
-          let isMatch = false;
-          if (isCatchup) {
-            isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-          } else {
-            isMatch = currentMins === alertMins;
-          }
-
-          if (isMatch) {
-            const triggeredKey = `alert_after_${prayer}_${todayStr}`;
-            if (!localStorage.getItem(triggeredKey)) {
-              safeSetItem(triggeredKey, 'true');
-              triggerSpiritualAlert(
-                `أذكار صلاة ${getArabicPrayerName(prayer)}`, 
-                `تذكير مبارك بقراءة الأذكار والسنن البعدية لصلاة ${getArabicPrayerName(prayer)}.`
-              );
-            }
-          }
-        }
-      });
-    }
-
-    if (alerts.duha?.enabled && alerts.duha.days.includes(currentDay)) {
-      const sunriseStr = currentTimes['Sunrise'];
-      if (sunriseStr) {
-        const sunriseMins = parseTimeToMinutes(sunriseStr);
-        const alertMins = sunriseMins + alerts.duha.minutes;
-        const currentMins = currentHour * 60 + currentMin;
-
-        let isMatch = false;
-        if (isCatchup) {
-          isMatch = currentMins >= alertMins && currentMins <= alertMins + 10;
-        } else {
-          isMatch = currentMins === alertMins;
-        }
-
-        if (isMatch) {
-          const triggeredKey = `alert_duha_${todayStr}`;
-          if (!localStorage.getItem(triggeredKey)) {
-            safeSetItem(triggeredKey, 'true');
-            triggerSpiritualAlert("صلاة الضحى (صلاة الأوابين) ☀️", `صلاة الضحى تجزئ عن صدقة كل سلامى من جسدك. حان الآن موعدها المبارك.`);
-          }
-        }
-      }
-    }
-  }, [settings, customAlarms, alerts, triggerAthan, triggerCustomAlarm, triggerSpiritualAlert, setToastMessage]);
+  }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);
 
   // Run catchup, cleanup, and native Android AlarmManager scheduling on initial state load or settings update
   useEffect(() => {
@@ -326,7 +234,7 @@ export function usePrayerScheduler({
       cleanupOldTrackingKeys();
 
       const now = new Date();
-      let days60List: Array<{ date: Date; timesMap: Record<string, string> }> = [];
+      let days60List: Array<{ date: Date; timesMap: Record<string, string> | PrayerTimes }> = [];
 
       const hasValidCoords = Boolean(settings.latitude && settings.longitude);
 
@@ -361,7 +269,7 @@ export function usePrayerScheduler({
               settings.madhab,
               settings.prayerOffsets || {}
             );
-            days60List.push({ date: d, timesMap: timesMap as any });
+            days60List.push({ date: d, timesMap });
           }
 
           // Save to location cache
@@ -387,25 +295,8 @@ export function usePrayerScheduler({
       }
 
       if (days60List.length > 0) {
-        const userTz = settings.timezoneId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
-        scheduleNativeAthanAlarms(days60List, undefined, {
-          lat: settings.latitude,
-          lng: settings.longitude,
-          calcMethod: settings.calcMethod,
-          madhab: settings.madhab,
-          timeZoneId: userTz,
-          fajrOffset: settings.prayerOffsets?.Fajr || 0,
-          dhuhrOffset: settings.prayerOffsets?.Dhuhr || 0,
-          asrOffset: settings.prayerOffsets?.Asr || 0,
-          maghribOffset: settings.prayerOffsets?.Maghrib || 0,
-          ishaOffset: settings.prayerOffsets?.Isha || 0,
-        }).catch(err => {
-          console.warn('Native athan alarm scheduling error:', err);
-        });
-
-        const currentTimes = days60List[0].timesMap;
-        updateNativeWidgetData(currentTimes as any, settings.cityName || 'مواقيت الصلاة').catch(err => {
-          console.warn('Native widget update error:', err);
+        UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List).catch(err => {
+          console.warn('[usePrayerScheduler] Notification orchestration error:', err);
         });
       }
     }
@@ -414,6 +305,7 @@ export function usePrayerScheduler({
   // Background Web Worker tick with single fallback interval (Task 2)
   useEffect(() => {
     let worker: Worker | null = null;
+    let workerUrl: string | null = null;
     let mainInterval: ReturnType<typeof setInterval> | null = null;
     let workerSuccess = false;
 
@@ -437,7 +329,7 @@ export function usePrayerScheduler({
         };
       `;
       const blob = new Blob([workerCode], { type: 'application/javascript' });
-      const workerUrl = URL.createObjectURL(blob);
+      workerUrl = URL.createObjectURL(blob);
       worker = new Worker(workerUrl);
 
       worker.onmessage = (e) => {
@@ -450,6 +342,10 @@ export function usePrayerScheduler({
       workerSuccess = true;
     } catch (err) {
       console.warn("Background web worker failed to initialize, using fallback interval:", err);
+      if (workerUrl) {
+        URL.revokeObjectURL(workerUrl);
+        workerUrl = null;
+      }
       workerSuccess = false;
     }
 
@@ -474,6 +370,10 @@ export function usePrayerScheduler({
         } catch (e) {
           console.warn('Error terminating worker:', e);
         }
+      }
+      if (workerUrl) {
+        URL.revokeObjectURL(workerUrl);
+        workerUrl = null;
       }
       if (mainInterval) {
         clearInterval(mainInterval);

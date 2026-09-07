@@ -4,6 +4,7 @@ import { RamadanQadaTracker, PendingQadaPrayer, PrayerName } from '../../types';
 import { AppModalVariant } from '../shared/AppModal';
 import { toArabicNumbers } from '../../utils/hijri';
 import { formatDateKey } from '../../utils/prayerDayBoundary';
+import { safeUUID } from '../../utils/uuid';
 
 interface QadaSettingsTabProps {
   ramadanQada: RamadanQadaTracker;
@@ -72,7 +73,7 @@ export default function QadaSettingsTab({
   const handleAddManualMissedPrayer = (prayerName: PrayerName) => {
     const todayStr = formatDateKey(new Date());
     const newQada: PendingQadaPrayer = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       date: todayStr,
       hijriDate: 'يدوي',
       prayerName

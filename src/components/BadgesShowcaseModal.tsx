@@ -66,6 +66,9 @@ export default function BadgesShowcaseModal({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="معرض الأوسمة والإتقان الإيماني"
           className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header Banner */}
@@ -101,6 +104,7 @@ export default function BadgesShowcaseModal({
                 type="button"
                 onClick={onClose}
                 className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="إغلاق معرض الأوسمة والإتقان الإيماني"
               >
                 <X className="w-5 h-5" />
               </button>

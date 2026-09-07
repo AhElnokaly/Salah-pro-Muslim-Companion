@@ -1,4 +1,4 @@
-import { AudioTrack } from "./audioStorage";
+import type { AudioTrack } from "./audioStorage";
 
 export const archiveMuezzins: AudioTrack[] = [
   {

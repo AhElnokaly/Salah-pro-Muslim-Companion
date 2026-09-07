@@ -63,6 +63,9 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in" dir="rtl">
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="نافذة ما الجديد وسجل التحديثات"
           initial={{ opacity: 0, scale: 0.92, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.92, y: 12 }}
@@ -93,7 +96,9 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
             </div>
 
             <button
+              type="button"
               onClick={handleClose}
+              aria-label="إغلاق نافذة ما الجديد والتحديثات"
               className="p-1.5 bg-black/20 hover:bg-black/30 text-white rounded-full transition-all cursor-pointer relative z-10 shrink-0"
               title="إغلاق"
             >

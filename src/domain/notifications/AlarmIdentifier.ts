@@ -4,21 +4,19 @@
  */
 
 export class AlarmIdentifier {
-  /**
-   * Creates a unique, deterministic 32-bit integer ID for a specific date & prayer
-   * @example generateId('2026-08-26', 'Fajr') => 1847392
-   */
-  static generateId(dateStr: string, prayerKey: string): number {
-    const combined = `${dateStr}:${prayerKey.toLowerCase()}`;
-    return Math.abs(this.fnv1aHash(combined));
+  private static javaStringHashCode(s: string): number {
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) {
+      hash = (Math.imul(31, hash) + s.charCodeAt(i)) | 0;
+    }
+    return hash;
   }
 
-  private static fnv1aHash(str: string): number {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < str.length; i++) {
-      hash ^= str.charCodeAt(i);
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-    }
-    return hash >>> 0;
+  static generateId(prayerKey: string, timeMs: number): number {
+    const minuteBucket = Math.floor(timeMs / 60000);
+    const identifier = `${prayerKey}_${minuteBucket}`;
+    const hash = this.javaStringHashCode(identifier);
+    return ((hash & 0x7FFFFFFF) % 10000000) + 1000;
   }
 }
+

@@ -8,6 +8,10 @@ export type PrayerName = 'Fajr' | 'Sunrise' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Ish
 export type PrayerStatus = 'future' | 'A' | 'B' | 'C' | 'D' | 'not_yet' | 'E' | 'done';
 // A: In time (في وقتها), B: Late/Qada (قضاء/متأخر), C/D: Missed (لم يصلها/فائتة), E: Excused/License (عذر شرعي - لا تحسب كفائتة)
 
+export type DashboardTab = 'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'moon';
+
+export type DailyPrayerLogs = Record<string, PrayerLog>;
+
 export interface PrayerLog {
   status: PrayerStatus;
   sunnahBefore?: number;
@@ -146,6 +150,8 @@ export type BackdropType =
 
 export type BackdropRenderMode = 'lineArt' | 'illustrated' | 'auto';
 
+export type ClockFaceType = 'classic' | 'islamic' | 'minimal' | 'cyber' | 'salatuk';
+
 export interface AppSettings {
   latitude: number;
   longitude: number;
@@ -188,6 +194,7 @@ export interface AppSettings {
     showSubhaBtn?: boolean;
     showProgressBar?: boolean;
     cardSize?: 'compact' | 'medium' | 'large';
+    showKhushuBtn?: boolean;
   };
   mainCardLayout?: MainCardLayout;
 }
@@ -234,12 +241,21 @@ export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' |
 
 export type AlarmNotifyMode = 'sound' | 'vibrate' | 'both' | 'silent';
 
+export type AlarmTimingType = 'fixed' | 'prayer_relative';
+export type PrayerAlarmRelation = 'before' | 'after' | 'at';
+export type RelativePrayerTarget = PrayerName | 'Sunrise';
+
 export interface AlarmConfig {
   id: string;
   title: string;
-  time: string; // "HH:MM"
-  days: number[];
   enabled: boolean;
+  type?: AlarmTimingType; // 'fixed' | 'prayer_relative' (defaults to 'fixed' if time is provided and prayers is undefined)
+  time?: string; // "HH:MM" (for fixed type)
+  prayers?: RelativePrayerTarget[]; // e.g. ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] or ['Sunrise']
+  relation?: PrayerAlarmRelation; // 'before' | 'after' | 'at'
+  offsetMinutes?: number; // e.g. 10 (or 0 if 'at')
+  offsetUnit?: 'minutes' | 'hours';
+  days: number[]; // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
   soundType: AlarmSoundType;
   notifyMode?: AlarmNotifyMode;
 }

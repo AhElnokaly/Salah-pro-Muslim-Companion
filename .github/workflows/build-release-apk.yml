@@ -13,6 +13,9 @@ jobs:
   build-release-apk:
     name: Build & Package Signed Release APK
     runs-on: ubuntu-latest
+    concurrency:
+      group: build-release-${{ github.ref }}
+      cancel-in-progress: true
 
     # Required Repository Secrets in GitHub Settings:
     # 1. RELEASE_KEYSTORE_BASE64: The base64-encoded string of your release-key.jks file
@@ -25,12 +28,11 @@ jobs:
       - name: Checkout Repository 🛎️
         uses: actions/checkout@v4
 
-      - name: Set up Java 21 ☕
+      - name: Set up Java 17 ☕
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
+          java-version: '17'
 
       - name: Set up Node.js ⚙️
         uses: actions/setup-node@v4
@@ -39,7 +41,12 @@ jobs:
           cache: npm
 
       - name: Install NPM Dependencies 📦
-        run: npm install --legacy-peer-deps
+        run: npm ci
+
+      - name: Unit Tests & Quality Gate 🛡️
+        run: |
+          npm run lint
+          npm test
 
       - name: Build Web Assets for Mobile 🏗️
         run: npm run build
@@ -67,8 +74,19 @@ jobs:
             chmod +x android/gradlew
           fi
 
-      - name: Verify Gradle Wrapper Integrity 🔍
+      - name: Setup Gradle Build Environment 🐘
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+          cache-read-only: false
+
+      - name: Ensure Gradle Wrapper Binary Integrity 🔍
         run: |
+          # If the local jar is damaged, download the authentic wrapper jar
+          if ! unzip -t android/gradle/wrapper/gradle-wrapper.jar >/dev/null 2>&1; then
+            echo "⚠️ Corrupted gradle-wrapper.jar detected. Fetching genuine Gradle 8.14.3 wrapper..."
+            curl -sSL "https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar" -o "android/gradle/wrapper/gradle-wrapper.jar"
+          fi
           unzip -t android/gradle/wrapper/gradle-wrapper.jar
           cd android && ./gradlew --version
 
@@ -96,12 +114,31 @@ jobs:
           fi
           echo "Found release APK: $RELEASE_APK"
 
-          # Verify ZIP alignment
-          zipalign -c -v 4 "$RELEASE_APK" || echo "Note: zipalign check completed"
+          # Locate Android SDK build-tools directory and prepend to PATH
+          BUILD_TOOLS_DIR=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$BUILD_TOOLS_DIR" ]; then
+            echo "Using Android build-tools: $BUILD_TOOLS_DIR"
+            export PATH="$BUILD_TOOLS_DIR:$PATH"
+          fi
 
-          # Verify signature if apksigner is present
-          if command -v apksigner >/dev/null 2>&1; then
-            apksigner verify --verbose "$RELEASE_APK" || echo "Note: unaligned/unsigned release artifact verification checked"
+          # Strict ZIP alignment verification
+          if ! command -v zipalign >/dev/null 2>&1; then
+            echo "ERROR: zipalign is required for release verification but was not found in PATH or $ANDROID_HOME/build-tools!"
+            exit 1
+          fi
+          echo "Verifying ZIP alignment (4-byte boundary) on $RELEASE_APK..."
+          zipalign -c -v 4 "$RELEASE_APK"
+
+          # Cryptographic signature verification
+          if [ "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" != "" ]; then
+            if ! command -v apksigner >/dev/null 2>&1; then
+              echo "ERROR: apksigner is required for signed release verification but was not found in PATH or $ANDROID_HOME/build-tools!"
+              exit 1
+            fi
+            echo "Verifying cryptographic APK signature with apksigner..."
+            apksigner verify --verbose "$RELEASE_APK"
+          else
+            echo "Notice: Unsigned release build generated (no keystore secret provided). Skipping apksigner verification."
           fi
 
           # Compute SHA-256 checksums for all release APKs
@@ -116,3 +153,14 @@ jobs:
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/apk/release/release-checksums.sha256
           retention-days: 30
+
+      - name: Create GitHub Release for Tags 🚀
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/release/release-checksums.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true

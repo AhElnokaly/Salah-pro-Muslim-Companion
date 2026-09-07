@@ -150,7 +150,8 @@ export default function QuranHistoryTab({
                       <button
                         type="button"
                         onClick={() => handleDeleteSession(s.id)}
-                        className="text-slate-400 hover:text-red-500 p-1"
+                        aria-label={`حذف جلسة ${s.sessionType === 'read' ? 'القراءة' : s.sessionType === 'memorize' ? 'الحفظ' : 'المراجعة'}${s.surahOrJuzName ? ` لـ ${s.surahOrJuzName}` : ''}`}
+                        className="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
                         title="حذف الجلسة"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

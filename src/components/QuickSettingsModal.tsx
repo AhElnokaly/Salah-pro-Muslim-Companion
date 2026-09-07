@@ -40,6 +40,9 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm dir-rtl">
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="نافذة التحكم والإعدادات السريعة"
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -59,7 +62,9 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="إغلاق نافذة التحكم والإعدادات السريعة"
               className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -132,7 +137,7 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                 <SpiritualThemePicker
                   currentThemeId={currentStyle}
                   onSelectTheme={(themeId, themeName) => {
-                    setSettings(prev => ({ ...prev, backdropStyle: themeId as any }));
+                    setSettings(prev => ({ ...prev, backdropStyle: themeId as AppSettings['backdropStyle'] }));
                     setToastMessage(`تم تفعيل ثيم: ${themeName} ✨`);
                   }}
                   columns={2}
@@ -155,6 +160,7 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                   max="100"
                   step="5"
                   value={settings.backdropOpacity ?? 75}
+                  aria-label="درجة شفافية ووضوح خلفية البطاقة"
                   onChange={(e) => {
                     const val = parseInt(e.target.value, 10);
                     setSettings(prev => ({ ...prev, backdropOpacity: val }));
@@ -175,14 +181,14 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
               <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">مظهر التطبيق العام:</span>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: 'light', label: 'نهار ☀️', icon: Sun },
-                  { id: 'dark', label: 'ليل 🌙', icon: Moon },
-                  { id: 'system', label: 'تلقائي 📱', icon: Monitor },
+                  { id: 'light' as const, label: 'نهار ☀️', icon: Sun },
+                  { id: 'dark' as const, label: 'ليل 🌙', icon: Moon },
+                  { id: 'system' as const, label: 'تلقائي 📱', icon: Monitor },
                 ].map(t => (
                   <button
                     key={t.id}
                     onClick={() => {
-                      setSettings(prev => ({ ...prev, theme: t.id as any }));
+                      setSettings(prev => ({ ...prev, theme: t.id }));
                       setToastMessage(`تم تغيير المظهر إلى: ${t.label}`);
                     }}
                     className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
@@ -273,9 +279,11 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setSettings(prev => ({ ...prev, hijriOffset: Math.max(-2, prev.hijriOffset - 1) }));
                   }}
+                  aria-label="إنقاص التاريخ الهجري يوماً واحداً"
                   className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-sm flex items-center justify-center shadow-xs cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-600"
                 >
                   -
@@ -284,9 +292,11 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                   {settings.hijriOffset > 0 ? `+${settings.hijriOffset}` : settings.hijriOffset} يوم
                 </span>
                 <button
+                  type="button"
                   onClick={() => {
                     setSettings(prev => ({ ...prev, hijriOffset: Math.min(2, prev.hijriOffset + 1) }));
                   }}
+                  aria-label="زيادة التاريخ الهجري يوماً واحداً"
                   className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-sm flex items-center justify-center shadow-xs cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-600"
                 >
                   +

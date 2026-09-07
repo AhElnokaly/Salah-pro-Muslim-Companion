@@ -11,19 +11,31 @@ echo "  هِمَّتِي Hemmaty - PWA to APK Builder"
 echo "==================================="
 echo ""
 
-echo "[1/4] بناء مشروع الويب ..."
+echo "[1/5] فحص جودة الكود والأنواع (Type-Check)..."
+npm run lint
+
+echo ""
+echo "[2/5] بناء مشروع الويب..."
 npm run build
 
 echo ""
-echo "[2/4] مزامنة Capacitor ..."
+echo "[3/5] مزامنة Capacitor Android..."
 npx cap sync android
 
 echo ""
-echo "[3/4] بناء APK ..."
+echo "[4/5] بناء حزمة APK (Debug)..."
 cd android
 chmod +x gradlew || true
 ./gradlew assembleDebug
 cd ..
+
+echo ""
+echo "[5/5] حساب البصمة الرقمية SHA-256..."
+if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+  cd android/app/build/outputs/apk/debug
+  sha256sum app-debug.apk > app-debug.apk.sha256 2>/dev/null || shasum -a 256 app-debug.apk > app-debug.apk.sha256
+  cd - > /dev/null
+fi
 
 echo ""
 echo "==================================="
