@@ -25,8 +25,8 @@ class MainActivity : BridgeActivity() {
                 renewalWorkRequest
             )
             Log.d("MainActivity", "Enqueued AthanScheduleRenewal WorkManager job successfully")
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Failed to enqueue AthanScheduleRenewal WorkManager job", e)
+        } catch (t: Throwable) {
+            Log.e("MainActivity", "Failed to enqueue AthanScheduleRenewal WorkManager job", t)
         }
     }
 }

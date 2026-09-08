@@ -180,9 +180,27 @@ export function useKhushuMode() {
     syncStatus();
     checkPermission();
 
-    const interval = setInterval(syncStatus, 1000);
-    return () => clearInterval(interval);
-  }, [syncStatus, checkPermission]);
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncStatus();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility);
+    }
+
+    // إذا كان وضع الخشوع نشطاً، يتم تحديث العداد كل ثانية
+    // إذا كان خاملاً، يكفي فحص دوري خفيف (كل 30 ثانية) لتوفير طاقة المعالج والبطارية
+    const pollInterval = isActive ? 1000 : 30000;
+    const interval = setInterval(syncStatus, pollInterval);
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility);
+      }
+    };
+  }, [syncStatus, checkPermission, isActive]);
 
   return {
     isActive,

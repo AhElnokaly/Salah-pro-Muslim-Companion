@@ -22,8 +22,8 @@ export class AudioResolver {
       console.warn('[AudioResolver] Error resolving playable audio URL:', e);
     }
 
-    // Default fallback
-    return 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/001-.mp3';
+    // Default local offline fallback bundled with app
+    return isFajr ? '/audio/fajr-default.mp3' : '/audio/prayer-default.mp3';
   }
 }
 

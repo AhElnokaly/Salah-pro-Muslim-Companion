@@ -44,6 +44,7 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT
             }
             val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
+            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
             views.setOnClickPendingIntent(R.id.widget_title, pendingIntent)
 
             // Khushu quick toggle PendingIntent
