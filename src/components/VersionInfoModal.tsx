@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, RefreshCw, CheckCircle2, ShieldCheck, History, ArrowRight, Zap, Wrench, Palette } from 'lucide-react';
+import { X, Sparkles, RefreshCw, CheckCircle2, ShieldCheck, History, ArrowRight, Zap, Wrench, Palette, Download, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 import { RELEASE_HISTORY, CURRENT_RELEASE, markCurrentVersionAsSeen, ChangelogCategory } from '../data/changelog';
+import { checkForAppUpdates, UpdateCheckResult } from '../services/updateChecker';
 
 interface VersionInfoModalProps {
   isOpen: boolean;
@@ -10,12 +11,32 @@ interface VersionInfoModalProps {
 
 export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalProps) {
   const [showHistory, setShowHistory] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
 
   if (!isOpen) return null;
 
   const handleClose = () => {
     markCurrentVersionAsSeen();
     onClose();
+  };
+
+  const handleCheckUpdates = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const res = await checkForAppUpdates({ force: true });
+      setUpdateResult(res);
+    } catch {
+      setUpdateResult({
+        hasUpdate: false,
+        currentVersion: CURRENT_RELEASE.version,
+        error: 'تعذر الاتصال بـ GitHub للتحقق من التحديثات.',
+        lastCheckedAt: Date.now(),
+      });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
   };
 
   const handleForceUpdate = () => {
@@ -124,6 +145,100 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
                     <ShieldCheck className="w-3.5 h-3.5" />
                     محدث الآن
                   </span>
+                </div>
+
+                {/* GitHub In-App Update Checker Section */}
+                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                          تحديثات تطبيق هِمَّتِي (GitHub)
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">
+                          فحص توفر إصدارات APK جديدة مباشرة من المستودع
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCheckUpdates}
+                      disabled={isCheckingUpdate}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[11px] font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {isCheckingUpdate ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>جارٍ الفحص...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>فحص التحديثات</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Result display */}
+                  {updateResult && (
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 animate-fade-in">
+                      {updateResult.hasUpdate && updateResult.latestRelease ? (
+                        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 p-3 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                              يتوفر إصدار أحدث: v{updateResult.latestRelease.version}
+                            </span>
+                            {updateResult.latestRelease.apkSizeFormatted && (
+                              <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
+                                {updateResult.latestRelease.apkSizeFormatted}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium whitespace-pre-line line-clamp-3">
+                            {updateResult.latestRelease.body || updateResult.latestRelease.name}
+                          </p>
+                          <div className="flex items-center gap-2 pt-1">
+                            {updateResult.latestRelease.apkDownloadUrl ? (
+                              <a
+                                href={updateResult.latestRelease.apkDownloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg shadow-sm text-center flex items-center justify-center gap-1.5 transition-colors"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>تحميل ملف APK المباشر</span>
+                              </a>
+                            ) : null}
+                            <a
+                              href={updateResult.latestRelease.htmlUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-2 px-3 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg text-center flex items-center gap-1 transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>GitHub</span>
+                            </a>
+                          </div>
+                        </div>
+                      ) : updateResult.error ? (
+                        <div className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-500/20 font-bold">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>{updateResult.error}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-500/20 font-bold">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                          <span>أنت تستخدم أحدث إصدار متوفر ({updateResult.currentVersion}) على المستودع.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Highlights List */}

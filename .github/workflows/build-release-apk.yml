@@ -90,11 +90,30 @@ jobs:
           unzip -t android/gradle/wrapper/gradle-wrapper.jar
           cd android && ./gradlew --version
 
+      - name: Compute Build Versioning 🏷️
+        id: versioning
+        run: |
+          # If triggered by a tag like v1.0.6, extract 1.0.6
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_NAME="${GITHUB_REF_NAME#v}"
+            echo "version_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "version_name=1.0.6" >> "$GITHUB_OUTPUT"
+          fi
+          
+          # Strictly sequential versionCode: base 1000 + github.run_number
+          # Guaranteed to strictly increase on every workflow run, ensuring updates are always installable
+          BUILD_CODE=$(( 1000 + ${{ github.run_number }} ))
+          echo "version_code=$BUILD_CODE" >> "$GITHUB_OUTPUT"
+          echo "Sequential Versioning -> versionCode: $BUILD_CODE, versionName: ${TAG_NAME:-1.0.6}"
+
       - name: Build Release APK with Gradle ⚙️
         run: |
           cd android
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease -PappVersionCode=${{ steps.versioning.outputs.version_code }} -PappVersionName=${{ steps.versioning.outputs.version_name }} --stacktrace
         env:
+          APP_VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
           RELEASE_KEYSTORE_PATH: 'release-key.jks'
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}

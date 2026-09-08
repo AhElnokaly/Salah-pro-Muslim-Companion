@@ -161,6 +161,7 @@ Last updated: 2026-08-31
 - `quran/AdaptiveKhatmaCalculator.ts` (~60 lines): No-guilt adaptive Quran calculation engine adjusting daily pages smoothly upon missed intervals.
 
 ## Services (`src/services/`)
+- `updateChecker.ts` (~140 lines): In-App GitHub Releases update checker with semantic version comparison (`isNewerVersion`), 6-hour throttled local caching (`UPDATE_CHECK_CACHE_KEY`), and direct APK asset link extraction.
 - `AlarmReconciliationService.ts` (~140 lines): State reconciliation service computing true diffs (missing, obsolete, retained) between desired prayers and scheduled native alarms.
 - `NotificationScheduler.ts` (~160 lines): Multi-channel notification and test alarm dispatcher with Web Worker timeout tracking.
 - `athanAlarmPlugin.ts` (~345 lines): Capacitor bridge and web simulation fallback for native Android Athan alarms, home screen widgets, and Battery Optimization bypass (`checkBatteryOptimization`, `requestIgnoreBatteryOptimization`).
@@ -264,6 +265,7 @@ Last updated: 2026-08-31
 - `WidgetPhoneFrame.tsx`: 9/16 aspect ratio smartphone container with Dynamic Island/notch, status bar, centered live widget, and launcher dock.
 
 ## Automated Testing Suites (`src/utils/`, `src/services/`, `src/domain/`, `src/components/widgets/`)
+- `src/services/updateChecker.test.ts`: Automated tests (3 suites, 7 assertions) covering semantic version comparison (`isNewerVersion`), byte-to-megabyte formatting (`formatFileSize`), and GitHub Releases API payload parsing / 404 handling.
 - `src/components/widgets/CustomModularWidget.test.ts`: Automated tests (4 suites, 60 total assertions) covering custom modular widget SVG generation, ambient theme palette consistency, analog clock dial degree rotations, and responsive cardSize adaptation (compact, medium, large).
 - `src/domain/khushu/Khushu.test.ts`: Automated test suite for Khushu 2.0 configuration, cross-environment localStorage serialization, and distraction shield dismissal session persistence.
 - `src/utils/hijri.test.ts`: Automated tests (18 assertions across 5 suites) for Eastern Arabic numerals (`toArabicNumbers`), Hijri calendar calculations (`getHijriDate`), Sharia fasting forbidden days (`isForbiddenFastDay`), Arabic dual/plural grammar (`formatArabicDayCount`), and uniform calendar boundary functions (`formatDateKey`, `getDateFromPrayerDay`).

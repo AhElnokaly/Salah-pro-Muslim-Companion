@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { RotateCcw, Download, Upload, FileUp } from 'lucide-react';
+import { RotateCcw, Download, Upload, FileUp, Sparkles, RefreshCw, AlertCircle, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
 import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, CustomDua, QuranSession, QuranKhatma, VoluntaryPrayerLog } from '../../types';
 import { safeSetItem, safeGetJSON, safeGetItem } from '../../utils/storage';
 import { formatDateKey } from '../../utils/prayerDayBoundary';
 import { getDashboardSectionsConfig } from '../dashboard/dashboardSections';
+import { checkForAppUpdates, UpdateCheckResult } from '../../services/updateChecker';
+import { CURRENT_RELEASE } from '../../data/changelog';
 
 interface BackupSettingsTabProps {
   settings: AppSettings;
@@ -63,7 +65,27 @@ export default function BackupSettingsTab({
   const [backupText, setBackupText] = useState('');
   const [importText, setImportText] = useState('');
   const [showImportResult, setShowImportResult] = useState('');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateResult(null);
+    try {
+      const res = await checkForAppUpdates({ force: true });
+      setUpdateResult(res);
+    } catch {
+      setUpdateResult({
+        hasUpdate: false,
+        currentVersion: CURRENT_RELEASE.version,
+        error: 'تعذر الاتصال بـ GitHub. يرجى التحقق من اتصال الإنترنت.',
+        lastCheckedAt: Date.now(),
+      });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -278,6 +300,97 @@ export default function BackupSettingsTab({
       <div className="flex items-center gap-2 mb-2">
         <RotateCcw className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <h2 className="text-lg font-black text-slate-800 dark:text-white">النسخ الاحتياطي واسترداد البيانات</h2>
+      </div>
+
+      {/* GitHub In-App Updates Card */}
+      <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <Download className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-800 dark:text-white">تحديثات التطبيق (GitHub Releases)</h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">
+                الإصدار المثبت: v{CURRENT_RELEASE.version} (بناء {CURRENT_RELEASE.buildNumber})
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCheckUpdate}
+            disabled={isCheckingUpdate}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            {isCheckingUpdate ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>جارٍ الفحص...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                <span>فحص الآن</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {updateResult && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            {updateResult.hasUpdate && updateResult.latestRelease ? (
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    يتوفر إصدار أحدث: v{updateResult.latestRelease.version}
+                  </span>
+                  {updateResult.latestRelease.apkSizeFormatted && (
+                    <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
+                      {updateResult.latestRelease.apkSizeFormatted}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium whitespace-pre-line line-clamp-3">
+                  {updateResult.latestRelease.body || updateResult.latestRelease.name}
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  {updateResult.latestRelease.apkDownloadUrl && (
+                    <a
+                      href={updateResult.latestRelease.apkDownloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-sm text-center flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تحميل APK المباشر</span>
+                    </a>
+                  )}
+                  <a
+                    href={updateResult.latestRelease.htmlUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2 px-3 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl text-center flex items-center gap-1 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>عرض في GitHub</span>
+                  </a>
+                </div>
+              </div>
+            ) : updateResult.error ? (
+              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-500/20 font-bold">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{updateResult.error}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 p-3 rounded-2xl border border-emerald-500/20 font-bold">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span>تطبيقك محدث بالكامل بأحدث إصدار متوفر ({updateResult.currentVersion}) على GitHub.</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Backup Action Card */}

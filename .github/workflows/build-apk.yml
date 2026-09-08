@@ -83,10 +83,21 @@ jobs:
           unzip -t android/gradle/wrapper/gradle-wrapper.jar
           cd android && ./gradlew --version
 
+      - name: Compute Build Versioning 🏷️
+        id: versioning
+        run: |
+          BUILD_CODE=$(( 1000 + ${{ github.run_number }} ))
+          echo "version_code=$BUILD_CODE" >> "$GITHUB_OUTPUT"
+          echo "version_name=1.0.6-debug" >> "$GITHUB_OUTPUT"
+          echo "Sequential Versioning -> versionCode: $BUILD_CODE"
+
       - name: Build Debug APK with Gradle ⚙️
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug -PappVersionCode=${{ steps.versioning.outputs.version_code }} -PappVersionName=${{ steps.versioning.outputs.version_name }} --no-daemon --stacktrace
+        env:
+          APP_VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
 
       - name: Verify Debug APK & Generate Checksum 🛡️
         run: |

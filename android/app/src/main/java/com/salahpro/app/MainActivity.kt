@@ -13,9 +13,9 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         registerPlugin(AthanAlarmPlugin::class.java)
         registerPlugin(KhushuModePlugin::class.java)
+        super.onCreate(savedInstanceState)
 
         try {
             val renewalWorkRequest = PeriodicWorkRequestBuilder<ScheduleRenewalWorker>(3, TimeUnit.DAYS).build()

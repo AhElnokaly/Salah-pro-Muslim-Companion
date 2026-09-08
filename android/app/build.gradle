@@ -12,12 +12,24 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.salahpro.app"
     compileSdk = rootProject.ext.compileSdkVersion
+
+    def defaultVersionCode = 106
+    def defaultVersionName = "1.0.6"
+
+    def appVersionCode = project.hasProperty('appVersionCode') ?
+        project.property('appVersionCode').toString().toInteger() :
+        (System.getenv("APP_VERSION_CODE") ? System.getenv("APP_VERSION_CODE").toInteger() : defaultVersionCode)
+
+    def appVersionName = project.hasProperty('appVersionName') ?
+        project.property('appVersionName').toString() :
+        (System.getenv("APP_VERSION_NAME") ?: defaultVersionName)
+
     defaultConfig {
         applicationId "com.salahpro.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 105
-        versionName "1.0.5"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

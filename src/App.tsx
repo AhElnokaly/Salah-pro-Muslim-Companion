@@ -51,6 +51,8 @@ import companionIcon from './assets/images/hemmaty_logo.jpg';
 import { getArabicPrayerName } from './utils/prayerCalc';
 import { toArabicNumbers } from './utils/hijri';
 import { getUnreadVersionStatus } from './data/changelog';
+import { checkForAppUpdates, AppReleaseInfo } from './services/updateChecker';
+import UpdateNotificationModal from './components/common/UpdateNotificationModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -59,6 +61,7 @@ export default function App() {
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<SettingsSubTabId>('prayer');
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AppReleaseInfo | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => safeGetItem('salah_show_post_onboarding_welcome') === 'true');
   const [, setNotificationsCount] = useState<number>(0);
 
@@ -119,6 +122,24 @@ export default function App() {
         }, 800);
         return () => clearTimeout(timer);
       }
+    }
+  }, [isLoaded]);
+
+  // Background check for newer GitHub Release APK (throttled safely to avoid spamming API)
+  useEffect(() => {
+    if (isLoaded) {
+      const timer = setTimeout(() => {
+        checkForAppUpdates({ force: false })
+          .then((result) => {
+            if (result.hasUpdate && result.latestRelease) {
+              setAvailableUpdate(result.latestRelease);
+            }
+          })
+          .catch(() => {
+            // Silently suppress network errors for background check
+          });
+      }, 3500);
+      return () => clearTimeout(timer);
     }
   }, [isLoaded]);
 
@@ -229,6 +250,7 @@ export default function App() {
       { id: 'isSidebarOpen', isOpen: isSidebarOpen, close: () => setIsSidebarOpen(false) },
       { id: 'isQuickSettingsOpen', isOpen: isQuickSettingsOpen, close: () => setIsQuickSettingsOpen(false) },
       { id: 'isTourModalOpen', isOpen: isTourModalOpen, close: () => setIsTourModalOpen(false) },
+      { id: 'availableUpdate', isOpen: Boolean(availableUpdate), close: () => setAvailableUpdate(null) },
       { id: 'isVersionModalOpen', isOpen: isVersionModalOpen, close: () => setIsVersionModalOpen(false) },
       { id: 'showSpiritualModal', isOpen: showSpiritualModal, close: () => setShowSpiritualModal(false) },
       { id: 'showPwaInstallGuide', isOpen: showPwaInstallGuide, close: () => setShowPwaInstallGuide(false) },
@@ -486,6 +508,15 @@ export default function App() {
         setActiveSettingsSubTab={setActiveSettingsSubTab}
         setToastMessage={setToastMessage}
       />
+
+      {/* GitHub In-App Update Alert Modal */}
+      {availableUpdate && (
+        <UpdateNotificationModal
+          isOpen={Boolean(availableUpdate)}
+          releaseInfo={availableUpdate}
+          onClose={() => setAvailableUpdate(null)}
+        />
+      )}
 
     </div>
   );

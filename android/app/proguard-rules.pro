@@ -24,9 +24,17 @@
 -keep class * extends android.content.BroadcastReceiver { *; }
 -keep class * extends android.appwidget.AppWidgetProvider { *; }
 
-# Keep WebKit JavaScript Interfaces
+# Keep WebKit JavaScript Interfaces & WebView
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
+}
+-keep class android.webkit.** { *; }
+-keep class androidx.webkit.** { *; }
+
+# Keep Kotlin Metadata & Reflection for Capacitor Bridge
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class **$WhenMappings {
+    <fields>;
 }
 
 # Keep GSON / Serialization models if present
