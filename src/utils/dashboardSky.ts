@@ -1,6 +1,7 @@
 import { BackdropType } from '../components/MosqueBackdrop';
 import { PrayerTimes, PrayerName } from '../types';
 import { parseTimeToMinutes } from './prayerCalc';
+import { getCustomWallpaperForTimingSlotSync } from './customWallpaperStorage';
 
 export function getTimeOfDayGradientAndLabel(now: Date, times: PrayerTimes): { gradient: string; label: string } {
   const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -58,26 +59,78 @@ export function getTimeOfDayGradientAndLabel(now: Date, times: PrayerTimes): { g
 
 export function getAutoBackdropKey(now: Date, times: PrayerTimes, hijri: { month: number; day: number }): BackdropType {
   const isFriday = now.getDay() === 5;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const fajrMins = parseTimeToMinutes(times.Fajr);
+  const sunriseMins = parseTimeToMinutes(times.Sunrise);
+  const dhuhrMins = parseTimeToMinutes(times.Dhuhr);
+  const asrMins = parseTimeToMinutes(times.Asr);
+  const maghribMins = parseTimeToMinutes(times.Maghrib);
+  const ishaMins = parseTimeToMinutes(times.Isha);
 
+  // 1. Check if the user assigned a custom wallpaper to the current specific prayer slot:
+  // Prayer Slot: Fajr (from Fajr to Sunrise)
+  if (nowMins >= fajrMins && nowMins < sunriseMins) {
+    const customFajr = getCustomWallpaperForTimingSlotSync('fajr');
+    if (customFajr) return customFajr.id;
+  }
+  // Prayer Slot: Sunrise / Duha (from Sunrise to Dhuhr)
+  else if (nowMins >= sunriseMins && nowMins < dhuhrMins) {
+    const customSunrise = getCustomWallpaperForTimingSlotSync('sunrise');
+    if (customSunrise) return customSunrise.id;
+  }
+  // Prayer Slot: Dhuhr (from Dhuhr to Asr)
+  else if (nowMins >= dhuhrMins && nowMins < asrMins) {
+    const customDhuhr = getCustomWallpaperForTimingSlotSync('dhuhr');
+    if (customDhuhr) return customDhuhr.id;
+  }
+  // Prayer Slot: Asr (from Asr to Maghrib)
+  else if (nowMins >= asrMins && nowMins < maghribMins) {
+    const customAsr = getCustomWallpaperForTimingSlotSync('asr');
+    if (customAsr) return customAsr.id;
+  }
+  // Prayer Slot: Maghrib (from Maghrib to Isha)
+  else if (nowMins >= maghribMins && nowMins < ishaMins) {
+    const customMaghrib = getCustomWallpaperForTimingSlotSync('maghrib');
+    if (customMaghrib) return customMaghrib.id;
+  }
+  // Prayer Slot: Isha (from Isha to Fajr next day)
+  else if (nowMins >= ishaMins || nowMins < fajrMins) {
+    const customIsha = getCustomWallpaperForTimingSlotSync('isha');
+    if (customIsha) return customIsha.id;
+  }
+
+  // 2. Check general period slots (Friday, Day, Night):
+  if (isFriday) {
+    const customFriday = getCustomWallpaperForTimingSlotSync('friday');
+    if (customFriday) return customFriday.id;
+  }
+
+  const isNight = nowMins < fajrMins || nowMins >= maghribMins;
+  if (isNight) {
+    const customNight = getCustomWallpaperForTimingSlotSync('night');
+    if (customNight) return customNight.id;
+  } else {
+    const customDay = getCustomWallpaperForTimingSlotSync('day');
+    if (customDay) return customDay.id;
+  }
+
+  // 3. Islamic Special Occasions
   // Ramadan (Month 9)
   if (hijri.month === 9) return 'ramadan';
   // Eid al-Fitr (Month 10, days 1-3)
   if (hijri.month === 10 && hijri.day <= 3) return 'eid_fitr';
   // Eid al-Adha (Month 12, days 9-13)
   if (hijri.month === 12 && hijri.day >= 9 && hijri.day <= 13) return 'eid_adha';
-  // Friday
-  if (isFriday) return 'friday';
+  // Friday (daytime)
+  if (isFriday && !isNight) return 'mosque_3'; // Friday mosque backdrop
 
-  // Day/Night check based on current time
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const fajrMins = parseTimeToMinutes(times.Fajr);
-  const maghribMins = parseTimeToMinutes(times.Maghrib);
-
-  const isNight = nowMins < fajrMins || nowMins >= maghribMins;
+  // 4. Standard Day & Night Mosque switching:
+  // Night (from Maghrib until Fajr): Mosque 2 (Spiritual illuminated night mosque)
+  // Day (from Fajr until Maghrib): Mosque 1 (Sunlit daytime mosque)
   if (isNight) {
-    return 'classic'; // Midnight/deep blue silhouette
+    return 'mosque_2'; // المسجد الليلي الروحاني
   } else {
-    return 'gold'; // Golden sunlit mosque backdrop
+    return 'mosque_1'; // المسجد النهاري المشرق
   }
 }
 
@@ -87,7 +140,23 @@ export function getGradientForBackdrop(bKey: BackdropType, defaultGrad: string, 
     return defaultGrad;
   }
 
+  if (typeof bKey === 'string' && (bKey.startsWith('custom_') || bKey.startsWith('data:'))) {
+    return 'from-[#090d16] via-[#131b2e] to-[#1e293b]';
+  }
+
   switch (bKey) {
+    case 'mosque_1':
+    case 'classic':
+      return 'from-[#0f172a] via-[#1e293b] to-[#334155]';
+    case 'mosque_2':
+    case 'gold':
+      return 'from-[#020617] via-[#0f172a] to-[#1e1b4b]';
+    case 'mosque_3':
+    case 'friday':
+      return 'from-[#064e3b] via-[#047857] to-[#0f766e]';
+    case 'mosque_4':
+    case 'banner':
+      return 'from-[#1e1b4b] via-[#312e81] to-[#0f172a]';
     case 'glass_crystal':
       return 'from-slate-900/50 via-slate-800/30 to-slate-900/50 border-white/25 shadow-2xl';
     case 'glass_emerald':
@@ -108,17 +177,11 @@ export function getGradientForBackdrop(bKey: BackdropType, defaultGrad: string, 
       return 'from-[#1e1b4b] via-[#312e81] to-[#4338ca]';
     case 'night_sky':
       return 'from-[#020617] via-[#0f172a] to-[#1e1b4b]';
-    case 'gold':
-      return 'from-[#d97706] via-[#f59e0b] to-[#b45309]';
-    case 'banner':
-      return 'from-[#4c0519] via-[#881337] to-[#be185d]';
     case 'ramadan':
       return 'from-[#091e3a] via-[#1d2671] to-[#283c86]';
     case 'eid_fitr':
     case 'eid_adha':
       return 'from-[#3b0764] via-[#581c87] to-[#7e22ce]';
-    case 'friday':
-      return 'from-[#064e3b] via-[#047857] to-[#0f766e]';
     default:
       return defaultGrad;
   }

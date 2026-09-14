@@ -15,6 +15,7 @@ export interface UseDashboardBlockSharedPropsParams {
   gregorianClean: string;
   dayNameArabic: string;
   setActiveTab?: (tab: DashboardTab) => void;
+  onOpenHijriAdjust?: () => void;
   now: Date;
   showAnalogClock: boolean;
   setShowAnalogClock: (show: boolean) => void;
@@ -33,6 +34,7 @@ export function useDashboardBlockSharedProps(params: UseDashboardBlockSharedProp
     gregorianClean,
     dayNameArabic,
     setActiveTab,
+    onOpenHijriAdjust,
     now,
     showAnalogClock,
     setShowAnalogClock,
@@ -50,6 +52,7 @@ export function useDashboardBlockSharedProps(params: UseDashboardBlockSharedProp
     gregorianClean,
     dayNameArabic,
     setActiveTab,
+    onOpenHijriAdjust,
     onNavigateTab: (tab: string, subTab?: string) => {
       if (tab && setActiveTab) setActiveTab(tab as DashboardTab);
       if (subTab) {

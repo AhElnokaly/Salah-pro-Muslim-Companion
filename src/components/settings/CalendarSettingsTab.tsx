@@ -39,7 +39,18 @@ export default function CalendarSettingsTab({
 
       {/* Hijri Adjustment Selector */}
       <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-4 transition-colors duration-300 shadow-sm">
-        <h3 className="text-sm font-black text-slate-800 dark:text-white">تعديل التاريخ الهجري (رؤية الهلال)</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-black text-slate-800 dark:text-white">تعديل التاريخ الهجري (رؤية الهلال)</h3>
+          <button
+            id="open-interactive-hijri-btn"
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-hijri-adjust'))}
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>النافذة المرئية السريعة</span>
+            <span>✨</span>
+          </button>
+        </div>
         <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
           اختر الفارق بالأيام إذا ثبتت رؤية الهلال في بلدك بخلاف التحديد الفلكي:
         </p>
@@ -59,6 +70,30 @@ export default function CalendarSettingsTab({
               {off === 0 ? 'قياسي (٠)' : off > 0 ? `+${toArabicNumbers(off)} يوم` : `${toArabicNumbers(off)} يوم`}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Smart Seasonal Transition Banner Toggle */}
+      <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0] dark:border-slate-800/80 space-y-3 transition-colors duration-300 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <span className="text-sm font-black text-slate-800 dark:text-white block">
+              تنبيهات ثبوت الهلال والمناسبات الهجرية 🌙
+            </span>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+              إظهار شريط تنبيه لطيف في الواجهة الرئيسية عند اقتراب هلال رمضان والأعياد وبداية الشهور للتأكد من موافقة تقويمك للرؤية الشرعية المحلية.
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <input
+              id="notify-hijri-month-start-toggle"
+              type="checkbox"
+              checked={settings.notifyHijriMonthStart !== false}
+              onChange={(e) => setSettings((prev) => ({ ...prev, notifyHijriMonthStart: e.target.checked }))}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+          </label>
         </div>
       </div>
     </div>

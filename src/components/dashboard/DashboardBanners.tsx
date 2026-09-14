@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, MapPin, ChevronLeft } from 'lucide-react';
+import { Bell, MapPin, ChevronLeft, Calendar } from 'lucide-react';
 import { PrayerName, DailyPrayerLogs, DashboardTab, QuranKhatma, AppSettings } from '../../types';
 import GettingStartedChecklist from '../GettingStartedChecklist';
 import SacredHoursBanner from '../SacredHoursBanner';
@@ -26,6 +26,8 @@ interface DashboardBannersProps {
   times: Record<string, string>;
   currentStyle: string;
   dashboardSections: { sacredHours?: boolean; [key: string]: boolean | undefined };
+  settings?: AppSettings;
+  onOpenHijriAdjust?: () => void;
 }
 
 export const DashboardBanners: React.FC<DashboardBannersProps> = ({
@@ -48,6 +50,8 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
   times,
   currentStyle,
   dashboardSections,
+  settings,
+  onOpenHijriAdjust,
 }) => {
   const yesterdayDate = subtractDays(now, 1);
   const yesterdayStr = formatDateKey(yesterdayDate);
@@ -71,8 +75,124 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
   const daysSinceInstalled = installedAt ? (Date.now() - Number(installedAt)) / (1000 * 60 * 60 * 24) : 0;
   const showChecklist = daysSinceInstalled <= 7;
 
+  // Check if Hijri Month Start / Season verification banner should be shown
+  const isHijriNotificationEnabled = settings?.notifyHijriMonthStart !== false;
+  const isMonthBoundary = hijri.day >= 29 || hijri.day <= 2;
+  
+  // Storage key for dismissal of this month's transition
+  const hijriDismissKey = `salah_dismissed_hijri_banner_${hijri.year}_${hijri.month}_${hijri.day <= 2 ? 'start' : 'end'}`;
+  const [dismissedHijriBanner, setDismissedHijriBanner] = React.useState<boolean>(() => {
+    return safeGetItem(hijriDismissKey) === 'true';
+  });
+
+  // Determine seasonal message
+  let seasonalInfo: { title: string; desc: string; badge: string; isMajor: boolean } | null = null;
+  if (isHijriNotificationEnabled && isMonthBoundary && !dismissedHijriBanner) {
+    // Ramadan transition (end of Shaban or beginning of Ramadan)
+    if ((hijri.month === 8 && hijri.day >= 29) || (hijri.month === 9 && hijri.day <= 2)) {
+      seasonalInfo = {
+        title: hijri.month === 8 ? 'ترقب هلال شهر رمضان المبارك 🌙' : 'مبارك عليكم شهر رمضان المبارك 🌙',
+        desc: 'هل ثبتت رؤية الهلال في بلدك؟ تأكد من مطابقة تاريخك الهجري مع الرؤية الشرعية لضبط الصيام والقيام.',
+        badge: 'موسم مبارك 🌟',
+        isMajor: true,
+      };
+    }
+    // Eid al-Fitr transition (end of Ramadan or beginning of Shawwal)
+    else if ((hijri.month === 9 && hijri.day >= 29) || (hijri.month === 10 && hijri.day <= 2)) {
+      seasonalInfo = {
+        title: hijri.month === 9 ? 'ترقب هلال شهر شوال وعيد الفطر 🎉' : 'عيد فطر مبارك وتقبل الله طاعتكم 🎉',
+        desc: 'هل أُعلنت رؤية هلال شوال في منطقتك؟ اضبط التاريخ بدقة لثبوت يوم العيد وإخراج زكاة الفطر.',
+        badge: 'عيد الفطر 🌙',
+        isMajor: true,
+      };
+    }
+    // Dhu al-Hijjah / Hajj & Arafah transition (end of Dhu al-Qadah or beginning of Dhu al-Hijjah)
+    else if ((hijri.month === 11 && hijri.day >= 29) || (hijri.month === 12 && hijri.day <= 2)) {
+      seasonalInfo = {
+        title: hijri.month === 11 ? 'ترقب هلال شهر ذي الحجة والعشر الأوائل 🕋' : 'أهلاً بالعشر الأوائل من ذي الحجة 🕋',
+        desc: 'اضبط التاريخ الهجري لضمان موافقة صيام التسع ويوم عرفة والأضحى لإعلان بلدك الشرعي.',
+        badge: 'عشر ذي الحجة 🕋',
+        isMajor: true,
+      };
+    }
+    // Muharram / New Hijri Year
+    else if ((hijri.month === 12 && hijri.day >= 29) || (hijri.month === 1 && hijri.day <= 2)) {
+      seasonalInfo = {
+        title: 'إطلالة العام الهجري الجديد 🌿',
+        desc: 'بداية شهر محرم الحرام، تحقق من توافق تقويمك مع إعلان الرؤية الشرعية وصيام عاشوراء.',
+        badge: 'رأس السنة الهجرية 🌿',
+        isMajor: true,
+      };
+    }
+    // Other months regular start
+    else {
+      seasonalInfo = {
+        title: `ثبوت هلال شهر ${hijri.monthName || 'الهجري الجديد'} 🌙`,
+        desc: 'هل ترغب بالتحقق من مطابقة التاريخ مع رؤية الهلال المحلية في بلدك؟',
+        badge: 'بداية الشهر 🗓️',
+        isMajor: false,
+      };
+    }
+  }
+
   return (
     <>
+      {/* Smart Hijri Month Transition & Season Verification Banner */}
+      {seasonalInfo && (
+        <div
+          id="hijri-month-transition-banner"
+          className="w-full bg-gradient-to-r from-emerald-500/15 via-cyan-500/10 to-indigo-500/15 border border-cyan-500/30 dark:border-cyan-500/40 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs transition-all"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 flex items-center justify-center shrink-0 mt-0.5">
+              <Calendar className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </div>
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs sm:text-sm font-black text-slate-900 dark:text-cyan-100 leading-snug">
+                  {seasonalInfo.title}
+                </p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-800 dark:text-cyan-200 border border-cyan-500/30">
+                  {seasonalInfo.badge}
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                {seasonalInfo.desc}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              id="adjust-hijri-from-banner-btn"
+              type="button"
+              onClick={() => {
+                if (onOpenHijriAdjust) {
+                  onOpenHijriAdjust();
+                } else {
+                  window.dispatchEvent(new CustomEvent('open-hijri-adjust'));
+                }
+              }}
+              className="py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap"
+            >
+              <span>اضبط التاريخ</span>
+              <span className="text-[10px]">⚙️</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDismissedHijriBanner(true);
+                safeSetItem(hijriDismissKey, 'true');
+              }}
+              title="إغلاق التنبيه لهذا الشهر"
+              aria-label="إغلاق تنبيه التاريخ الهجري"
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       {/* Yesterday's Unlogged Obligatory Prayers Notice Banner */}
       {missingPrayers.length > 0 && (
         <div 

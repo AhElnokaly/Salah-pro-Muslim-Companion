@@ -233,16 +233,20 @@ export default function ThemeSettingsTab({
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-slate-800 dark:text-white">
-              السمات الإيمانية والمعالم الإسلامية (7 سمات مرئية):
+              خلفيات وصور المساجد أو إضافة صورة مخصصة:
             </span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/50">
-              عرض مرئي فاخر 🎨
+            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-900/50">
+              جودة أصلية بدون ضغط ✨
             </span>
           </div>
           <SpiritualThemePicker
             currentThemeId={settings.backdropStyle || 'auto'}
             onSelectTheme={(themeId) => {
-              setSettings(prev => ({ ...prev, backdropStyle: themeId as AppSettings['backdropStyle'] }));
+              setSettings(prev => ({
+                ...prev,
+                backdropStyle: themeId as AppSettings['backdropStyle'],
+                backdropRenderMode: 'illustrated',
+              }));
             }}
             columns={2}
           />

@@ -74,83 +74,81 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
           {/* Body Scrollable */}
           <div className="p-5 overflow-y-auto space-y-5 text-end">
             
-            {/* 1. Backdrop Render Mode: SVG vs Presets */}
-            <div className="space-y-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+            {/* 1. Backdrop Settings */}
+            <div className="space-y-3 bg-slate-50 dark:bg-slate-900/60 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <Image className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  نوع خلفية بطاقة الصلاة:
+                  خلفية بطاقة الصلاة
                 </span>
-                <span className="text-[10px] bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-full">
-                  {currentRenderMode === 'illustrated' ? 'صور ثيمات جاهزة 🖼️' : 'رسم متجهي SVG 🎨'}
+                <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-900/40">
+                  {currentRenderMode === 'lineArt' ? 'رسم متجهي 🎨' : 'صور المساجد 🕌'}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* Segmented Control for Mode */}
+              <div className="flex p-1 bg-slate-200/80 dark:bg-slate-800/80 rounded-xl gap-1">
                 <button
-                  onClick={() => {
-                    setSettings(prev => ({ ...prev, backdropRenderMode: 'lineArt' }));
-                    setToastMessage("تم اختيار رسم المتجهي SVG الفاخر 🎨");
-                  }}
-                  className={`p-3 rounded-xl border text-end transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    currentRenderMode === 'lineArt' || currentRenderMode === 'auto'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-xs font-black">رسم متجهي SVG 🎨</span>
-                    {(currentRenderMode === 'lineArt' || currentRenderMode === 'auto') && <Check className="w-4 h-4" />}
-                  </div>
-                  <span className="text-[10px] opacity-80 leading-snug">خطوط وتصاميم إسلامية متجهية عالية الدقة ومتفاعلة مع أوقات الصلاة.</span>
-                </button>
-
-                <button
+                  type="button"
                   onClick={() => {
                     setSettings(prev => ({ ...prev, backdropRenderMode: 'illustrated' }));
-                    setToastMessage("تم اختيار خلفيات الصور الإيمانية الطبيعية 🖼️");
+                    setToastMessage("تم اختيار صور المساجد والمخصص 🖼️");
                   }}
-                  className={`p-3 rounded-xl border text-end transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                    currentRenderMode === 'illustrated'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    currentRenderMode === 'illustrated' || currentRenderMode === 'auto'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-xs font-black">صور ثيمات جاهزة 🖼️</span>
-                    {currentRenderMode === 'illustrated' && <Check className="w-4 h-4" />}
-                  </div>
-                  <span className="text-[10px] opacity-80 leading-snug">صور وخلفيات طبيعية خلابة للمساجد والمعالم الإسلامية العظيمة.</span>
+                  <Image className="w-3.5 h-3.5" />
+                  <span>صور المساجد والمخصص</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettings(prev => ({ ...prev, backdropRenderMode: 'lineArt' }));
+                    setToastMessage("تم اختيار الرسم المتجهي SVG 🎨");
+                  }}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    currentRenderMode === 'lineArt'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>رسم متجهي إسلامي</span>
                 </button>
               </div>
 
-              {/* Visual Spiritual Theme Picker Grid */}
-              <div className="pt-2">
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-[11px] font-black text-slate-700 dark:text-slate-200">
-                    اختر السمة الروحانية لخلفية الصلاة:
-                  </span>
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-extrabold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/50">
-                    7 سمات مميزة ✨
+              {/* Theme / Mosque Picker Grid */}
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    اختر المظهر أو أضف صورة خاصة:
                   </span>
                 </div>
                 <SpiritualThemePicker
                   currentThemeId={currentStyle}
                   onSelectTheme={(themeId, themeName) => {
-                    setSettings(prev => ({ ...prev, backdropStyle: themeId as AppSettings['backdropStyle'] }));
-                    setToastMessage(`تم تفعيل ثيم: ${themeName} ✨`);
+                    setSettings(prev => ({
+                      ...prev,
+                      backdropStyle: themeId as AppSettings['backdropStyle'],
+                      backdropRenderMode: 'illustrated', // Automatically activate illustrated mode so user sees image!
+                    }));
+                    setToastMessage(`تم تفعيل: ${themeName}`);
                   }}
                   columns={2}
                 />
               </div>
 
               {/* Backdrop Opacity Slider Bar */}
-              <div className="pt-3 border-t border-indigo-100 dark:border-indigo-900/40 space-y-2">
+              <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
-                    درجة شفافية الصورة ووضوح خلفية البطاقة:
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    وضوح وشفافية الخلفية:
                   </span>
-                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
                     {settings.backdropOpacity ?? 75}%
                   </span>
                 </div>
@@ -168,7 +166,7 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                   className="w-full accent-indigo-600 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
                 />
                 <div className="flex items-center justify-between text-[9.5px] text-slate-500 dark:text-slate-400 font-bold px-0.5">
-                  <span>خفيفة جداً (10%)</span>
+                  <span>خفيفة (10%)</span>
                   <span>متوازنة (75%)</span>
                   <span>ظهور كامل (100%)</span>
                 </div>
@@ -274,14 +272,26 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
             {/* 5. Hijri Offset Adjustment */}
             <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
               <div>
-                <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">تعديل التاريخ الهجري:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">تعديل التاريخ الهجري:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      window.dispatchEvent(new CustomEvent('open-hijri-adjust'));
+                    }}
+                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    (عرض مرئي 🗓️)
+                  </button>
+                </div>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400">لضبط مع رؤية الهلال المحلية</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setSettings(prev => ({ ...prev, hijriOffset: Math.max(-2, prev.hijriOffset - 1) }));
+                    setSettings(prev => ({ ...prev, hijriOffset: Math.max(-3, (prev.hijriOffset ?? 0) - 1) }));
                   }}
                   aria-label="إنقاص التاريخ الهجري يوماً واحداً"
                   className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-sm flex items-center justify-center shadow-xs cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-600"
@@ -289,12 +299,12 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                   -
                 </button>
                 <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 px-2 min-w-[3rem] text-center">
-                  {settings.hijriOffset > 0 ? `+${settings.hijriOffset}` : settings.hijriOffset} يوم
+                  {(settings.hijriOffset ?? 0) > 0 ? `+${settings.hijriOffset}` : (settings.hijriOffset ?? 0)} يوم
                 </span>
                 <button
                   type="button"
                   onClick={() => {
-                    setSettings(prev => ({ ...prev, hijriOffset: Math.min(2, prev.hijriOffset + 1) }));
+                    setSettings(prev => ({ ...prev, hijriOffset: Math.min(3, (prev.hijriOffset ?? 0) + 1) }));
                   }}
                   aria-label="زيادة التاريخ الهجري يوماً واحداً"
                   className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-black text-sm flex items-center justify-center shadow-xs cursor-pointer active:scale-95 border border-slate-200 dark:border-slate-600"
@@ -302,6 +312,25 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
                   +
                 </button>
               </div>
+            </div>
+
+            {/* 6. Battery Optimization Guide */}
+            <div className="flex items-center justify-between bg-cyan-500/5 dark:bg-cyan-950/30 p-3 rounded-2xl border border-cyan-500/20">
+              <div>
+                <span className="text-xs font-black text-cyan-950 dark:text-cyan-200 block">استقرار الأذان بالخلفية:</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">تجاوز قيود توفير الطاقة والبطارية</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  window.dispatchEvent(new CustomEvent('open-battery-guide'));
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-xs active:scale-95 cursor-pointer flex items-center gap-1"
+              >
+                <span>دليل البطارية</span>
+                <span>🔋</span>
+              </button>
             </div>
 
           </div>

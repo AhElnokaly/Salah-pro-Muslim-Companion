@@ -62,4 +62,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     showProgressBar: true,
     cardSize: 'medium',
   },
+  notifyHijriMonthStart: true,
 };

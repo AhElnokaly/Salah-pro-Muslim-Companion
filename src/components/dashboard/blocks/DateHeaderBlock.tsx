@@ -9,6 +9,7 @@ interface DateHeaderBlockProps {
   gregorianClean: string;
   dayNameArabic: string;
   setActiveTab?: (tab: string) => void;
+  onOpenHijriAdjust?: () => void;
   getMoonPhaseInfo: (day: number) => { name: string; icon: string; illumination: number };
   toArabicNumbers: (str: string | number) => string;
 }
@@ -19,6 +20,7 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = React.memo(({
   gregorianClean,
   dayNameArabic,
   setActiveTab,
+  onOpenHijriAdjust,
   getMoonPhaseInfo,
   toArabicNumbers
 }) => {
@@ -35,14 +37,24 @@ const DateHeaderBlock: React.FC<DateHeaderBlockProps> = React.memo(({
       <div className={`flex items-center justify-center gap-2 sm:gap-3 bg-black/20 rounded-full border border-white/10 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none ${sizeClasses}`}>
         {/* Clickable Hijri Date */}
         <button
+          id="date-header-hijri-quick-adjust-btn"
           type="button"
-          onClick={() => setActiveTab && setActiveTab('calendar')}
+          onClick={() => {
+            if (onOpenHijriAdjust) {
+              onOpenHijriAdjust();
+            } else {
+              window.dispatchEvent(new CustomEvent('open-hijri-adjust'));
+            }
+          }}
           className="flex items-center gap-1.5 font-extrabold text-white hover:text-amber-300 transition-colors cursor-pointer shrink-0 group"
-          title="اضغط لعرض التقويم الهجري والميلادي وتعديل الأيام"
-          aria-label={`التاريخ الهجري: ${hijri.fullString} - فتح التقويم`}
+          title="اضغط لضبط وتعديل التاريخ الهجري فوراً"
+          aria-label={`التاريخ الهجري: ${hijri.fullString} - اضغط لضبط التاريخ الهجري`}
         >
           <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
           <span className="leading-none drop-shadow-xs">{hijri.fullString}</span>
+          <span className="text-[9px] px-1 py-0.5 rounded-md bg-white/10 text-amber-300/80 group-hover:text-amber-200 group-hover:bg-white/20 transition-all font-medium">
+            ضبط ✏️
+          </span>
         </button>
 
         {/* Clickable Sleek Moon Phase Circle */}

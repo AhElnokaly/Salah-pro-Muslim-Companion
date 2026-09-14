@@ -47,6 +47,8 @@ import { useKhushuAutoScheduler } from '../domain/khushu/useKhushuAutoScheduler'
 import { DashboardKhushuModals } from './khushu/DashboardKhushuModals';
 import { useDashboardTimeAndPrayers } from './dashboard/useDashboardTimeAndPrayers';
 import { useDashboardBlockSharedProps } from './dashboard/useDashboardBlockSharedProps';
+import QuickHijriAdjustModal from './QuickHijriAdjustModal';
+import BatteryOptimizationModal from './BatteryOptimizationModal';
 import { BACKDROP_IMAGES } from './dashboard/dashboardBackdropImages';
 export { BACKDROP_IMAGES };
 
@@ -127,6 +129,19 @@ export default function Dashboard({
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locationToast, setLocationToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [isKhushuSheetOpen, setIsKhushuSheetOpen] = useState<boolean>(false);
+  const [showHijriAdjustModal, setShowHijriAdjustModal] = useState<boolean>(false);
+  const [showBatteryModal, setShowBatteryModal] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    const handleOpenHijri = () => setShowHijriAdjustModal(true);
+    const handleOpenBattery = () => setShowBatteryModal(true);
+    window.addEventListener('open-hijri-adjust', handleOpenHijri);
+    window.addEventListener('open-battery-guide', handleOpenBattery);
+    return () => {
+      window.removeEventListener('open-hijri-adjust', handleOpenHijri);
+      window.removeEventListener('open-battery-guide', handleOpenBattery);
+    };
+  }, []);
 
   const {
     isActive: isKhushuActive,
@@ -283,6 +298,7 @@ export default function Dashboard({
     gregorianClean,
     dayNameArabic,
     setActiveTab,
+    onOpenHijriAdjust: () => setShowHijriAdjustModal(true),
     now,
     showAnalogClock,
     setShowAnalogClock,
@@ -349,6 +365,8 @@ export default function Dashboard({
         times={times}
         currentStyle={currentStyle}
         dashboardSections={dashboardSections}
+        settings={settings}
+        onOpenHijriAdjust={() => setShowHijriAdjustModal(true)}
       />
 
       {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons - Always Visible) */}
@@ -486,6 +504,22 @@ export default function Dashboard({
         onOpenAthkar={() => {
           if (setActiveTab) setActiveTab('adhkar');
         }}
+      />
+
+      {/* Quick Hijri Date Adjust Modal (Inspired by Salatuk Experience) */}
+      <QuickHijriAdjustModal
+        isOpen={showHijriAdjustModal}
+        onClose={() => setShowHijriAdjustModal(false)}
+        settings={settings}
+        setSettings={setSettings}
+        now={now}
+        setActiveTab={setActiveTab}
+      />
+
+      {/* Battery Optimization & Background Athan Guide Modal (Inspired by Salatuk Experience) */}
+      <BatteryOptimizationModal
+        isOpen={showBatteryModal}
+        onClose={() => setShowBatteryModal(false)}
       />
     </div>
   );

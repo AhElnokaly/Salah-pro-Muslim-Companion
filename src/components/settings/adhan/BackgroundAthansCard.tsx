@@ -73,6 +73,24 @@ export const BackgroundAthansCard: React.FC<BackgroundAthansCardProps> = ({ setA
           تفعيل الإشعارات
         </button>
       </div>
+
+      {/* Battery Optimization & Background Guide Button */}
+      <div className="pt-2.5 border-t border-indigo-500/15 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+          <span>🔋 هل يتأخر الأذان أو ينقطع في الخلفية؟</span>
+        </div>
+        <button
+          id="open-battery-guide-btn"
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('open-battery-guide'));
+          }}
+          className="px-3 py-1.5 rounded-xl bg-cyan-600/15 hover:bg-cyan-600/25 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+        >
+          <span>دليل استقرار البطارية</span>
+          <span className="text-[10px]">⚙️</span>
+        </button>
+      </div>
     </div>
   );
 };

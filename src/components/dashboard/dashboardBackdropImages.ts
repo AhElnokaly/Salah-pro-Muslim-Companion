@@ -10,6 +10,10 @@ import lightMosqueBackdrop from '../../assets/images/mosque_backdrop_light.jpg';
 import darkMosqueBackdrop from '../../assets/images/mosque_backdrop_dark.jpg';
 
 export const BACKDROP_IMAGES = {
+  mosque_1: lightMosqueBackdrop,
+  mosque_2: darkMosqueBackdrop,
+  mosque_3: fridayBackdrop,
+  mosque_4: bannerBackdrop,
   gold: darkMosqueBackdrop,
   classic: lightMosqueBackdrop,
   banner: bannerBackdrop,

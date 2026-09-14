@@ -15,6 +15,7 @@ export interface CardBlockSharedProps {
   gregorianClean?: string;
   dayNameArabic?: string;
   setActiveTab?: (tab: DashboardTab | string) => void;
+  onOpenHijriAdjust?: () => void;
   onNavigateTab?: (tab: string, subTab?: string) => void;
   getMoonPhaseInfo?: (day: number) => { name: string; icon: string; illumination: number };
   toArabicNumbers?: (str: string | number) => string;

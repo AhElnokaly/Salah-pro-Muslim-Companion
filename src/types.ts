@@ -128,6 +128,11 @@ export interface CustomDua {
 }
 
 export type BackdropType = 
+  | 'auto'
+  | 'mosque_1'
+  | 'mosque_2'
+  | 'mosque_3'
+  | 'mosque_4'
   | 'gold' 
   | 'classic' 
   | 'banner' 
@@ -146,7 +151,7 @@ export type BackdropType =
   | 'glass_emerald'
   | 'glass_blue'
   | 'glass_dark'
-  | 'auto';
+  | (string & {});
 
 export type BackdropRenderMode = 'lineArt' | 'illustrated' | 'auto';
 
@@ -169,7 +174,7 @@ export interface AppSettings {
   prayerVolumes?: Record<string, number>;
   appStyle?: 'glass-dark' | 'faith-bright';
   primaryCalendar?: 'hijri' | 'gregorian';
-  backdropStyle?: 'gold' | 'classic' | 'banner' | 'emerald' | 'night_sky' | 'kaaba' | 'andulas' | 'minimal' | 'ramadan' | 'eid_fitr' | 'eid_adha' | 'friday' | 'madinah' | 'aqsa' | 'glass_crystal' | 'glass_emerald' | 'glass_blue' | 'glass_dark' | 'auto';
+  backdropStyle?: BackdropType;
   backdropRenderMode?: BackdropRenderMode;
   backdropOpacity?: number; // 10 to 100 percentage
   cardTheme?: 'dynamic' | 'gold_luxury' | 'emerald_royal' | 'velvet_night' | 'sunset_amber' | 'cyan_dome' | 'rose_twilight' | 'dark_onyx' | 'pure_light';
@@ -197,6 +202,7 @@ export interface AppSettings {
     showKhushuBtn?: boolean;
   };
   mainCardLayout?: MainCardLayout;
+  notifyHijriMonthStart?: boolean;
 }
 
 export type CardBlockId =

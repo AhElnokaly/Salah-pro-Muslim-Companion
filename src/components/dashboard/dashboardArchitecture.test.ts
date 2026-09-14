@@ -58,7 +58,7 @@ describe('Dashboard Modular Time & Prayers Architecture', () => {
     );
 
     const backdropKey = getAutoBackdropKey(fixedDate, times, hijri);
-    assert.ok(['classic', 'gold', 'friday', 'ramadan', 'eid_fitr', 'eid_adha'].includes(backdropKey), 'Backdrop key must be valid');
+    assert.ok(['classic', 'gold', 'friday', 'ramadan', 'eid_fitr', 'eid_adha', 'mosque_1', 'mosque_2', 'mosque_3'].includes(backdropKey), 'Backdrop key must be valid');
 
     const { gradient } = getTimeOfDayGradientAndLabel(fixedDate, times);
     const cardGradient = getGradientForBackdrop(backdropKey, gradient, 'auto');

@@ -1,7 +1,8 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { BackdropType, BackdropRenderMode } from '../types';
 import { resolveRenderMode, getBackdropImagePath } from '../utils/backdropAssets';
 import { safeGetJSON } from '../utils/storage';
+import { subscribeCustomWallpapers } from '../utils/customWallpaperStorage';
 
 export type { BackdropType };
 
@@ -355,6 +356,16 @@ export const IllustratedBackdrop = memo(function IllustratedBackdrop({
   className?: string;
 }) {
   const backdropKey = type === 'auto' ? 'classic' : type;
+  const [, setCustomTick] = useState(0);
+
+  useEffect(() => {
+    if (backdropKey.startsWith('custom_')) {
+      return subscribeCustomWallpapers(() => {
+        setCustomTick(t => t + 1);
+      });
+    }
+  }, [backdropKey]);
+
   const imagePath = getBackdropImagePath(backdropKey);
 
   if (!imagePath) {
