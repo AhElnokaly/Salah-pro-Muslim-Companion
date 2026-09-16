@@ -4,6 +4,7 @@ import {
   SettingsSubTabId, 
   DashboardTab, 
   QuranSession, 
+  QuranKhatma,
   PrayerName 
 } from '../../types';
 import { safeSetItem } from '../../utils/storage';
@@ -17,6 +18,8 @@ interface UseAppGlobalEventsProps {
   setNotificationsCount: (count: number) => void;
   quranSessions: QuranSession[];
   setQuranSessions: React.Dispatch<React.SetStateAction<QuranSession[]>>;
+  khatmat?: QuranKhatma[];
+  setKhatmat?: React.Dispatch<React.SetStateAction<QuranKhatma[]>>;
   current: PrayerName | 'Sunrise' | null;
   next: PrayerName | 'Sunrise' | null;
   setAthanOverlayPrayer: (prayer: PrayerName) => void;
@@ -33,6 +36,8 @@ export function useAppGlobalEvents({
   setNotificationsCount,
   quranSessions,
   setQuranSessions,
+  khatmat,
+  setKhatmat,
   current,
   next,
   setAthanOverlayPrayer,
@@ -118,14 +123,51 @@ export function useAppGlobalEvents({
       safeSetItem('mc_quran_sessions', JSON.stringify(updated));
     };
 
+    const handleSmartReadingCompleted = (e: Event) => {
+      const customEv = e as CustomEvent<{ pagesRead?: number }>;
+      const pagesRead = customEv?.detail?.pagesRead || 2;
+      const today = getLocalDateStr(new Date());
+      const newSession: QuranSession = {
+        id: `qs_smart_${Date.now()}`,
+        date: today,
+        sessionType: 'read',
+        unitType: 'pages',
+        unitValue: pagesRead
+      };
+      const updated = [newSession, ...quranSessions];
+      setQuranSessions(updated);
+      safeSetItem('mc_quran_sessions', JSON.stringify(updated));
+
+      if (khatmat && setKhatmat && khatmat.length > 0) {
+        const activeKhatma = khatmat.find((k) => k.status === 'active') || khatmat[0];
+        if (activeKhatma) {
+          const updatedKhatmat = khatmat.map((k) => {
+            if (k.id === activeKhatma.id) {
+              const newCurrent = Math.min(604, k.currentPage + pagesRead);
+              return {
+                ...k,
+                currentPage: newCurrent,
+                status: newCurrent >= 604 ? ('completed' as const) : k.status,
+              };
+            }
+            return k;
+          });
+          setKhatmat(updatedKhatmat);
+          safeSetItem('mc_quran_khatmat', JSON.stringify(updatedKhatmat));
+        }
+      }
+    };
+
     window.addEventListener('salah_quick_log_prayer', handleQuickLogPrayer);
     window.addEventListener('salah_quick_log_quran', handleQuickLogQuran);
+    window.addEventListener('smart-reading-portion-completed', handleSmartReadingCompleted);
 
     return () => {
       window.removeEventListener('salah_quick_log_prayer', handleQuickLogPrayer);
       window.removeEventListener('salah_quick_log_quran', handleQuickLogQuran);
+      window.removeEventListener('smart-reading-portion-completed', handleSmartReadingCompleted);
     };
-  }, [quranSessions, setQuranSessions, setActiveTab]);
+  }, [quranSessions, setQuranSessions, khatmat, setKhatmat, setActiveTab]);
 
   // Listen to simulation trigger globally
   useEffect(() => {

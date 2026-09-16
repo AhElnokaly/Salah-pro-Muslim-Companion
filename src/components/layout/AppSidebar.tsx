@@ -243,6 +243,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {(
                     [
                       { id: 'dashboard', label: 'تخصيص الشاشة الرئيسية', icon: Sliders },
+                      { id: 'smartNotifications', label: 'الإشعارات الذكية والورد اليومي', icon: Bell },
                       { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
                       { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
                       { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },

@@ -426,6 +426,73 @@ class AthanAlarmPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun updateOngoingPrayerNotification(call: PluginCall) {
+        val enabled = call.getBoolean("enabled", true) ?: true
+        val title = call.getString("title", "مواقيت الصلاة") ?: "مواقيت الصلاة"
+        val body = call.getString("body", "") ?: ""
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        if (notificationManager == null) {
+            val res = JSObject()
+            res.put("success", false)
+            call.resolve(res)
+            return
+        }
+
+        val channelId = "athan_ongoing_prayer_bar"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "شريط الصلاة الحي الدائم",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "يعرض وقت الصلاة القادمة والعد التنازلي بشكل دائم في ستارة الإشعارات"
+                setShowBadge(false)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val notificationId = 888801
+
+        if (!enabled) {
+            notificationManager.cancel(notificationId)
+            val res = JSObject()
+            res.put("success", true)
+            res.put("cleared", true)
+            call.resolve(res)
+            return
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pIntent = if (launchIntent != null) {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getActivity(context, 0, launchIntent, flags)
+        } else null
+
+        val notifBuilder = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setOngoing(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+
+        if (pIntent != null) {
+            notifBuilder.setContentIntent(pIntent)
+        }
+
+        notificationManager.notify(notificationId, notifBuilder.build())
+        val res = JSObject()
+        res.put("success", true)
+        res.put("posted", true)
+        call.resolve(res)
+    }
+
+    @PluginMethod
     fun scheduleAthanAlarms(call: PluginCall) {
         val timesArray: JSArray? = call.getArray("times")
         if (timesArray == null || timesArray.length() == 0) {

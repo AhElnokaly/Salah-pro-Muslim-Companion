@@ -25,6 +25,7 @@ import PrayerSettingsTab from './settings/PrayerSettingsTab';
 import AdhanSettingsTab from './settings/AdhanSettingsTab';
 import CalendarSettingsTab from './settings/CalendarSettingsTab';
 import DuasSettingsTab from './settings/DuasSettingsTab';
+import SmartNotificationsSettingsTab from './settings/SmartNotificationsSettingsTab';
 import { safeSetItem, safeGetItem } from '../utils/storage';
 
 interface MoreSettingsProps {
@@ -102,8 +103,45 @@ export default function MoreSettings({
     safeSetItem('salah_auto_play_athan', autoPlayAthan ? 'true' : 'false');
   }, [autoPlayAthan]);
 
+  const SETTINGS_TABS: { id: SettingsSubTabId; label: string }[] = [
+    { id: 'dashboard', label: 'الرئيسية' },
+    { id: 'smartNotifications', label: 'الإشعارات الذكية' },
+    { id: 'prayer', label: 'الصلاة' },
+    { id: 'location', label: 'الموقع' },
+    { id: 'adhan', label: 'الأذان' },
+    { id: 'calendar', label: 'التقويم' },
+    { id: 'theme', label: 'المظهر' },
+    { id: 'qada', label: 'سجل القضاء' },
+    { id: 'duas', label: 'الأدعية' },
+    { id: 'backup', label: 'النسخ الاحتياطي' },
+  ];
+
   return (
     <div id="settings-root" className="space-y-6 text-end animate-fade-in w-full" dir="rtl">
+      {/* Quick horizontal subtabs navigation bar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-1 border-b border-slate-200/60 dark:border-slate-800/80">
+        {SETTINGS_TABS.map((tabItem) => {
+          const isSelected = subTab === tabItem.id;
+          return (
+            <button
+              key={tabItem.id}
+              type="button"
+              onClick={() => setSubTab(tabItem.id)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
+                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/80'
+              }`}
+            >
+              {tabItem.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ==================== 0. SMART NOTIFICATIONS ==================== */}
+      {subTab === 'smartNotifications' && <SmartNotificationsSettingsTab />}
+
       {/* ==================== 1. PRAYER CALCULATIONS & MADHAB ==================== */}
       {subTab === 'prayer' && (
         <PrayerSettingsTab

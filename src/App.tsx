@@ -39,6 +39,7 @@ import { usePwaInstall } from './hooks/usePwaInstall';
 import { useAthanPlayer } from './hooks/useAthanPlayer';
 import { usePrayerScheduler } from './hooks/usePrayerScheduler';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton';
+import { useSmartNotificationsSystemSync } from './hooks/useSmartNotificationsSystemSync';
 
 import { formatDateKey } from './utils/prayerDayBoundary';
 import { trackFeatureUsage } from './utils/analyticsStorage';
@@ -220,12 +221,23 @@ export default function App() {
     setNotificationsCount,
     quranSessions,
     setQuranSessions,
+    khatmat,
+    setKhatmat,
     current,
     next,
     setAthanOverlayPrayer,
     setShowAthanOverlay,
     globalAudioRef,
     togglePlayAthanGlobal
+  });
+
+  // Silent Background Smart Notifications System Sync (Android Ongoing Notification Shade + Scheduled Reminders)
+  useSmartNotificationsSystemSync({
+    cityName: settings.cityName || 'موقعي',
+    hijriDateStr: hijri.fullString,
+    nextPrayerNameArabic: getArabicPrayerName(next),
+    nextPrayerTimeFormatted: times[next] || '',
+    remainingMsToNextPrayer: 0,
   });
 
   // Register Android Hardware Back Button Handling (Task 26)

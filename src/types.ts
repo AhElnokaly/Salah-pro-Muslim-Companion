@@ -308,7 +308,7 @@ export interface MuezzinOption {
 
 export type TabId = 'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon';
 
-export type SettingsSubTabId = 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas' | 'dashboard';
+export type SettingsSubTabId = 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas' | 'dashboard' | 'smartNotifications';
 
 export type ClockFace = 'classic' | 'islamic' | 'minimal' | 'hybrid';
 

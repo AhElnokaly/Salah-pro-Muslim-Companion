@@ -61,6 +61,17 @@ self.addEventListener('fetch', (event) => {
     return; // Pass through completely untouched
   }
 
+  // Never intercept source files or Vite internal modules under any circumstances
+  if (
+    url.pathname.includes('/src/') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.ts') ||
+    url.pathname.includes('/@vite/') ||
+    url.pathname.includes('/node_modules/')
+  ) {
+    return;
+  }
+
   const isNavigation = event.request.mode === 'navigate' || event.request.destination === 'document';
 
   if (url.origin === self.location.origin) {
@@ -155,6 +166,12 @@ self.addEventListener('notificationclick', (event) => {
             client.postMessage({
               type: 'TRIGGER_ATHAN_FROM_NOTIFICATION',
               prayerName: prayerName
+            });
+          }
+          if (event.notification.data?.tab) {
+            client.postMessage({
+              type: 'NAVIGATE_TAB',
+              tab: event.notification.data.tab
             });
           }
           return client.focus();
@@ -263,8 +280,94 @@ self.addEventListener('message', (event) => {
   } else if (event.data.type === 'SYNC_PRAYER_SCHEDULE') {
     const payload = event.data.payload || {};
     scheduleExactPrayerTimers(payload.schedule, payload.cityName, payload.adhanEnabled);
+  } else if (event.data.type === 'SYNC_SMART_SCHEDULE') {
+    const payload = event.data.payload || {};
+    scheduleSmartReminders(payload);
   }
 });
+
+let smartTimers = [];
+function scheduleSmartReminders(payload) {
+  for (const t of smartTimers) {
+    clearTimeout(t);
+  }
+  smartTimers = [];
+  if (!payload) return;
+
+  const now = new Date();
+  const scheduleTimeAt = (timeStr, callback) => {
+    if (!timeStr) return;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return;
+    const target = new Date();
+    target.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+    const delay = target.getTime() - now.getTime();
+    if (delay > 0 && delay < 24 * 60 * 60 * 1000) {
+      const timer = setTimeout(callback, delay);
+      smartTimers.push(timer);
+    }
+  };
+
+  if (payload.readingPortion?.enabled && !payload.readingPortion?.completedToday) {
+    scheduleTimeAt(payload.readingPortion.scheduledTime || '17:00', () => {
+      const start = payload.readingPortion.currentPage || 1;
+      const end = start + (payload.readingPortion.dailyPagesGoal || 2);
+      self.registration.showNotification('📖 وردك اليومي من القرآن', {
+        body: `اقرأ وردك من صفحة ${start} إلى صفحة ${end} المباركة`,
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'quran_reading_portion',
+        dir: 'rtl',
+        lang: 'ar',
+        vibrate: [200, 100, 200],
+        data: { url: './?tab=quran', tab: 'quran' },
+      });
+    });
+  }
+
+  if (payload.listeningPortion?.enabled) {
+    scheduleTimeAt(payload.listeningPortion.scheduledTime || '20:00', () => {
+      self.registration.showNotification('🎧 ورد الاستماع القرآني', {
+        body: 'حان موعد الاستماع لآيات الذكر الحكيم اليومية',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'quran_listening_portion',
+        dir: 'rtl',
+        lang: 'ar',
+        vibrate: [200, 100, 200],
+        data: { url: './?tab=quran&listen=true', tab: 'quran' },
+      });
+    });
+  }
+
+  if (payload.contextualAdhkar?.enabled) {
+    scheduleTimeAt(payload.contextualAdhkar.morningTime || '05:15', () => {
+      self.registration.showNotification('أذكار الصباح', {
+        body: 'حان وقت أذكار الصباح — «أصبحنا وأصبح المُلْكُ لله»',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'contextual_adhkar',
+        dir: 'rtl',
+        lang: 'ar',
+        vibrate: [200, 100, 200],
+        data: { url: './?tab=adhkar', tab: 'adhkar' },
+      });
+    });
+
+    scheduleTimeAt(payload.contextualAdhkar.eveningTime || '16:56', () => {
+      self.registration.showNotification('أذكار المساء', {
+        body: 'حان وقت أذكار المساء — «أمسينا وأمسى المُلْكُ لله»',
+        icon: './icon-192.png',
+        badge: './icon-192.png',
+        tag: 'contextual_adhkar',
+        dir: 'rtl',
+        lang: 'ar',
+        vibrate: [200, 100, 200],
+        data: { url: './?tab=adhkar', tab: 'adhkar' },
+      });
+    });
+  }
+}
 
 // Periodic Sync / Background Sync listeners (as fallback when browser wakes)
 self.addEventListener('periodicsync', (event) => {

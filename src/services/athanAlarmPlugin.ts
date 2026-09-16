@@ -57,6 +57,7 @@ export interface AthanAlarmPlugin {
   requestIgnoreBatteryOptimization(): Promise<{ requested: boolean }>;
   checkNotificationPermission(): Promise<{ granted: boolean; status: string }>;
   requestNotificationPermission(): Promise<{ granted: boolean; status: string }>;
+  updateOngoingPrayerNotification?(options: { enabled: boolean; title?: string; body?: string }): Promise<{ success: boolean; posted?: boolean; cleared?: boolean }>;
 }
 
 const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
