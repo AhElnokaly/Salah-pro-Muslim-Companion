@@ -15,11 +15,27 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     
     <link rel="manifest" href="./manifest.json" />
-    <script type="module" crossorigin src="./assets/index-kpdLv_UO.js"></script>
+
+    <script>
+      // Immediate cleanup of service workers in dev/cloud preview environments to avoid caching Vite source code
+      (function() {
+        if ('serviceWorker' in navigator) {
+          var h = window.location.hostname;
+          if (h.indexOf('run.app') !== -1 || h.indexOf('aistudio') !== -1 || h === 'localhost' || h === '127.0.0.1') {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) {
+                regs[i].unregister();
+              }
+            }).catch(function() {});
+          }
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-DozDNM57.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-libs-Bb8JjhAW.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-core-CoESz5TR.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-CAzbkKaE.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-DbYqxvso.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-Bd5n78Lb.css">
   </head>
   <body class="bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root">
@@ -37,10 +53,41 @@
       </div>
     </div>
     <script>
+      var hasRecovered = false;
+      var retryCount = 0;
+
       // Global resource error detection (catches 404/503 on JS/CSS modules)
       window.addEventListener('error', function(e) {
         if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-          console.error('[BootGuard] Failed loading essential asset:', e.target.src || e.target.href);
+          var src = e.target.src || e.target.href || '';
+          console.warn('[BootGuard] Network hiccup loading module asset:', src);
+
+          // If main entry point failed to load (e.g. cold start / SW cache conflict), attempt self-healing retry
+          if (src.indexOf('/src/main.tsx') !== -1 && retryCount < 2 && !hasRecovered) {
+            retryCount++;
+            console.log('[BootGuard] Attempting automatic self-healing reload for main entry point (attempt ' + retryCount + ')...');
+            
+            // Clean service worker registrations
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                for (var i = 0; i < regs.length; i++) regs[i].unregister();
+              }).catch(function() {});
+            }
+
+            // Retry importing main.tsx dynamically with cache-busting
+            setTimeout(function() {
+              import('/src/main.tsx?t=' + Date.now()).then(function() {
+                hasRecovered = true;
+                console.log('[BootGuard] Self-healing module load succeeded!');
+              }).catch(function(err) {
+                console.error('[BootGuard] Retry failed:', err);
+                var box = document.getElementById('recovery-box');
+                if (box) box.style.display = 'block';
+              });
+            }, 600);
+            return;
+          }
+
           var box = document.getElementById('recovery-box');
           if (box) {
             box.style.display = 'block';
@@ -53,7 +100,7 @@
         if (box && document.getElementById('boot-loader')) {
           box.style.display = 'block';
         }
-      }, 2500);
+      }, 7000);
 
       function clearAndReload() {
         var btn = document.querySelector('#recovery-box button');
