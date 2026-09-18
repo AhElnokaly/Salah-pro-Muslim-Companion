@@ -354,16 +354,13 @@
             android:textSize="11sp"
             android:textStyle="bold" />
 
-        <!-- Spacer -->
-        <View
-            android:layout_width="6dp"
-            android:layout_height="1dp" />
-
         <!-- Khushu Toggle Button -->
         <TextView
             android:id="@+id/widget_khushu_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginLeft="6dp"
             android:background="@drawable/widget_khushu_btn_bg"
             android:gravity="center"
             android:paddingLeft="12dp"

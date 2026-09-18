@@ -348,6 +348,7 @@ export interface NativeWidgetPayload {
   progressPercent?: number;
   isJumuah?: boolean;
   dhikrText?: string;
+  timePeriod?: string;
 }
 
 export async function updateNativeWidgetData(

@@ -115,6 +115,7 @@ class SalahWidgetProvider : AppWidgetProvider() {
             var isha = "08:21 م"
             var isJumuah = false
             var dhikrText = "«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»"
+            var timePeriod = ""
 
             if (widgetDataJson != null) {
                 try {
@@ -134,10 +135,25 @@ class SalahWidgetProvider : AppWidgetProvider() {
                     isha = json.optString("isha", isha)
                     isJumuah = json.optBoolean("isJumuah", false)
                     dhikrText = json.optString("dhikrText", dhikrText)
+                    timePeriod = json.optString("timePeriod", "")
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
+
+            // Dynamic Spiritual Background matching time of day / Hero card
+            val cal = Calendar.getInstance()
+            val hour = cal.get(Calendar.HOUR_OF_DAY)
+            val isDaytime = hour in 6..17
+
+            val bgResId = when {
+                timePeriod.equals("friday", ignoreCase = true) || (isJumuah && isDaytime) -> R.drawable.widget_card_bg_friday
+                timePeriod.equals("fajr", ignoreCase = true) || activePrayer == "fajr" -> R.drawable.widget_card_bg_fajr
+                timePeriod.equals("sunset", ignoreCase = true) || activePrayer == "maghrib" -> R.drawable.widget_card_bg_sunset
+                timePeriod.equals("day", ignoreCase = true) || (isDaytime && (activePrayer == "dhuhr" || activePrayer == "asr")) -> R.drawable.widget_card_bg_day
+                else -> R.drawable.widget_card_bg_night
+            }
+            views.setInt(R.id.widget_root, "setBackgroundResource", bgResId)
 
             // Fallback for current digital time
             if (currentTime.isEmpty()) {

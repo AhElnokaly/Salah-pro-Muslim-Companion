@@ -97,6 +97,19 @@ export function useSmartNotificationsSystemSync({
       // Update Android Native Widget (Homescreen)
       if (times && typeof window !== 'undefined' && window.Capacitor?.isNativePlatform()) {
         const hDate = dayNameArabic ? `${dayNameArabic} • ${hijriDateStr}` : hijriDateStr;
+        const currentHour = new Date().getHours();
+        const isDaytime = currentHour >= 6 && currentHour < 18;
+        let timePeriod = 'night';
+        if (isJumuah && isDaytime) {
+          timePeriod = 'friday';
+        } else if (nextPrayerKey === 'fajr' || (currentHour >= 4 && currentHour < 6)) {
+          timePeriod = 'fajr';
+        } else if (nextPrayerKey === 'maghrib' || (currentHour >= 17 && currentHour < 19)) {
+          timePeriod = 'sunset';
+        } else if (isDaytime) {
+          timePeriod = 'day';
+        }
+
         updateNativeWidgetData(times, cityName, {
           hijriDate: hDate,
           moonPhase: moonPhaseText || '🌓 التربيع الأول',
@@ -107,6 +120,7 @@ export function useSmartNotificationsSystemSync({
           progressPercent: progressPercent ?? 80,
           activePrayer: (nextPrayerKey || 'dhuhr').toLowerCase(),
           isJumuah: Boolean(isJumuah),
+          timePeriod,
         }).catch(() => {});
       }
 

@@ -61,6 +61,15 @@ jobs:
       - name: Sync Capacitor Android Project 🔄
         run: npx cap sync android
 
+      - name: Restore Keystores from Secrets 🔑
+        run: |
+          mkdir -p ~/.android
+          if [ -n "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" ]; then
+            echo "Installing DEBUG_KEYSTORE_BASE64 to ~/.android and android/app..."
+            echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore
+            echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > android/app/debug.keystore
+          fi
+
       - name: Grant Executable Permissions to Gradlew 🔑
         run: |
           if [ -f "android/gradlew" ]; then
