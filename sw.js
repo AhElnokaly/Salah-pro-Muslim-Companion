@@ -7,6 +7,10 @@ const PRECACHE_ASSETS = [
   '/apple-touch-icon.png',
   '/icon-192.png',
   '/icon-512.png',
+  '/favicon.png',
+  '/hemmaty_logo.png',
+  '/muslim_companion_icon.png',
+  '/images/logo.png',
   '/hemmaty_logo.jpg',
   '/muslim_companion_icon.jpg',
   '/audio/takbeer.mp3',
@@ -155,8 +159,17 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
+  let targetTab = event.notification.data?.tab;
+  if (event.action === 'open_times') {
+    targetTab = 'times';
+  } else if (event.action === 'open_adhkar') {
+    targetTab = 'adhkar';
+  } else if (event.action === 'open_quran') {
+    targetTab = 'quran';
+  }
+
   const prayerName = event.notification.data?.prayerName;
-  const urlToOpen = event.notification.data?.url || (prayerName ? `./?autoAthan=true&prayer=${prayerName}` : './');
+  const urlToOpen = targetTab ? `./?tab=${targetTab}` : (event.notification.data?.url || (prayerName ? `./?autoAthan=true&prayer=${prayerName}` : './'));
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
@@ -168,10 +181,10 @@ self.addEventListener('notificationclick', (event) => {
               prayerName: prayerName
             });
           }
-          if (event.notification.data?.tab) {
+          if (targetTab) {
             client.postMessage({
               type: 'NAVIGATE_TAB',
-              tab: event.notification.data.tab
+              tab: targetTab
             });
           }
           return client.focus();
