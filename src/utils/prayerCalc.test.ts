@@ -89,6 +89,8 @@ describe('Prayer Calculation Engine', () => {
     // Friday
     const friday = new Date(2026, 8, 4);
     assert.equal(getArabicPrayerName('Dhuhr', friday), 'الجمعة');
+    assert.equal(getArabicPrayerName('Dhuhr', friday.getTime()), 'الجمعة');
+    assert.equal(getArabicPrayerName('Dhuhr', thursday.getTime()), 'الظهر');
 
     assert.equal(getArabicPrayerName('Fajr'), 'الفجر');
     assert.equal(getArabicPrayerName('Asr'), 'العصر');

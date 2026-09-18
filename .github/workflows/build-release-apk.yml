@@ -110,7 +110,7 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF_NAME#v}"
           else
-            VERSION_NAME=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.6")
+            VERSION_NAME=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.7")
           fi
           TAG_NAME="v${VERSION_NAME}"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"

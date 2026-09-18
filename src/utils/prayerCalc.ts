@@ -410,8 +410,15 @@ export function getCurrentAndNextPrayer(
   };
 }
 
-export function getArabicPrayerName(name: PrayerName, date: Date | string = new Date()): string {
-  const d = typeof date === 'string' ? new Date(date) : (date || new Date());
+export function getArabicPrayerName(name: PrayerName, date: Date | string | number = new Date()): string {
+  let d: Date;
+  if (date instanceof Date) {
+    d = date;
+  } else if (typeof date === 'string' || typeof date === 'number') {
+    d = new Date(date);
+  } else {
+    d = new Date();
+  }
   if (name === 'Dhuhr') {
     if (!isNaN(d.getTime()) && d.getDay() === 5) {
       return 'الجمعة';
