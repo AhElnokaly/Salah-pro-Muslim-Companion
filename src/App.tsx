@@ -51,6 +51,8 @@ import companionIcon from './assets/images/hemmaty_logo.png';
 // Calculations for standalone widget state synchronization
 import { getArabicPrayerName } from './utils/prayerCalc';
 import { toArabicNumbers } from './utils/hijri';
+import { getMoonPhaseInfo } from './utils/moonPhase';
+import { getPrayerProgressPercentage } from './utils/dashboardSky';
 import { getUnreadVersionStatus } from './data/changelog';
 import { checkForAppUpdates, AppReleaseInfo } from './services/updateChecker';
 import UpdateNotificationModal from './components/common/UpdateNotificationModal';
@@ -231,7 +233,19 @@ export default function App() {
     togglePlayAthanGlobal
   });
 
-  // Silent Background Smart Notifications System Sync (Android Ongoing Notification Shade + Scheduled Reminders)
+  // Compute widget & notification synchronization parameters
+  const moonInfo = getMoonPhaseInfo(hijri.day);
+  const moonPhaseText = `${moonInfo.icon} ${moonInfo.name}`;
+  const currentTimeFormatted = toArabicNumbers(
+    now.toLocaleTimeString('ar-EG', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  );
+  const progressPercent = getPrayerProgressPercentage(now, times);
+
+  // Silent Background Smart Notifications System Sync (Android Ongoing Notification Shade + Android Homescreen Widget)
   useSmartNotificationsSystemSync({
     cityName: settings.cityName || 'موقعي',
     hijriDateStr: hijri.fullString,
@@ -239,6 +253,14 @@ export default function App() {
     nextPrayerTimeFormatted: times[next] || '',
     remainingMsToNextPrayer: remainingMs,
     targetTimestampMs,
+    times,
+    dayNameArabic,
+    nextPrayerKey: next,
+    moonPhaseText,
+    currentTimeFormatted,
+    timeRemainingFormatted: timeRemainingStr,
+    progressPercent,
+    isJumuah: now.getDay() === 5 && next === 'Dhuhr',
   });
 
   // Register Android Hardware Back Button Handling (Task 26)

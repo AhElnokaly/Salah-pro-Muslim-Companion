@@ -10,7 +10,8 @@ import {
   SMART_NOTIFICATIONS_STORAGE_KEY 
 } from '../domain/smartNotifications/smartNotificationService';
 import { SmartNotificationsSettings } from '../domain/smartNotifications/smartNotificationTypes';
-import AthanAlarm from '../services/athanAlarmPlugin';
+import AthanAlarm, { updateNativeWidgetData } from '../services/athanAlarmPlugin';
+import { PrayerTimes } from '../types';
 import { safeGetJSON, safeSetJSON } from '../utils/storage';
 
 interface UseSmartNotificationsSystemSyncProps {
@@ -20,6 +21,14 @@ interface UseSmartNotificationsSystemSyncProps {
   nextPrayerTimeFormatted: string;
   remainingMsToNextPrayer: number;
   targetTimestampMs?: number;
+  times?: Record<string, string> | PrayerTimes;
+  dayNameArabic?: string;
+  nextPrayerKey?: string;
+  moonPhaseText?: string;
+  currentTimeFormatted?: string;
+  timeRemainingFormatted?: string;
+  progressPercent?: number;
+  isJumuah?: boolean;
 }
 
 const DISPATCHED_STORAGE_KEY = 'hemmaty_smart_notifications_dispatched_log';
@@ -44,6 +53,14 @@ export function useSmartNotificationsSystemSync({
   nextPrayerTimeFormatted,
   remainingMsToNextPrayer,
   targetTimestampMs,
+  times,
+  dayNameArabic,
+  nextPrayerKey,
+  moonPhaseText,
+  currentTimeFormatted,
+  timeRemainingFormatted,
+  progressPercent,
+  isJumuah,
 }: UseSmartNotificationsSystemSyncProps) {
   const lastOngoingUpdateRef = useRef<number>(0);
   const settingsRef = useRef<SmartNotificationsSettings>(getSmartNotificationsSettings());
@@ -72,10 +89,27 @@ export function useSmartNotificationsSystemSync({
     };
   }, []);
 
-  // 1. Ongoing Prayer Bar: Update OS Notification Bar (Android Ongoing Notification)
+  // 1. Ongoing Prayer Bar & Android Widget Update
   useEffect(() => {
     const updateOngoing = () => {
       const settings = settingsRef.current;
+      
+      // Update Android Native Widget (Homescreen)
+      if (times && typeof window !== 'undefined' && window.Capacitor?.isNativePlatform()) {
+        const hDate = dayNameArabic ? `${dayNameArabic} • ${hijriDateStr}` : hijriDateStr;
+        updateNativeWidgetData(times, cityName, {
+          hijriDate: hDate,
+          moonPhase: moonPhaseText || '🌓 التربيع الأول',
+          currentTime: currentTimeFormatted,
+          nextPrayerTitle: `الصلاة القادمة: صلاة ${nextPrayerNameArabic}`,
+          nextPrayerTime: nextPrayerTimeFormatted,
+          remainingText: `⏳ متبقي: ${timeRemainingFormatted || ''}`,
+          progressPercent: progressPercent ?? 80,
+          activePrayer: (nextPrayerKey || 'dhuhr').toLowerCase(),
+          isJumuah: Boolean(isJumuah),
+        }).catch(() => {});
+      }
+
       if (!settings.ongoingPrayerBar.enabled) return;
 
       const currentRemaining = targetTimestampMs
@@ -100,7 +134,22 @@ export function useSmartNotificationsSystemSync({
     // Regular interval to keep notification countdown accurate even without app re-render
     const interval = setInterval(updateOngoing, 20000);
     return () => clearInterval(interval);
-  }, [cityName, hijriDateStr, nextPrayerNameArabic, nextPrayerTimeFormatted, remainingMsToNextPrayer, targetTimestampMs]);
+  }, [
+    cityName,
+    hijriDateStr,
+    nextPrayerNameArabic,
+    nextPrayerTimeFormatted,
+    remainingMsToNextPrayer,
+    targetTimestampMs,
+    times,
+    dayNameArabic,
+    nextPrayerKey,
+    moonPhaseText,
+    currentTimeFormatted,
+    timeRemainingFormatted,
+    progressPercent,
+    isJumuah,
+  ]);
 
   // 2. Periodic Time Watcher for Scheduled Reminders (Quran Reading, Listening, Adhkar)
   useEffect(() => {

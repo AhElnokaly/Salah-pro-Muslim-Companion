@@ -68,6 +68,7 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.salahpro.app.widget.ACTION_TOGGLE_KHUSHU" />
+                <action android:name="com.salahpro.app.widget.ACTION_INCREMENT_TASBEEH" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

@@ -50,7 +50,7 @@ export interface AthanAlarmPlugin {
   getScheduledAlarms(): Promise<{ alarms: ScheduledAlarmItem[]; count: number }>;
   cancelAllAlarms(): Promise<{ cancelled: boolean }>;
   cancelAlarm(options: { alarmId?: string; requestCode?: number }): Promise<{ cancelled: boolean; requestCode?: number }>;
-  updateWidgetData(options: { data: Record<string, string>; cityName: string }): Promise<{ updated: boolean }>;
+  updateWidgetData(options: { data: Record<string, any>; cityName: string }): Promise<{ updated: boolean }>;
   checkExactAlarmPermission(): Promise<{ granted: boolean }>;
   requestExactAlarmPermission(): Promise<{ requested: boolean }>;
   checkBatteryOptimization(): Promise<{ isOptimized: boolean; isIgnoringBatteryOptimizations: boolean }>;
@@ -331,16 +331,42 @@ export async function scheduleNativeAthanAlarms(
   }
 }
 
-export async function updateNativeWidgetData(prayerTimesMap: Record<string, string> | PrayerTimes, cityName: string, nextPrayerText?: string): Promise<boolean> {
+export interface NativeWidgetPayload {
+  fajr?: string;
+  dhuhr?: string;
+  asr?: string;
+  maghrib?: string;
+  isha?: string;
+  nextPrayer?: string;
+  activePrayer?: string;
+  hijriDate?: string;
+  moonPhase?: string;
+  currentTime?: string;
+  nextPrayerTitle?: string;
+  nextPrayerTime?: string;
+  remainingText?: string;
+  progressPercent?: number;
+  isJumuah?: boolean;
+  dhikrText?: string;
+}
+
+export async function updateNativeWidgetData(
+  prayerTimesMap: Record<string, string> | PrayerTimes,
+  cityName: string,
+  extra?: Partial<NativeWidgetPayload> | string
+): Promise<boolean> {
   try {
     const timesMapObj = prayerTimesMap as Record<string, string>;
-    const data: Record<string, string> = {
-      fajr: timesMapObj.Fajr || timesMapObj.fajr || '04:30',
-      dhuhr: timesMapObj.Dhuhr || timesMapObj.dhuhr || '12:15',
-      asr: timesMapObj.Asr || timesMapObj.asr || '15:45',
-      maghrib: timesMapObj.Maghrib || timesMapObj.maghrib || '19:02',
-      isha: timesMapObj.Isha || timesMapObj.isha || '20:35',
-      nextPrayer: nextPrayerText || 'الفجر',
+    const extraObj = typeof extra === 'string' ? { nextPrayer: extra } : (extra || {});
+    const data: Record<string, any> = {
+      fajr: timesMapObj.Fajr || timesMapObj.fajr || '05:18 ص',
+      dhuhr: timesMapObj.Dhuhr || timesMapObj.dhuhr || '12:54 م',
+      asr: timesMapObj.Asr || timesMapObj.asr || '04:23 م',
+      maghrib: timesMapObj.Maghrib || timesMapObj.maghrib || '07:02 م',
+      isha: timesMapObj.Isha || timesMapObj.isha || '08:21 م',
+      nextPrayer: extraObj.nextPrayer || 'الفجر',
+      activePrayer: extraObj.activePrayer || extraObj.nextPrayer || 'dhuhr',
+      ...extraObj,
     };
     await AthanAlarm.updateWidgetData({ data, cityName });
     return true;
