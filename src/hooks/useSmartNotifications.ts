@@ -94,21 +94,14 @@ export function useSmartNotifications({
   const eveningAdhkarInfo = getContextualAdhkarInfo('evening', settings.contextualAdhkar.eveningTime);
 
   // Ongoing prayer bar formatted data
-  const baseOngoingData = getOngoingPrayerBarData(
+  const ongoingPrayerData = getOngoingPrayerBarData(
     cityName,
     hijriFullString,
     nextPrayerNameArabic,
     nextPrayerTimeFormatted,
-    liveRemainingMs
+    liveRemainingMs,
+    settings.ongoingPrayerBar
   );
-
-  const ongoingPrayerData = countdownFormatted
-    ? {
-        ...baseOngoingData,
-        countdownFormatted: countdownFormatted.startsWith('+') ? countdownFormatted : `+ ${countdownFormatted}`,
-        secondLine: `${nextPrayerNameArabic}، ${nextPrayerTimeFormatted}  ${countdownFormatted.startsWith('+') ? countdownFormatted : `+ ${countdownFormatted}`}`,
-      }
-    : baseOngoingData;
 
   // Play next ayah audio in sequence
   const playAyahAt = useCallback((index: number, urls: string[]) => {

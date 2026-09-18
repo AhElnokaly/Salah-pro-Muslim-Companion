@@ -112,7 +112,7 @@ export const PrayerAnalogClock: React.FC<PrayerAnalogClockProps> = ({
 
       {/* Clock Face Customizer Buttons */}
       <div className="space-y-1 w-full">
-        <span className="text-[9px] text-slate-400 dark:text-slate-500 font-black text-end block">شكل وجه الساعة:</span>
+        <span className="text-[9px] text-slate-400 dark:text-slate-500 font-black text-right block">شكل وجه الساعة:</span>
         <div className="grid grid-cols-4 gap-1 w-full">
           {(
             [

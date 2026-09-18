@@ -19,6 +19,7 @@ interface UseSmartNotificationsSystemSyncProps {
   nextPrayerNameArabic: string;
   nextPrayerTimeFormatted: string;
   remainingMsToNextPrayer: number;
+  targetTimestampMs?: number;
 }
 
 const DISPATCHED_STORAGE_KEY = 'hemmaty_smart_notifications_dispatched_log';
@@ -42,6 +43,7 @@ export function useSmartNotificationsSystemSync({
   nextPrayerNameArabic,
   nextPrayerTimeFormatted,
   remainingMsToNextPrayer,
+  targetTimestampMs,
 }: UseSmartNotificationsSystemSyncProps) {
   const lastOngoingUpdateRef = useRef<number>(0);
   const settingsRef = useRef<SmartNotificationsSettings>(getSmartNotificationsSettings());
@@ -72,24 +74,33 @@ export function useSmartNotificationsSystemSync({
 
   // 1. Ongoing Prayer Bar: Update OS Notification Bar (Android Ongoing Notification)
   useEffect(() => {
-    const settings = settingsRef.current;
-    if (!settings.ongoingPrayerBar.enabled) return;
+    const updateOngoing = () => {
+      const settings = settingsRef.current;
+      if (!settings.ongoingPrayerBar.enabled) return;
 
-    // Rate-limit IPC update to once every 20-30 seconds unless prayer changes
-    const now = Date.now();
-    if (now - lastOngoingUpdateRef.current < 20000) return;
-    lastOngoingUpdateRef.current = now;
+      const currentRemaining = targetTimestampMs
+        ? Math.max(0, targetTimestampMs - Date.now())
+        : remainingMsToNextPrayer;
 
-    dispatchSmartNotification('ongoing_prayer', settings, {
-      locationName: cityName,
-      hijriDateStr,
-      nextPrayerNameArabic,
-      prayerTimeFormatted: nextPrayerTimeFormatted,
-      remainingMs: remainingMsToNextPrayer,
-    }).catch((err) => {
-      console.warn('[SmartNotificationsSystemSync] Ongoing update failed:', err);
-    });
-  }, [cityName, hijriDateStr, nextPrayerNameArabic, nextPrayerTimeFormatted, remainingMsToNextPrayer]);
+      dispatchSmartNotification('ongoing_prayer', settings, {
+        locationName: cityName,
+        hijriDateStr,
+        nextPrayerNameArabic,
+        prayerTimeFormatted: nextPrayerTimeFormatted,
+        remainingMs: currentRemaining,
+        targetTimestamp: targetTimestampMs,
+      }).catch((err) => {
+        console.warn('[SmartNotificationsSystemSync] Ongoing update failed:', err);
+      });
+    };
+
+    // Immediate update
+    updateOngoing();
+
+    // Regular interval to keep notification countdown accurate even without app re-render
+    const interval = setInterval(updateOngoing, 20000);
+    return () => clearInterval(interval);
+  }, [cityName, hijriDateStr, nextPrayerNameArabic, nextPrayerTimeFormatted, remainingMsToNextPrayer, targetTimestampMs]);
 
   // 2. Periodic Time Watcher for Scheduled Reminders (Quran Reading, Listening, Adhkar)
   useEffect(() => {

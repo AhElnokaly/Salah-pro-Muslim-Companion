@@ -72,7 +72,7 @@ export const QuickSettingsModal: React.FC<QuickSettingsModalProps> = ({
           </div>
 
           {/* Body Scrollable */}
-          <div className="p-5 overflow-y-auto space-y-5 text-end">
+          <div className="p-5 overflow-y-auto space-y-5 text-right">
             
             {/* 1. Backdrop Settings */}
             <div className="space-y-3 bg-slate-50 dark:bg-slate-900/60 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">

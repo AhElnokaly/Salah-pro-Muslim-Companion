@@ -35,7 +35,7 @@ export const AppBanners: React.FC<AppBannersProps> = ({
   return (
     <>
       {storageWriteError && !storageWarningAcknowledged && (
-        <div className="w-full p-3.5 bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 rounded-2xl text-rose-900 dark:text-rose-100 space-y-2 text-end text-xs shadow-md">
+        <div className="w-full p-3.5 bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 rounded-2xl text-rose-900 dark:text-rose-100 space-y-2 text-right text-xs shadow-md">
           <div className="flex items-center gap-2 font-bold text-sm">
             <span className="text-base">⚠️</span>
             <span>تنبيه هام: تعذر حفظ البيانات</span>
@@ -53,7 +53,7 @@ export const AppBanners: React.FC<AppBannersProps> = ({
       )}
 
       {notifPermission === 'default' && !notifBannerDismissed && (
-        <div className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 rounded-2xl text-indigo-900 dark:text-indigo-100 flex items-center justify-between gap-3 text-end text-xs shadow-xs">
+        <div className="w-full p-3.5 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 rounded-2xl text-indigo-900 dark:text-indigo-100 flex items-center justify-between gap-3 text-right text-xs shadow-xs">
           <div className="flex items-center gap-2.5">
             <span className="text-base">🔔</span>
             <div>
@@ -90,7 +90,7 @@ export const AppBanners: React.FC<AppBannersProps> = ({
       )}
 
       {!exactAlarmPermissionGranted && !exactAlarmBannerDismissed && (
-        <div className="w-full p-3.5 bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-100 flex items-center justify-between gap-3 text-end text-xs shadow-xs">
+        <div className="w-full p-3.5 bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-100 flex items-center justify-between gap-3 text-right text-xs shadow-xs">
           <div className="flex items-center gap-2.5">
             <span className="text-base">⏰</span>
             <div>

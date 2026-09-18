@@ -31,7 +31,7 @@ export function FridaySunnahChecklist({
   const completionPercentage = Math.round((completedCount / totalItems) * 100);
 
   return (
-    <div className="space-y-3 text-right" dir="rtl">
+    <div className="space-y-3 " dir="rtl">
       <div className="flex items-center justify-between">
         <span className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
           <Trophy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -59,7 +59,7 @@ export function FridaySunnahChecklist({
               key={item.key}
               type="button"
               onClick={() => onToggleCheck(item.key)}
-              className={`p-3 rounded-2xl border text-right flex items-start gap-3 transition-all cursor-pointer ${
+              className={`p-3 rounded-2xl border  flex items-start gap-3 transition-all cursor-pointer ${
                 isChecked
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-bold'
                   : currentStyle === 'glass-dark'
@@ -74,11 +74,11 @@ export function FridaySunnahChecklist({
               }`}>
                 {isChecked && <Check className="w-3.5 h-3.5" />}
               </div>
-              <div className="text-right">
-                <span className="text-xs font-black block leading-none text-right">
+              <div className="">
+                <span className="text-xs font-black block leading-none ">
                   {item.emoji} {item.label}
                 </span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block mt-1 text-right">
+                <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold block mt-1 ">
                   {item.desc}
                 </span>
               </div>

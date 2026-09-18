@@ -63,7 +63,7 @@ export default function AppModal({ message, variant = 'info', onClose }: AppModa
         role="dialog"
         aria-modal="true"
         aria-label="نافذة تنبيه النظام"
-        className={`bg-white dark:bg-[#18202c] border ${cfg.border} rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-end`}
+        className={`bg-white dark:bg-[#18202c] border ${cfg.border} rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-right`}
         onClick={e => e.stopPropagation()}
       >
         <div className={`flex items-center gap-2.5 font-black text-base ${cfg.titleColor}`}>

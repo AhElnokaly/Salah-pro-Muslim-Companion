@@ -34,7 +34,7 @@ export const DiscoveryBubble: React.FC<DiscoveryBubbleProps> = ({
   const Icon = currentFeature.icon;
 
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-3.5 sm:p-4 border border-indigo-500/30 shadow-xl relative overflow-hidden transition-all duration-300 text-end">
+    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-3.5 sm:p-4 border border-indigo-500/30 shadow-xl relative overflow-hidden transition-all duration-300 text-right">
       {/* Background glow accents */}
       <div className="absolute top-0 end-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
       <div className="absolute bottom-0 start-0 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />

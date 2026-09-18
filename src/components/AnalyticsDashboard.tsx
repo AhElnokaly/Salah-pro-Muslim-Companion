@@ -89,7 +89,7 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
   const bronzeCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 1).length;
 
   return (
-    <div className="space-y-6 text-end animate-fade-in pb-12" id="analytics-dashboard-root">
+    <div className="space-y-6 text-right animate-fade-in pb-12" id="analytics-dashboard-root">
       {/* 1. HERO BANNER & OVERVIEW STATS */}
       <AnalyticsHero
         period={period}

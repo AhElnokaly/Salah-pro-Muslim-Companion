@@ -150,7 +150,7 @@ export const KhushuGuidelinesCard: React.FC<KhushuGuidelinesCardProps> = ({
           return (
             <div
               key={step.id}
-              className={`p-3.5 rounded-2xl border text-end transition-all space-y-2 ${
+              className={`p-3.5 rounded-2xl border text-right transition-all space-y-2 ${
                 isDone
                   ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-slate-800 dark:text-slate-200'
                   : 'bg-slate-50/60 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/40'
@@ -160,7 +160,7 @@ export const KhushuGuidelinesCard: React.FC<KhushuGuidelinesCardProps> = ({
                 <button
                   type="button"
                   onClick={() => onToggleKhushuStep(step.id)}
-                  className="flex items-start gap-2.5 flex-1 cursor-pointer text-end"
+                  className="flex items-start gap-2.5 flex-1 cursor-pointer text-right"
                 >
                   <div className="mt-0.5 shrink-0">
                     {isDone ? (

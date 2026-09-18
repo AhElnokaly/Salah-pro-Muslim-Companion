@@ -430,6 +430,7 @@ class AthanAlarmPlugin : Plugin() {
         val enabled = call.getBoolean("enabled", true) ?: true
         val title = call.getString("title", "مواقيت الصلاة") ?: "مواقيت الصلاة"
         val body = call.getString("body", "") ?: ""
+        val targetTimestamp = call.getDouble("targetTimestamp")?.toLong() ?: 0L
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
         if (notificationManager == null) {
@@ -477,9 +478,17 @@ class AthanAlarmPlugin : Plugin() {
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
             .setOngoing(true)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && targetTimestamp > System.currentTimeMillis()) {
+            notifBuilder.setWhen(targetTimestamp)
+                .setShowWhen(true)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+        }
 
         if (pIntent != null) {
             notifBuilder.setContentIntent(pIntent)
@@ -527,10 +536,10 @@ class AthanAlarmPlugin : Plugin() {
         val editor = prefs.edit()
         
         if (call.hasOption("lat")) {
-            editor.putFloat("lat", call.getDouble("lat", 30.0444).toFloat())
+            editor.putFloat("lat", call.getDouble("lat", 30.0444)?.toFloat() ?: 30.0444f)
         }
         if (call.hasOption("lng")) {
-            editor.putFloat("lng", call.getDouble("lng", 31.2357).toFloat())
+            editor.putFloat("lng", call.getDouble("lng", 31.2357)?.toFloat() ?: 31.2357f)
         }
         if (call.hasOption("calcMethod")) {
             editor.putString("calcMethod", call.getString("calcMethod", "Egypt"))
@@ -542,19 +551,19 @@ class AthanAlarmPlugin : Plugin() {
             editor.putString("timeZoneId", call.getString("timeZoneId"))
         }
         if (call.hasOption("fajrOffset")) {
-            editor.putFloat("fajrOffset", call.getDouble("fajrOffset", 0.0).toFloat())
+            editor.putFloat("fajrOffset", call.getDouble("fajrOffset", 0.0)?.toFloat() ?: 0f)
         }
         if (call.hasOption("dhuhrOffset")) {
-            editor.putFloat("dhuhrOffset", call.getDouble("dhuhrOffset", 0.0).toFloat())
+            editor.putFloat("dhuhrOffset", call.getDouble("dhuhrOffset", 0.0)?.toFloat() ?: 0f)
         }
         if (call.hasOption("asrOffset")) {
-            editor.putFloat("asrOffset", call.getDouble("asrOffset", 0.0).toFloat())
+            editor.putFloat("asrOffset", call.getDouble("asrOffset", 0.0)?.toFloat() ?: 0f)
         }
         if (call.hasOption("maghribOffset")) {
-            editor.putFloat("maghribOffset", call.getDouble("maghribOffset", 0.0).toFloat())
+            editor.putFloat("maghribOffset", call.getDouble("maghribOffset", 0.0)?.toFloat() ?: 0f)
         }
         if (call.hasOption("ishaOffset")) {
-            editor.putFloat("ishaOffset", call.getDouble("ishaOffset", 0.0).toFloat())
+            editor.putFloat("ishaOffset", call.getDouble("ishaOffset", 0.0)?.toFloat() ?: 0f)
         }
         editor.apply()
 

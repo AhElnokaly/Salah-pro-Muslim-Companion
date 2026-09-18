@@ -101,7 +101,7 @@ export const PrayerTodayWorshipView: React.FC<PrayerTodayWorshipViewProps> = ({
       />
 
       {/* Hadith Quote Card */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-500/10 dark:border-amber-500/20 p-4 rounded-3xl space-y-2 text-end">
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-500/10 dark:border-amber-500/20 p-4 rounded-3xl space-y-2 text-right">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400 animate-spin-slow" />
           <span className="text-xs font-black text-amber-800 dark:text-amber-400">فضل الرواتب والسنن:</span>

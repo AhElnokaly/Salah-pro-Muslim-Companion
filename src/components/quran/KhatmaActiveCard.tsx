@@ -140,7 +140,7 @@ export default function KhatmaActiveCard({
   return (
     <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 space-y-5 shadow-sm">
       <div className="flex justify-between items-start">
-        <div className="space-y-1 text-end">
+        <div className="space-y-1 text-right">
           <h3 className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-white">{activeKhatma.name}</h3>
           <p className="text-xs text-slate-400 dark:text-slate-500">
             مدة الختمة: <span className="font-bold text-slate-600 dark:text-slate-400">{formatArabicDayCount(activeKhatma.durationDays)}</span>

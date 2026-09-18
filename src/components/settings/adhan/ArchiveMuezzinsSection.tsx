@@ -76,7 +76,7 @@ export const ArchiveMuezzinsSection: React.FC<ArchiveMuezzinsSectionProps> = ({
               placeholder={searchPlaceholder}
               value={searchValue}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full p-2.5 pe-10 ps-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-end"
+              className="w-full p-2.5 pe-10 ps-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111720] text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 transition-all text-right"
             />
             <Search className="w-4 h-4 text-slate-400 absolute end-3 top-3.5" />
           </div>
@@ -91,7 +91,7 @@ export const ArchiveMuezzinsSection: React.FC<ArchiveMuezzinsSectionProps> = ({
                 <div
                   key={m.id}
                   onClick={() => onSelectMuezzin(m.id)}
-                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-end ${
+                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all text-right ${
                     isSelected
                       ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10'
                       : 'border-slate-100 dark:border-slate-800/40 bg-white dark:bg-[#161d26] hover:bg-slate-50 dark:hover:bg-[#111720]/50'

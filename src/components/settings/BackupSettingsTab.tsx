@@ -422,7 +422,7 @@ export default function BackupSettingsTab({
               onClick={(e) => (e.target as HTMLTextAreaElement).select()}
               className="w-full bg-slate-50 dark:bg-[#111720] border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-[10px] font-mono text-start"
             />
-            <span className="text-[9px] text-emerald-600 font-bold block text-end">تم نسخ النص تلقائياً، يمكنك نسخه وحفظه في أي ملف نصي آمن.</span>
+            <span className="text-[9px] text-emerald-600 font-bold block text-right">تم نسخ النص تلقائياً، يمكنك نسخه وحفظه في أي ملف نصي آمن.</span>
           </div>
         )}
       </div>

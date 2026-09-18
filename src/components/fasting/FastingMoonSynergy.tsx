@@ -26,7 +26,7 @@ export default function FastingMoonSynergy({
         <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center text-2xl shrink-0">
           {moonInfo.icon}
         </div>
-        <div className="space-y-0.5 text-end">
+        <div className="space-y-0.5 text-right">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-black text-slate-800 dark:text-white">
               طور القمر اليوم: {moonInfo.name}

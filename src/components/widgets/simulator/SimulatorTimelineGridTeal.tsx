@@ -38,7 +38,7 @@ export const SimulatorTimelineGridTeal: React.FC<SimulatorTimelineGridTealProps>
 }) => {
   if (widgetType === 'timeline') {
     return (
-      <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-end select-none scale-100 ${themeClass}`}>
+      <div className={`w-full rounded-[18px] p-2.5 flex flex-col justify-between transition-all duration-500 border text-right select-none scale-100 ${themeClass}`}>
         {/* Top line */}
         <div className="flex justify-between items-start border-b border-white/10 pb-1.5">
           <div className="flex items-center gap-1">
@@ -46,7 +46,7 @@ export const SimulatorTimelineGridTeal: React.FC<SimulatorTimelineGridTealProps>
               <span className="text-[10px] font-black leading-none">{toArabicNumbers(currentDayDigit)}</span>
               <span className="text-[6px] font-bold leading-none">{currentMonthName}</span>
             </div>
-            <div className="text-end">
+            <div className="text-right">
               <span className="text-[8px] font-black block text-white/90 leading-none">{dayNameArabic}</span>
               <span className="text-[6px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianStr.split(' ').slice(0, 2).join(' '))}</span>
             </div>
@@ -97,7 +97,7 @@ export const SimulatorTimelineGridTeal: React.FC<SimulatorTimelineGridTealProps>
 
   if (widgetType === 'grid') {
     return (
-      <div className={`w-full rounded-[18px] p-2 flex flex-col justify-between transition-all duration-500 border text-end select-none ${themeClass}`}>
+      <div className={`w-full rounded-[18px] p-2 flex flex-col justify-between transition-all duration-500 border text-right select-none ${themeClass}`}>
         <div className="flex justify-between items-center border-b border-white/10 pb-1.5 text-[7.5px] font-black">
           <span className="text-white">{dayNameArabic} • {toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
           <span className="text-amber-400 flex items-center gap-0.5">📍 {settings.cityName || 'الإسكندرية'}</span>
@@ -139,7 +139,7 @@ export const SimulatorTimelineGridTeal: React.FC<SimulatorTimelineGridTealProps>
         <span className="text-teal-100">{toArabicNumbers(currentDayDigit)} {currentMonthName}</span>
       </div>
 
-      <div className="py-1.5 text-end space-y-0.5">
+      <div className="py-1.5 text-right space-y-0.5">
         <span className="text-[6px] font-bold text-teal-100/70 block leading-none">الصلاة القادمة</span>
         <h3 className="text-[10px] font-black text-white flex justify-between items-center leading-none">
           <span>صلاة {getArabicName(nextPrayer)}</span>

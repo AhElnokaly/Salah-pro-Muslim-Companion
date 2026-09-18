@@ -8,9 +8,23 @@ export default defineConfig(({ command }) => {
     base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'lucide-react',
+        'motion/react',
+        'canvas-confetti',
+        'html-to-image',
+      ],
     },
     build: {
       chunkSizeWarningLimit: 800,

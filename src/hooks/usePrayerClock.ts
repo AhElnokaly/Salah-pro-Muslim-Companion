@@ -7,10 +7,10 @@ export function usePrayerClock(settings: AppSettings) {
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
-    // Update UI clock every 10 seconds to avoid unnecessary full component tree re-renders every second
+    // Update UI clock every second to maintain live countdown accuracy
     const timer = setInterval(() => {
       setNow(new Date());
-    }, 10000);
+    }, 1000);
 
     return () => clearInterval(timer);
   }, []);
@@ -27,7 +27,7 @@ export function usePrayerClock(settings: AppSettings) {
     settings.madhab,
     settings.prayerOffsets || {}
   );
-  const { current, next, timeRemainingStr } = getCurrentAndNextPrayer(times, now);
+  const { current, next, timeRemainingStr, remainingMs, targetTimestampMs } = getCurrentAndNextPrayer(times, now);
   const dayNamesArabic = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const dayNameArabic = dayNamesArabic[now.getDay()];
 
@@ -40,5 +40,7 @@ export function usePrayerClock(settings: AppSettings) {
     next,
     timeRemainingStr,
     dayNameArabic,
+    remainingMs,
+    targetTimestampMs,
   };
 }

@@ -2,6 +2,7 @@ import React, { Suspense, RefObject } from 'react';
 import { safeRemoveItem } from '../../utils/storage';
 import { safeLazy } from '../../utils/safeLazy';
 import { TabId, SettingsSubTabId, AppSettings, AlarmConfig } from '../../types';
+import { stopSpiritualSound } from '../../utils/spiritualAudio';
 
 // Lazy Loaded Modal Dialogs
 const PwaInstallModal = safeLazy(() => import('../PwaInstallModal').then(m => ({ default: m.PwaInstallModal })));
@@ -97,9 +98,7 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
         <CustomAlarmOverlay
           activeRingingAlarm={activeRingingAlarm}
           onSnooze={() => {
-            if (globalAudioRef.current) {
-              globalAudioRef.current.pause();
-            }
+            stopSpiritualSound(globalAudioRef);
             const snoozedAlarm: AlarmConfig = {
               ...activeRingingAlarm,
               id: `snooze_${Date.now()}`,
@@ -118,9 +117,7 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
             setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
           }}
           onStop={() => {
-            if (globalAudioRef.current) {
-              globalAudioRef.current.pause();
-            }
+            stopSpiritualSound(globalAudioRef);
             setActiveRingingAlarm(null);
           }}
         />

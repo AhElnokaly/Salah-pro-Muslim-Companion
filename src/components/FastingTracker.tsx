@@ -330,7 +330,7 @@ export default function FastingTracker({
   const qadaFasted = fastingLogsList.filter(l => l.fastType === 'Qada').length;
 
   return (
-    <div id="fasting-tracker-root" className="space-y-6 text-end pb-10" dir="rtl">
+    <div id="fasting-tracker-root" className="space-y-6 text-right pb-10" dir="rtl">
       {/* 1. Ramadan / Qada Summary & Main Tracker Banner */}
       <FastingHeroBanner
         hijriToday={hijriToday}

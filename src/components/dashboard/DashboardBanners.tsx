@@ -197,7 +197,7 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
       {missingPrayers.length > 0 && (
         <div 
           id="yesterday-unlogged-prayers-banner"
-          className="w-full bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300/50 dark:border-amber-700/40 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs text-end transition-all animate-fade-in"
+          className="w-full bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300/50 dark:border-amber-700/40 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs text-right transition-all animate-fade-in"
         >
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/20 dark:bg-amber-400/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">

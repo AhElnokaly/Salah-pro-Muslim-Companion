@@ -71,11 +71,14 @@ export interface ContextualAdhkarInfo {
 }
 
 export interface OngoingPrayerBarData {
-  firstLine: string; // e.g. "سان ستفانو | 03 ربيع الآخر 1448"
-  secondLine: string; // e.g. "العشاء، 08:27 م + 1:21:04"
+  firstLine: string; // Notification Title: e.g. "🕌 صلاة الظهر: 12:49 م (متبقي 01:33:15)"
+  secondLine: string; // Notification Body: e.g. "⏳ متبقي: ساعة و ٣٣ دقيقة  |  📍 القاهرة، مصر • ٧ ربيع الآخر"
   prayerName: string;
   prayerTimeFormatted: string;
   countdownFormatted: string;
+  readableRemaining: string;
+  locationAndDate: string;
+  isPrayerDue: boolean;
 }
 
 /**
@@ -161,20 +164,43 @@ export function getContextualAdhkarInfo(type: 'morning' | 'evening', timeStr?: s
 }
 
 /**
- * Formats a duration in milliseconds into +HH:MM:SS or HH:MM:SS
+ * Formats a duration in milliseconds into HH:MM:SS or HH:MM
  */
-export function formatCountdown(ms: number, withPlus = true): string {
+export function formatCountdown(ms: number, withPlus = false, includeSeconds = true): string {
   if (ms <= 0) return '00:00:00';
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  const hStr = hours > 0 ? `${hours}:` : '';
-  const mStr = String(minutes).padStart(hours > 0 ? 2 : 1, '0');
+  const hStr = `${String(hours).padStart(2, '0')}:`;
+  const mStr = String(minutes).padStart(2, '0');
   const sStr = String(seconds).padStart(2, '0');
 
+  if (!includeSeconds) {
+    return `${withPlus ? '+' : ''}${hStr}${mStr}`;
+  }
   return `${withPlus ? '+' : ''}${hStr}${mStr}:${sStr}`;
+}
+
+/**
+ * Returns human-readable Arabic duration string (e.g. "ساعة و ٣٣ دقيقة")
+ */
+export function formatRemainingArabic(ms: number): string {
+  if (ms <= 0) return 'حان الآن موعد الصلاة 🕌';
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    const hText = hours === 1 ? 'ساعة' : hours === 2 ? 'ساعتان' : `${hours} ساعات`;
+    const mText = minutes === 1 ? 'دقيقة' : minutes === 2 ? 'دقيقتان' : `${minutes} دقيقة`;
+    return `${hText} و ${mText}`;
+  } else if (hours > 0) {
+    return hours === 1 ? 'ساعة واحدة' : hours === 2 ? 'ساعتان' : `${hours} ساعات`;
+  } else {
+    return minutes <= 1 ? 'أقل من دقيقة' : `${minutes} دقيقة`;
+  }
 }
 
 /**
@@ -185,11 +211,40 @@ export function getOngoingPrayerBarData(
   hijriDateStr: string,
   nextPrayerNameArabic: string,
   prayerTimeFormatted: string,
-  remainingMs: number
+  remainingMs: number,
+  config?: { showSeconds?: boolean; showHijriDate?: boolean; showLocation?: boolean }
 ): OngoingPrayerBarData {
-  const countdownFormatted = formatCountdown(remainingMs, true);
-  const firstLine = `${locationName || 'موقعي'} | ${hijriDateStr}`;
-  const secondLine = `${nextPrayerNameArabic}، ${prayerTimeFormatted}  ${countdownFormatted}`;
+  const showSeconds = config?.showSeconds ?? true;
+  const showHijri = config?.showHijriDate ?? true;
+  const showLoc = config?.showLocation ?? true;
+
+  const isPrayerDue = remainingMs <= 0;
+  const countdownFormatted = isPrayerDue ? '00:00:00' : formatCountdown(remainingMs, false, showSeconds);
+  const readableRemaining = formatRemainingArabic(remainingMs);
+
+  const locMeta: string[] = [];
+  if (showLoc && locationName) {
+    locMeta.push(locationName);
+  }
+  if (showHijri && hijriDateStr) {
+    locMeta.push(hijriDateStr);
+  }
+  const locationAndDate = locMeta.join(' | ');
+
+  let firstLine = '';
+  let secondLine = '';
+
+  if (isPrayerDue) {
+    firstLine = `🕌 حان الآن موعد صلاة ${nextPrayerNameArabic} (${prayerTimeFormatted})`;
+    secondLine = `حي على الصلاة • حي على الفلاح${locationAndDate ? `  |  📍 ${locationAndDate}` : ''}`;
+  } else {
+    firstLine = `🕌 صلاة ${nextPrayerNameArabic}: ${prayerTimeFormatted}  (متبقي ${countdownFormatted})`;
+    const bodyParts: string[] = [`⏳ متبقي: ${readableRemaining}`];
+    if (locationAndDate) {
+      bodyParts.push(`📍 ${locationAndDate}`);
+    }
+    secondLine = bodyParts.join('  |  ');
+  }
 
   return {
     firstLine,
@@ -197,6 +252,9 @@ export function getOngoingPrayerBarData(
     prayerName: nextPrayerNameArabic,
     prayerTimeFormatted,
     countdownFormatted,
+    readableRemaining,
+    locationAndDate,
+    isPrayerDue,
   };
 }
 
@@ -212,6 +270,7 @@ export async function dispatchSmartNotification(
     nextPrayerNameArabic?: string;
     prayerTimeFormatted?: string;
     remainingMs?: number;
+    targetTimestamp?: number;
     adhkarType?: 'morning' | 'evening';
   }
 ): Promise<boolean> {
@@ -230,7 +289,8 @@ export async function dispatchSmartNotification(
           contextData.hijriDateStr || '',
           contextData.nextPrayerNameArabic || 'الصلاة القادمة',
           contextData.prayerTimeFormatted || '',
-          contextData.remainingMs || 0
+          contextData.remainingMs ?? 0,
+          settings.ongoingPrayerBar
         );
         title = barData.firstLine;
         body = barData.secondLine;
@@ -244,6 +304,7 @@ export async function dispatchSmartNotification(
               enabled: settings.ongoingPrayerBar.enabled,
               title,
               body,
+              targetTimestamp: contextData.targetTimestamp,
             });
           } catch (nativeErr) {
             console.warn('[SmartNotificationService] Native ongoing notification notice:', nativeErr);
@@ -283,11 +344,18 @@ export async function dispatchSmartNotification(
     await sendPushNotification(title, {
       body,
       tag,
-      icon: '/images/logo.jpg',
-      badge: '/images/logo.jpg',
+      icon: '/images/logo.png',
+      badge: '/images/logo.png',
       url: targetUrl,
       data: { url: targetUrl, tab: targetTab },
-    });
+      silent: type === 'ongoing_prayer',
+      renotify: false,
+      actions: [
+        { action: 'open_times', title: '🕌 المواقيت' },
+        { action: 'open_adhkar', title: '📿 الأذكار' },
+        { action: 'open_quran', title: '📖 القرآن' },
+      ],
+    } as any);
 
     return true;
   } catch (err) {

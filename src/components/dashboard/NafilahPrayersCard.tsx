@@ -28,7 +28,7 @@ export const NafilahPrayersCard: React.FC<NafilahPrayersCardProps> = ({
   return (
     <div
       dir="rtl"
-      className={`rounded-3xl p-5 border transition-all duration-300 space-y-4 text-right ${
+      className={`rounded-3xl p-5 border transition-all duration-300 space-y-4  ${
         currentStyle === 'glass-dark'
           ? 'bg-[#111723]/80 backdrop-blur-md border-white/5 shadow-2xl text-slate-100'
           : 'bg-white border-[#e2e8f0] shadow-sm text-slate-800'
@@ -37,9 +37,9 @@ export const NafilahPrayersCard: React.FC<NafilahPrayersCardProps> = ({
       <div className="flex justify-between items-center pb-2 border-b border-slate-200/40 dark:border-slate-800/50">
         <div className="flex items-center gap-2">
           <span className="text-xl">✨</span>
-          <div className="text-right">
-            <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none text-right">السنن الإضافية والنوافل</h3>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1 text-right">سجل سنن الضحى، قيام الليل، والوتر مباشرة</p>
+          <div className="">
+            <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none ">السنن الإضافية والنوافل</h3>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1 ">سجل سنن الضحى، قيام الليل، والوتر مباشرة</p>
           </div>
         </div>
       </div>
@@ -72,9 +72,9 @@ export const NafilahPrayersCard: React.FC<NafilahPrayersCardProps> = ({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <span className="text-base">☀️</span>
-              <div className="text-right">
-                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">صلاة الضحى</span>
-                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
+              <div className="">
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block ">صلاة الضحى</span>
+                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block ">
                   {currentDuhaRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentDuhaRakahs)} ركعات` : 'الضحى (٢، ٤، ٦، ٨)'}
                 </span>
               </div>
@@ -136,9 +136,9 @@ export const NafilahPrayersCard: React.FC<NafilahPrayersCardProps> = ({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <span className="text-base">🌃</span>
-              <div className="text-right">
-                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">قيام الليل والتهجد</span>
-                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
+              <div className="">
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block ">قيام الليل والتهجد</span>
+                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block ">
                   {currentQiyamRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentQiyamRakahs)} ركعة` : 'التهجد (٢، ٤، ٦، ٨+)'}
                 </span>
               </div>
@@ -200,9 +200,9 @@ export const NafilahPrayersCard: React.FC<NafilahPrayersCardProps> = ({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <span className="text-base">🌟</span>
-              <div className="text-right">
-                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block text-right">الشفع والوتر</span>
-                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block text-right">
+              <div className="">
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200 block ">الشفع والوتر</span>
+                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold block ">
                   {currentWitrRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentWitrRakahs)} ركعة` : 'الوتر (١، ٣، ٥، ٧)'}
                 </span>
               </div>

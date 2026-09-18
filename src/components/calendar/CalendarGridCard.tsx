@@ -60,7 +60,7 @@ export default function CalendarGridCard({
       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5 mb-4">
         <div className="flex items-center gap-2">
           <span className="text-xl">📅</span>
-          <div className="text-end">
+          <div className="text-right">
             <h3 className="text-sm font-black leading-none">التقويم الهجري والميلادي</h3>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold mt-1">تنسيق متبادل للمناسبات والأيام البيض</p>
           </div>

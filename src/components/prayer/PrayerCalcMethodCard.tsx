@@ -19,7 +19,7 @@ export const PrayerCalcMethodCard: React.FC<PrayerCalcMethodCardProps> = ({
   setLogSuccessMessage,
 }) => {
   return (
-    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4 text-end">
+    <div className="bg-white dark:bg-[#161d26] rounded-3xl p-5 border border-[#e2e8f0]/80 dark:border-slate-800/80 transition-colors duration-300 shadow-xs space-y-4 text-right">
       <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
         <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         <div>

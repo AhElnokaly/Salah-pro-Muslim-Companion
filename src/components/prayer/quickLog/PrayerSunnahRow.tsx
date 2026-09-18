@@ -24,11 +24,11 @@ export const PrayerSunnahRow: React.FC<PrayerSunnahRowProps> = ({
 
   return (
     <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
-      <div className="text-right">
-        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans text-right block">
+      <div className="">
+        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-sans  block">
           {label} ({toArabicNumbers(maxRakahs)} ركعات)
         </span>
-        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
+        <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 ">
           {isComplete 
             ? `✨ اكتملت ${label}` 
             : currentRakahs > 0 

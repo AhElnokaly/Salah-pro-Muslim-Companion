@@ -82,7 +82,7 @@ export default function DuasSettingsTab({
                 key={dua.id}
                 className="p-4 bg-slate-50 dark:bg-[#111720] rounded-2xl border border-slate-100 dark:border-slate-800/40 space-y-3"
               >
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line text-end font-sans">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line text-right font-sans">
                   {dua.text}
                 </p>
                 <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/30 pt-2 text-xs">

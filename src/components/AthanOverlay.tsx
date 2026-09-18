@@ -218,7 +218,7 @@ export default function AthanOverlay({
 
       {/* Top Bar (Mute and Close) */}
       <div className="flex justify-between items-center z-10 w-full max-w-2xl mx-auto">
-        <div className="text-end">
+        <div className="text-right">
           <span className="text-[10px] tracking-widest text-emerald-400/70 font-black uppercase block">
             {isSunrise ? 'تنبيه الشروق' : 'نداء الصلاة'}
           </span>
@@ -281,7 +281,7 @@ export default function AthanOverlay({
           </div>
         ) : (
           /* Sleek Minimalist Post-Athan Du'a */
-          <div className="space-y-4 w-full max-w-md py-6 px-8 bg-white/[0.02] border border-white/[0.05] rounded-3xl text-end animate-fade-in shadow-xl">
+          <div className="space-y-4 w-full max-w-md py-6 px-8 bg-white/[0.02] border border-white/[0.05] rounded-3xl text-right animate-fade-in shadow-xl">
             <div className="flex items-center gap-1.5 text-amber-300">
               <Sparkles className="w-3.5 h-3.5" />
               <span className="text-[10px] tracking-wider font-extrabold block">دعاء ما بعد الأذان المبارك</span>
@@ -298,7 +298,7 @@ export default function AthanOverlay({
         {/* Audio Error Alert & Retry Action */}
         <div className="space-y-3 w-full max-w-md pt-2">
           {audioError && (
-            <div className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-end text-amber-200 text-xs space-y-2 animate-fade-in shadow-lg">
+            <div className="w-full p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-right text-amber-200 text-xs space-y-2 animate-fade-in shadow-lg">
               <div className="flex items-center gap-2 font-bold text-amber-300">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>تنبيه خطأ تشغيل الصوت:</span>
@@ -363,7 +363,7 @@ export default function AthanOverlay({
 
       {/* Footer minimal information & Close */}
       <div className="mt-auto z-10 w-full max-w-2xl mx-auto border-t border-white/[0.05] pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <span className="text-[10px] text-white/40 font-medium text-center sm:text-end max-w-sm leading-relaxed">
+        <span className="text-[10px] text-white/40 font-medium text-center sm:text-right max-w-sm leading-relaxed">
           {isSunrise
             ? 'قال النبي ﷺ: "من صلى الفجر في جماعة ثم قعد يذكر الله حتى تطلع الشمس ثم صلى ركعتين كانت له كأجر حجة وعمرة تامّتين".'
             : 'حُضوركَ في الصف الأول صلاة جماعة تزيد عن صلاتك منفرداً بسبعٍ وعشرين درجة مباركة. تقبل الله طاعتك.'}

@@ -137,7 +137,7 @@ export default function MoonSubTabs({
                 return (
                   <div
                     key={mansion.id}
-                    className={`p-2.5 rounded-xl border transition-all text-end ${
+                    className={`p-2.5 rounded-xl border transition-all text-right ${
                       isCurrent
                         ? 'bg-amber-400 text-slate-950 border-amber-300 font-extrabold shadow-md'
                         : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:border-slate-700'

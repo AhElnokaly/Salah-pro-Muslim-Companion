@@ -19,16 +19,16 @@ export function FridayKahfCard({
 }: FridayKahfCardProps) {
   return (
     <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md flex flex-wrap items-center justify-between gap-3" dir="rtl">
-      <div className="flex items-center gap-3 text-right">
+      <div className="flex items-center gap-3 ">
         <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
           <BookOpen className="w-6 h-6 text-amber-300" />
         </div>
-        <div className="text-right">
+        <div className="">
           <h4 className="text-sm font-black flex items-center gap-1.5 flex-wrap">
             <span>سورة الكهف المباركة</span>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/30">نور ما بين الجمعتين</span>
           </h4>
-          <p className="text-xs text-emerald-100/90 mt-0.5 text-right">
+          <p className="text-xs text-emerald-100/90 mt-0.5 ">
             {isKahfRead ? 'تمت قراءتها اليوم بحمد الله ✓' : 'احرص على تلاوتها أو الاستماع إليها اليوم'}
           </p>
         </div>

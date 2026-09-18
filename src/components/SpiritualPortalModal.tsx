@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Sparkles, RotateCcw } from 'lucide-react';
-import companionIcon from '../assets/images/hemmaty_logo.jpg';
+import companionIcon from '../assets/images/hemmaty_logo.png';
 
 export const SPIRITUAL_CAPSULES = [
   {
@@ -151,7 +151,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: "spring", damping: 25, stiffness: 350 }}
-          className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-end flex flex-col items-center gap-5 text-white overflow-hidden"
+          className="bg-[#0e131b] border-2 border-emerald-500/25 rounded-[2.5rem] p-6 max-w-sm w-full shadow-[0_0_50px_rgba(16,185,129,0.15)] relative text-right flex flex-col items-center gap-5 text-white overflow-hidden"
         >
           {/* Background Glow */}
           <div className="absolute top-0 inset-x-0 h-40 bg-radial-[at_top] from-emerald-500/20 via-transparent to-transparent pointer-events-none" />
@@ -185,7 +185,7 @@ export const SpiritualPortalModal: React.FC<SpiritualPortalModalProps> = ({
                 src={companionIcon} 
                 alt="هِمَّتِي" 
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
+                  (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.png';
                 }}
                 className="w-full h-full object-cover select-none"
                 referrerPolicy="no-referrer"

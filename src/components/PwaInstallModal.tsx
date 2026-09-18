@@ -30,7 +30,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label="نافذة تثبيت تطبيق هِمَّتِي"
-          className="bg-white dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-end flex flex-col gap-4 text-slate-800 dark:text-slate-100"
+          className="bg-white dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-right flex flex-col gap-4 text-slate-800 dark:text-slate-100"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -52,9 +52,9 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
           {/* App Preview Card */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
             <img 
-              src="/muslim_companion_icon.jpg" 
+              src="/muslim_companion_icon.png" 
               alt="Hemmaty App" 
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.png'; }}
               className="w-12 h-12 rounded-2xl object-cover shadow-md border border-amber-500/30 shrink-0"
             />
             <div className="text-right">

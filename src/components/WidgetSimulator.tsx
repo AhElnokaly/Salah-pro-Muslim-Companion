@@ -69,7 +69,7 @@ export default function WidgetSimulator({
         <div className="absolute top-4 inset-x-4 z-50 bg-emerald-600 text-white font-black text-xs py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between gap-2 animate-bounce">
           <div className="flex items-center gap-2">
             <span className="text-base">✨</span>
-            <p className="text-end leading-relaxed">{logic.toastMessage}</p>
+            <p className="text-right leading-relaxed">{logic.toastMessage}</p>
           </div>
           <button
             type="button"

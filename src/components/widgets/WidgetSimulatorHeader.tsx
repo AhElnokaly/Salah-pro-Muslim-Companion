@@ -33,7 +33,7 @@ export const WidgetSimulatorHeader: React.FC<WidgetSimulatorHeaderProps> = ({
         >
           📱
         </div>
-        <div className="text-end">
+        <div className="text-right">
           <h3 className="text-sm font-black leading-tight">تطبيقات شاشة الهاتف (Widgets Lab)</h3>
           <p className="text-[10.5px] text-slate-400 dark:text-slate-500 font-bold mt-0.5">
             صمّم، جرب، وحمل المكونات الذكية التفاعلية الخاصة بهاتفك مباشرة بالأسفل

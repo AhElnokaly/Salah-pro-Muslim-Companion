@@ -53,7 +53,7 @@ export const SimulatorSpecialtyWidgets: React.FC<SimulatorSpecialtyWidgetsProps>
   // STYLE 4: Analog style dial
   if (widgetType === 'analog') {
     return (
-      <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-3 transition-all duration-500 border text-end select-none ${themeClass}`}>
+      <div className={`w-full rounded-[18px] p-2.5 flex items-center justify-center gap-3 transition-all duration-500 border text-right select-none ${themeClass}`}>
         {/* Miniature Clock Face */}
         <div className="w-[56px] h-[56px] rounded-full bg-[#0a1520] border-2 border-[#1e3448] relative flex items-center justify-center shrink-0 shadow-md">
           <div className="absolute inset-0.5 rounded-full border border-dashed border-white/10 pointer-events-none" />

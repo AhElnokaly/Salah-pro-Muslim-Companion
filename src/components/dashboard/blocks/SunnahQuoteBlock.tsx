@@ -17,7 +17,7 @@ const SunnahQuoteBlock: React.FC<SunnahQuoteBlockProps> = ({
   else if (hr >= 15 && hr < 18) quote = "أربع ركعات قبل العصر رحم الله امرءاً صلى قبل العصر أربعاً.";
 
   return (
-    <div className="text-[9.5px] font-bold text-white/80 bg-white/5 border border-white/5 rounded-xl px-2.5 py-1.5 w-full leading-relaxed flex items-start gap-1.5 shadow-sm text-end my-1">
+    <div className="text-[9.5px] font-bold text-white/80 bg-white/5 border border-white/5 rounded-xl px-2.5 py-1.5 w-full leading-relaxed flex items-start gap-1.5 shadow-sm text-right my-1">
       <span className="text-amber-300 text-[11px] shrink-0 mt-0.5">💡</span>
       <span className="leading-normal">{quote}</span>
     </div>

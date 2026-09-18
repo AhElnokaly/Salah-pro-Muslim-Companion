@@ -64,7 +64,7 @@ export const DhikrCategoryHeader: React.FC<DhikrCategoryHeaderProps> = ({
             <span>رجوع للمحطات</span>
           </button>
 
-          <div className="text-right truncate">
+          <div className=" truncate">
             <h3 className="font-black text-slate-800 dark:text-white text-sm sm:text-base flex items-center justify-end gap-1.5">
               <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span className="truncate">حصن المسلم: {category.arabicName}</span>

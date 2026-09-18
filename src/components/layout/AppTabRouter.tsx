@@ -15,10 +15,10 @@ import {
 } from '../../types';
 import { safeLazy } from '../../utils/safeLazy';
 import Dashboard from '../Dashboard';
+import AdhkarTracker from '../AdhkarTracker';
 
 // Code-split Lazy Secondary Tabs & Features
 const QuranTracker = safeLazy(() => import('../QuranTracker'));
-const AdhkarTracker = safeLazy(() => import('../AdhkarTracker'));
 const QiblaCompass = safeLazy(() => import('../QiblaCompass'));
 const MoreSettings = safeLazy(() => import('../MoreSettings'));
 const PrayerManager = safeLazy(() => import('../PrayerManager'));

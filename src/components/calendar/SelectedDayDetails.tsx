@@ -46,7 +46,7 @@ export default function SelectedDayDetails({
   };
 
   return (
-    <div className="bg-slate-50 dark:bg-[#161d26]/40 rounded-3xl p-4 border border-[#e2e8f0]/60 dark:border-slate-800/60 text-end space-y-3.5">
+    <div className="bg-slate-50 dark:bg-[#161d26]/40 rounded-3xl p-4 border border-[#e2e8f0]/60 dark:border-slate-800/60 text-right space-y-3.5">
       <div className="flex items-center justify-between border-b border-slate-200/40 dark:border-slate-800/30 pb-2">
         <span className="text-[10px] font-black text-slate-400 dark:text-slate-500">تفاصيل اليوم المحدّد</span>
         <span className="text-[9px] font-mono bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded-md font-bold">

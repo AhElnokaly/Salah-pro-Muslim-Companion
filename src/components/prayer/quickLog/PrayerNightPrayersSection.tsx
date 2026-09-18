@@ -35,11 +35,11 @@ export const PrayerNightPrayersSection: React.FC<PrayerNightPrayersSectionProps>
       <div className="space-y-2">
         {/* Quick Witr Row */}
         <div className="flex items-center justify-between p-2.5 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl">
-          <div className="text-right">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block text-right">
+          <div className="">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block ">
               🌟 الشفع والوتر
             </span>
-            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 ">
               {currentWitrRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentWitrRakahs)} ركعة` : '١ أو ٣ ركعات'}
             </p>
           </div>
@@ -65,11 +65,11 @@ export const PrayerNightPrayersSection: React.FC<PrayerNightPrayersSectionProps>
 
         {/* Quick Qiyam Row */}
         <div className="flex items-center justify-between p-2.5 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl">
-          <div className="text-right">
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block text-right">
+          <div className="">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block ">
               🌃 قيام الليل والتهجد
             </span>
-            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 text-right">
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5 ">
               {currentQiyamRakahs > 0 ? `تمت صلاة ${toArabicNumbers(currentQiyamRakahs)} ركعة` : '٢، ٤، ٨ ركعات'}
             </p>
           </div>

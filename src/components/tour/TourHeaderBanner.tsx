@@ -30,7 +30,7 @@ export const TourHeaderBanner: React.FC<TourHeaderBannerProps> = ({
         <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl border border-white/20 shadow-inner">
           <Icon className="w-6 h-6 text-white" aria-hidden="true" />
         </div>
-        <div className="text-right">
+        <div className="">
           <div className="flex items-center gap-2">
             <span className="text-[10px] bg-white/20 font-extrabold px-2 py-0.5 rounded-full border border-white/20">
               خطوة {currentStepIndex + 1} من {totalSteps}

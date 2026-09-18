@@ -52,7 +52,7 @@ export const AdhanAudioPlaybar: React.FC<AdhanAudioPlaybarProps> = ({
   };
 
   return (
-    <div className="p-4 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-[#131b26] dark:to-[#17212f] rounded-2xl border border-indigo-100 dark:border-indigo-950/50 space-y-3 shadow-md text-end transition-all">
+    <div className="p-4 bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-[#131b26] dark:to-[#17212f] rounded-2xl border border-indigo-100 dark:border-indigo-950/50 space-y-3 shadow-md text-right transition-all">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
           <span className="relative flex h-2 w-2">

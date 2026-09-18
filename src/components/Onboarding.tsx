@@ -86,18 +86,18 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   return (
-    <div id="onboarding-root" className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center p-4 text-end" dir="rtl">
+    <div id="onboarding-root" className="min-h-screen bg-[#faf7f0] flex flex-col items-center justify-center p-4 " dir="rtl">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-6 border border-[#e2e8f0] transition-all duration-300">
         
         {/* App Logo & Branding */}
         <div className="flex items-center justify-center gap-2.5 mb-5 pb-3 border-b border-gray-100">
           <img 
-            src="/muslim_companion_icon.jpg" 
+            src="/muslim_companion_icon.png" 
             alt="Hemmaty App Logo" 
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg'; }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.png'; }}
             className="w-10 h-10 rounded-xl object-cover shadow-sm border border-amber-500/20 shrink-0"
           />
-          <div className="text-right">
+          <div className="">
             <h1 className="text-sm font-black text-gray-900 leading-tight">تطبيق هِمَّتِي الإيماني</h1>
             <p className="text-[10px] text-gray-400 font-bold">رفيقك الذكي لمواقيت الصلاة والقرآن والطاعات</p>
           </div>
@@ -159,7 +159,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <button
                   key={city.name}
                   onClick={() => handleCitySelect(city)}
-                  className="p-3 text-end bg-[#faf7f0] hover:bg-indigo-50 hover:text-indigo-600 text-gray-700 font-semibold rounded-xl text-sm transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
+                  className="p-3  bg-[#faf7f0] hover:bg-indigo-50 hover:text-indigo-600 text-gray-700 font-semibold rounded-xl text-sm transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
                 >
                   {city.arabicName}
                 </button>
@@ -179,7 +179,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <p className="text-sm text-gray-500">اختر طريقة الحساب المعتمدة في منطقتك لضمان تطابق الأذان.</p>
             </div>
 
-            <div className="space-y-4 text-end">
+            <div className="space-y-4 ">
               {/* Calc Method */}
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-gray-700">طريقة الحساب:</label>
@@ -253,7 +253,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               </div>
 
               {/* Gender Selection */}
-              <div className="space-y-1.5 text-end">
+              <div className="space-y-1.5 ">
                 <label className="text-sm font-bold text-gray-700">الجنس ومستند الرخصة الشرعية (👨/👩):</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -316,7 +316,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <p className="text-sm text-gray-500">نود معرفة آخر صلاة صليتها لنبدأ تتبع الفوائت بشكل صحيح بدون ملء خانات فارغة غير حقيقية.</p>
             </div>
 
-            <div className="space-y-4 text-end">
+            <div className="space-y-4 ">
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700">ما هي آخر فريضة أديتها اليوم؟</label>
                 <div className="grid grid-cols-3 gap-2">

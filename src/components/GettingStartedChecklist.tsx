@@ -76,7 +76,7 @@ export default function GettingStartedChecklist({
   const progressPercent = Math.round((completedCount / totalCount) * 100);
 
   return (
-    <div className="bg-gradient-to-r from-indigo-900/10 via-slate-900/5 to-emerald-900/10 dark:from-indigo-950/40 dark:via-slate-900/30 dark:to-emerald-950/40 rounded-3xl p-4 sm:p-5 border border-indigo-200/50 dark:border-indigo-800/50 space-y-3 text-end transition-all shadow-sm">
+    <div className="bg-gradient-to-r from-indigo-900/10 via-slate-900/5 to-emerald-900/10 dark:from-indigo-950/40 dark:via-slate-900/30 dark:to-emerald-950/40 rounded-3xl p-4 sm:p-5 border border-indigo-200/50 dark:border-indigo-800/50 space-y-3 text-right transition-all shadow-sm">
       <div className="flex items-center justify-between">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -85,7 +85,7 @@ export default function GettingStartedChecklist({
           <div className="p-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-2xl border border-emerald-500/20">
             <Sparkles className="w-4 h-4" />
           </div>
-          <div className="text-end">
+          <div className="text-right">
             <h3 className="text-xs sm:text-sm font-black flex items-center gap-1.5">
               <span>خطوات البداية السريعة 🌱</span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-black px-2 py-0.5 rounded-full">
@@ -136,7 +136,7 @@ export default function GettingStartedChecklist({
               <button
                 key={task.id}
                 onClick={task.action}
-                className={`p-3 rounded-2xl border text-end flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                className={`p-3 rounded-2xl border text-right flex items-center justify-between gap-2 transition-all cursor-pointer ${
                   task.done
                     ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
                     : 'bg-white/80 dark:bg-[#131922] border-slate-200/80 dark:border-slate-800 hover:border-indigo-400 text-slate-700 dark:text-slate-200'

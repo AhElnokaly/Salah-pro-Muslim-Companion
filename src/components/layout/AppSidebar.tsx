@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   Sliders,
@@ -19,25 +19,81 @@ import {
   Lightbulb,
   Share2,
   Download,
+  Sunrise,
+  ListChecks,
+  MoreHorizontal,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TabId, SettingsSubTabId, AppSettings } from '../../types';
 import { APP_VERSION } from '../../version';
 import { getUnreadVersionStatus } from '../../data/changelog';
+import { SidebarSection } from './SidebarSection';
 
 const MosqueIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg 
-    className={className} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
     strokeLinejoin="round"
   >
     <path d="M12 2v4M12 6a4 4 0 0 0-4 4v3h8v-3a4 4 0 0 0-4-4zM6 13h12v7H6zM3 13v7M21 13v7M12 16h.01" />
   </svg>
 );
+
+interface NavItem { id: TabId; label: string; icon: React.ElementType }
+interface SettingsNavItem { id: SettingsSubTabId; label: string; icon: React.ElementType }
+
+const WORSHIP_NAV_GROUPS: { key: string; title: string; icon: React.ElementType; items: NavItem[] }[] = [
+  {
+    key: 'daily',
+    title: 'العبادات اليومية',
+    icon: MosqueIcon,
+    items: [
+      { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
+      { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
+      { id: 'alarms', label: 'منبهات العبادات والصلوات ⏰', icon: Bell },
+      { id: 'qibla', label: 'تحديد اتجاه القبلة', icon: Compass },
+      { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
+      { id: 'fasting', label: 'متابعة وتتبع الصيام', icon: Sunrise },
+    ],
+  },
+  {
+    key: 'quran',
+    title: 'القرآن والأذكار',
+    icon: BookOpen,
+    items: [
+      { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
+      { id: 'adhkar', label: 'الأذكار اليومية والاستغفار', icon: Sparkles },
+    ],
+  },
+  {
+    key: 'tools',
+    title: 'أدوات ومتابعة',
+    icon: ListChecks,
+    items: [
+      { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
+      { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
+      { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
+      { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
+    ],
+  },
+];
+
+const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
+  { id: 'dashboard', label: 'تخصيص الشاشة الرئيسية', icon: Sliders },
+  { id: 'smartNotifications', label: 'الإشعارات الذكية والورد اليومي', icon: Bell },
+  { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
+  { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
+  { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
+  { id: 'calendar', label: 'تعديل التقويم الهجري', icon: Calendar },
+  { id: 'theme', label: 'مظهر التطبيق وشكل الساعة', icon: Settings },
+  { id: 'qada', label: 'سجل القضاء وتتبع الفوائت', icon: Clock },
+  { id: 'duas', label: 'الأدعية المخصصة المحفوظة', icon: Heart },
+  { id: 'backup', label: 'نسخ احتياطي واسترداد البيانات', icon: RotateCcw },
+];
 
 export interface AppSidebarProps {
   isSidebarOpen: boolean;
@@ -74,6 +130,24 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   handleShareApp,
   setToastMessage,
 }) => {
+  // Which nav group contains the currently active tab — that group opens by default,
+  // so the sidebar shows where you already are instead of dumping every item on screen.
+  const activeWorshipGroupKey = WORSHIP_NAV_GROUPS.find(g =>
+    g.items.some(item => item.id === activeTab)
+  )?.key;
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    daily: activeWorshipGroupKey ? activeWorshipGroupKey === 'daily' : true,
+    quran: activeWorshipGroupKey === 'quran',
+    tools: activeWorshipGroupKey === 'tools',
+    settings: activeTab === 'settings',
+    more: false,
+  });
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   return (
     <AnimatePresence>
       {isSidebarOpen && (
@@ -186,162 +260,121 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
                     <Sliders className="w-4 h-4" />
                   </div>
-                  <div className="text-right">
+                  <div className="">
                     <div className="text-xs font-black">التحكم والإعدادات السريعة ⚙️</div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">المظهر، خلفية البطاقات، المذهب والساعة</div>
                   </div>
                 </div>
               </button>
 
-              {/* Main Worship Navigation */}
-              <div className="space-y-2 text-right">
-                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-right">الأقسام والعبادات</span>
-                <div className="grid grid-cols-1 gap-1">
-                  {(
-                    [
-                      { id: 'home', label: 'الرئيسية ولوحة التحكم', icon: Home },
-                      { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
-                      { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
-                      { id: 'khushu', label: 'الخشوع وقيام الليل والتهجد 🌙', icon: Moon },
-                      { id: 'calendar', label: 'التقويم والتقرير الإحصائي', icon: Calendar },
-                      { id: 'salah', label: 'مواقيت الصلاة ومتابعتها', icon: MosqueIcon },
-                      { id: 'quran', label: 'القرآن الكريم والختمات', icon: BookOpen },
-                      { id: 'fasting', label: 'متابعة وتتبع الصيام', icon: Moon },
-                      { id: 'adhkar', label: 'الأذكار اليومية والاستغفار', icon: Sparkles },
-                      { id: 'alarms', label: 'منبهات العبادات والصلوات ⏰', icon: Bell },
-                      { id: 'qibla', label: 'تحديد اتجاه القبلة', icon: Compass },
-                      { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
-                    ] as { id: TabId; label: string; icon: React.ElementType }[]
-                  ).map((item) => {
-                    const Icon = item.icon;
-                    const isSelected = activeTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setIsSidebarOpen(false);
-                        }}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
-                          isSelected
-                            ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-black'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Worship Navigation — grouped into collapsible categories instead of one long list */}
+              <div className="space-y-3">
+                {WORSHIP_NAV_GROUPS.map(group => (
+                  <SidebarSection
+                    key={group.key}
+                    title={group.title}
+                    icon={group.icon}
+                    isOpen={openGroups[group.key]}
+                    onToggle={() => toggleGroup(group.key)}
+                  >
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const isSelected = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold  transition-all cursor-pointer w-full ${
+                            isSelected
+                              ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 font-black'
+                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </SidebarSection>
+                ))}
               </div>
 
-              {/* Dedicated Settings Pages Section */}
-              <div className="space-y-2 text-right">
-                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-right">إعدادات وضبط التطبيق</span>
-                <div className="grid grid-cols-1 gap-1">
-                  {(
-                    [
-                      { id: 'dashboard', label: 'تخصيص الشاشة الرئيسية', icon: Sliders },
-                      { id: 'smartNotifications', label: 'الإشعارات الذكية والورد اليومي', icon: Bell },
-                      { id: 'prayer', label: 'إعدادات الصلاة والمذهب', icon: Sliders },
-                      { id: 'location', label: 'إعدادات الموقع الجغرافي والـ GPS', icon: MapPin },
-                      { id: 'adhan', label: 'أصوات الأذان وتنبيهات المؤذنين', icon: Volume2 },
-                      { id: 'calendar', label: 'تعديل التقويم الهجري', icon: Calendar },
-                      { id: 'theme', label: 'مظهر التطبيق وشكل الساعة', icon: Settings },
-                      { id: 'qada', label: 'سجل القضاء وتتبع الفوائت', icon: Clock },
-                      { id: 'duas', label: 'الأدعية المخصصة المحفوظة', icon: Heart },
-                      { id: 'backup', label: 'نسخ احتياطي واسترداد البيانات', icon: RotateCcw },
-                    ] as { id: SettingsSubTabId; label: string; icon: React.ElementType }[]
-                  ).map((item) => {
-                    const Icon = item.icon;
-                    const isSelected = activeTab === 'settings' && activeSettingsSubTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab('settings');
-                          setActiveSettingsSubTab(item.id);
-                          setIsSidebarOpen(false);
-                        }}
-                        className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold text-right transition-all cursor-pointer w-full ${
-                          isSelected
-                            ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-black border border-amber-500/20'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Settings Pages — one collapsible group instead of 10 always-visible buttons */}
+              <SidebarSection
+                title="إعدادات وضبط التطبيق"
+                icon={Settings}
+                isOpen={openGroups.settings}
+                onToggle={() => toggleGroup('settings')}
+              >
+                {SETTINGS_NAV_ITEMS.map(item => {
+                  const Icon = item.icon;
+                  const isSelected = activeTab === 'settings' && activeSettingsSubTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab('settings');
+                        setActiveSettingsSubTab(item.id);
+                        setIsSidebarOpen(false);
+                      }}
+                      className={`flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold  transition-all cursor-pointer w-full ${
+                        isSelected
+                          ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-black border border-amber-500/20'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 text-slate-500 dark:text-slate-450 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </SidebarSection>
 
-              {/* Feature Discovery Tour Launch Card inside Sidebar */}
-              <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-emerald-500/5 dark:from-emerald-950/30 dark:to-teal-950/20 p-3.5 rounded-2xl border border-emerald-500/20 shadow-xs space-y-2 text-right">
-                <div className="flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse shrink-0" />
-                  <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">دليل وجولة مزايا التطبيق 💡</span>
-                </div>
-                <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
-                  تعرف على كافة الخدمات المميزة خطوة بخطوة عبر جولة تفاعلية سريعة وشاملة.
-                </p>
+              {/* More — tour / share / install, collapsed into compact rows instead of 3 full promo cards */}
+              <SidebarSection
+                title="المزيد"
+                icon={MoreHorizontal}
+                isOpen={openGroups.more}
+                onToggle={() => toggleGroup('more')}
+              >
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
                     setIsTourModalOpen(true);
                   }}
-                  className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-[10.5px] rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold  transition-all cursor-pointer w-full text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                 >
-                  <Lightbulb className="w-3.5 h-3.5" />
-                  <span>بدء الجولة التفاعلية ✨</span>
+                  <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>دليل وجولة مزايا التطبيق 💡</span>
                 </button>
-              </div>
 
-              {/* Share App Action inside Sidebar */}
-              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/10 dark:to-indigo-950/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-950/20 shadow-xs space-y-2 text-right">
-                <div className="flex items-center gap-2">
-                  <Share2 className="w-4 h-4 text-indigo-500 animate-pulse shrink-0" />
-                  <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">نشر الخير ومشاركة التطبيق</span>
-                </div>
-                <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
-                  الدال على الخير كفاعله. شارك تطبيق هِمَّتِي مع أصدقائك وعائلتك ليكتب الله لك الأجر! 🤍
-                </p>
                 <button
                   onClick={() => {
                     setIsSidebarOpen(false);
                     handleShareApp();
                   }}
-                  className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-[10.5px] rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold  transition-all cursor-pointer w-full text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                 >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>مشاركة رابط التطبيق 📤</span>
+                  <Share2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>مشاركة التطبيق مع الأصدقاء 📤</span>
                 </button>
-              </div>
 
-              {/* PWA Install Promo inside Sidebar */}
-              {!isInstalled && (
-                <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/10 dark:to-amber-950/20 p-3.5 rounded-2xl border border-amber-100 dark:border-amber-950/20 shadow-xs space-y-2 text-right">
-                  <div className="flex items-center gap-2">
-                    <Download className="w-4 h-4 text-amber-500 animate-bounce shrink-0" />
-                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">تنزيل تطبيق هِمَّتِي كـ App</span>
-                  </div>
-                  <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-relaxed font-bold text-right">
-                    ثبّت التطبيق على جهازك للوصول السريع، وتلقي تنبيهات الأذان حتى بدون إنترنت!
-                  </p>
+                {!isInstalled && (
                   <button
                     onClick={() => {
                       setIsSidebarOpen(false);
                       handleInstallApp();
                     }}
-                    className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black text-[10.5px] rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                    className="flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold  transition-all cursor-pointer w-full text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>تثبيت التطبيق الآن 📱</span>
+                    <Download className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>تثبيت التطبيق كـ App 📱</span>
                   </button>
-                </div>
-              )}
+                )}
+              </SidebarSection>
 
             </div>
 

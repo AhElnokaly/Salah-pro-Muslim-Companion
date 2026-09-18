@@ -34,7 +34,7 @@ export const HolyCitiesPrayerTimesCard: React.FC<HolyCitiesPrayerTimesCardProps>
     <div className="bg-white dark:bg-[#161d26] rounded-3xl border border-[#e2e8f0]/80 dark:border-slate-800/80 shadow-xs p-5 transition-all duration-300 space-y-4">
       <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800/60 pb-3">
         <Compass className="w-5 h-5 text-indigo-500 animate-spin-slow" />
-        <div className="text-end">
+        <div className="text-right">
           <h4 className="text-sm font-black text-slate-800 dark:text-white">مواقيت الحرمين الشريفين والمسجد الأقصى</h4>
           <p className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold">مواقيت الصلاة والعد التنازلي المباشر لأقدس بقاع الأرض</p>
         </div>
@@ -54,7 +54,7 @@ export const HolyCitiesPrayerTimesCard: React.FC<HolyCitiesPrayerTimesCardProps>
           const countdownInfo = getExactCountdown(cityTimes, currentTime);
 
           return (
-            <div key={city.id} className="bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-3 border border-slate-100/50 dark:border-slate-800/40 space-y-2 text-end">
+            <div key={city.id} className="bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-3 border border-slate-100/50 dark:border-slate-800/40 space-y-2 text-right">
               <div className="flex justify-between items-start gap-1">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1">

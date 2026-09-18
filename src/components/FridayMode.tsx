@@ -166,7 +166,7 @@ export default function FridayMode({ settings, onNavigateTab }: FridayModeProps)
     <div 
       id="friday-mode-root" 
       dir="rtl"
-      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6 text-right ${
+      className={`rounded-3xl p-6 border relative overflow-hidden transition-all duration-300 space-y-6  ${
         currentStyle === 'glass-dark'
           ? 'bg-gradient-to-br from-[#1b3c22] via-[#111723] to-[#122216] border-emerald-500/20 shadow-2xl text-slate-100'
           : 'bg-gradient-to-br from-[#f4faf5] via-white to-[#f0f8f2] border-emerald-500/30 shadow-md text-slate-800'
@@ -184,14 +184,14 @@ export default function FridayMode({ settings, onNavigateTab }: FridayModeProps)
 
       {/* Header section */}
       <div className="flex justify-between items-start pb-3 border-b border-emerald-500/15" dir="rtl">
-        <div className="text-right">
+        <div className="">
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
-            <h3 className="text-lg font-black text-emerald-700 dark:text-emerald-400 text-right">
+            <h3 className="text-lg font-black text-emerald-700 dark:text-emerald-400 ">
               {isTodayFriday ? 'يوم الجمعة المبارك 🌟' : 'معاينة أجواء سنن يوم الجمعة 🌟'}
             </h3>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1 text-right leading-relaxed">
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1  leading-relaxed">
             «إن من أفضل أيامكم يوم الجمعة، فأكثروا عليّ من الصلاة فيه...»
           </p>
         </div>

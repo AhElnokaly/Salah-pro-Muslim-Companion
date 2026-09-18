@@ -38,7 +38,7 @@ export const QiblaModals: React.FC<QiblaModalsProps> = ({
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-end flex flex-col gap-4 text-white"
+              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-right flex flex-col gap-4 text-white"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -100,7 +100,7 @@ export const QiblaModals: React.FC<QiblaModalsProps> = ({
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-end flex flex-col gap-4 text-white"
+              className="bg-[#0b1722] border border-white/10 w-full max-w-xs rounded-3xl p-5 relative z-10 shadow-2xl text-right flex flex-col gap-4 text-white"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export const QiblaModals: React.FC<QiblaModalsProps> = ({
 
               <div className="space-y-3 text-xs font-semibold leading-relaxed text-white/95">
                 <p>متصفحات مثل <span className="text-amber-400 font-bold">Brave</span> و <span className="text-amber-400 font-bold">Chrome</span> تقوم بحظر حساسات الهاتف افتراضياً لحمايتك. لتشغيل البوصلة تلقائياً، يرجى اتباع هذه الخطوة البسيطة:</p>
-                <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2 text-end">
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2 text-right">
                   <p className="font-bold text-amber-300">من شريط العنوان بالمتصفح (في الأعلى أو الأسفل):</p>
                   <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-white/80">
                     <li>اضغط على <span className="text-white font-bold">أيقونة القفل 🔒</span> أو <span className="text-white font-bold">أيقونة الإعدادات ⚙️</span> الموجودة بجانب رابط الموقع.</li>

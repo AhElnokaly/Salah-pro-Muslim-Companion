@@ -39,7 +39,7 @@ export default function QuranTracker({
   });
 
   return (
-    <div id="quran-tracker-root" className="space-y-5 text-end" dir="rtl">
+    <div id="quran-tracker-root" className="space-y-5 text-right" dir="rtl">
       {/* CENTER TOP HEADER BAR & TABS */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-1">
         <div className="flex items-center gap-1 sm:gap-2">

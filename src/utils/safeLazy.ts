@@ -2,17 +2,19 @@ import React, { lazy } from 'react';
 
 // Helper for safe lazy loading with retry mechanism and graceful fallback
 export function safeLazy<T extends React.ComponentType<any>>(
-  importFn: () => Promise<Record<string, unknown>>
+  importFn: () => Promise<{ default: T } | Record<string, unknown>>
 ) {
   return lazy(async () => {
     try {
       const module = await importFn();
-      if (module.default) {
+      if ('default' in module && module.default) {
         return { default: module.default as T };
       }
-      const firstExport = Object.values(module)[0];
-      if (firstExport) {
-        return { default: firstExport as T };
+      const values = Object.values(module);
+      for (const val of values) {
+        if (typeof val === 'function') {
+          return { default: val as unknown as T };
+        }
       }
       throw new Error('No valid component export found');
     } catch (err) {
@@ -20,12 +22,14 @@ export function safeLazy<T extends React.ComponentType<any>>(
       await new Promise((resolve) => setTimeout(resolve, 300));
       try {
         const retryModule = await importFn();
-        if (retryModule && retryModule.default) {
+        if ('default' in retryModule && retryModule.default) {
           return { default: retryModule.default as T };
         }
-        const firstExport = retryModule ? Object.values(retryModule)[0] : null;
-        if (firstExport) {
-          return { default: firstExport as T };
+        const values = Object.values(retryModule);
+        for (const val of values) {
+          if (typeof val === 'function') {
+            return { default: val as unknown as T };
+          }
         }
       } catch (retryErr) {
         console.error('[safeLazy] Secondary retry failed:', retryErr);

@@ -34,11 +34,11 @@ export const PrayerContextualGateways: React.FC<PrayerContextualGatewaysProps> =
         <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-500/20 rounded-2xl flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="text-base" aria-hidden="true">📿</span>
-            <div className="text-right">
-              <span className="font-extrabold text-emerald-900 dark:text-emerald-300 block text-right">
+            <div className="">
+              <span className="font-extrabold text-emerald-900 dark:text-emerald-300 block ">
                 {getAdhkarTitle()}
               </span>
-              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-bold text-right block">
+              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-bold  block">
                 هل أتممت أذكارك المباركة؟
               </span>
             </div>
@@ -59,11 +59,11 @@ export const PrayerContextualGateways: React.FC<PrayerContextualGatewaysProps> =
         <div className="p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-500/20 rounded-2xl flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="text-base" aria-hidden="true">⚡</span>
-            <div className="text-right">
-              <span className="font-extrabold text-amber-900 dark:text-amber-300 block text-right">
+            <div className="">
+              <span className="font-extrabold text-amber-900 dark:text-amber-300 block ">
                 لديك {toArabicNumbers(qadaCount)} صلاة {prayerDisplayName} فائتة
               </span>
-              <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-bold text-right block">
+              <span className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-bold  block">
                 هل قضيت صلاة سابقة مع هذه الفريضة؟
               </span>
             </div>

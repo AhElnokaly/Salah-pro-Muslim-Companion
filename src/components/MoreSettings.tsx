@@ -117,7 +117,7 @@ export default function MoreSettings({
   ];
 
   return (
-    <div id="settings-root" className="space-y-6 text-end animate-fade-in w-full" dir="rtl">
+    <div id="settings-root" className="space-y-6 text-right animate-fade-in w-full" dir="rtl">
       {/* Quick horizontal subtabs navigation bar */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-1 border-b border-slate-200/60 dark:border-slate-800/80">
         {SETTINGS_TABS.map((tabItem) => {

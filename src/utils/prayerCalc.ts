@@ -303,7 +303,7 @@ export function calculatePrayerTimes(
 export function getCurrentAndNextPrayer(
   prayerTimes: PrayerTimes,
   now: Date = new Date()
-): { current: PrayerName; next: PrayerName; timeRemainingStr: string; progressPercent: number } {
+): { current: PrayerName; next: PrayerName; timeRemainingStr: string; progressPercent: number; remainingMs: number; targetTimestampMs: number } {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   
   const prayers: { name: PrayerName; minutes: number }[] = [
@@ -391,11 +391,22 @@ export function getCurrentAndNextPrayer(
   
   const progressPercent = Math.min(100, Math.max(0, (elapsedMins / totalSpan) * 100));
   
+  // Calculate exact target Date & remaining milliseconds down to seconds
+  const targetDate = new Date(now);
+  targetDate.setHours(Math.floor(nextPrayerObj.minutes / 60), nextPrayerObj.minutes % 60, 0, 0);
+  if (targetDate.getTime() <= now.getTime()) {
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+  const remainingMs = Math.max(0, targetDate.getTime() - now.getTime());
+  const targetTimestampMs = targetDate.getTime();
+
   return {
     current: currentPrayerObj.name,
     next: nextPrayerObj.name,
     timeRemainingStr,
     progressPercent,
+    remainingMs,
+    targetTimestampMs,
   };
 }
 

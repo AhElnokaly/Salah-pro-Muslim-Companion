@@ -177,7 +177,7 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
         {/* First sub-row: Offset & Muezzin */}
         <div className="flex items-center gap-2">
           {/* Offset Adjuster (الضبط لأقرب مسجد) */}
-          <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-end" title="الضبط لأقرب مسجد">
+          <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-right" title="الضبط لأقرب مسجد">
             <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold ms-1.5 shrink-0">المسجد:</span>
             <div className="flex items-center gap-1">
               <button

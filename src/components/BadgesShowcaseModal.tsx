@@ -153,7 +153,7 @@ export default function BadgesShowcaseModal({
             
             {/* Overall Status Badge Banner */}
             <div className={`p-4 rounded-2xl border ${overallTier.colorClasses.bg} ${overallTier.colorClasses.border} flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm`}>
-              <div className="flex items-center gap-3 text-end">
+              <div className="flex items-center gap-3 text-right">
                 <div className={`w-12 h-12 rounded-2xl ${overallTier.colorClasses.badgeBg} flex items-center justify-center text-2xl shrink-0 ${overallTier.colorClasses.glow}`}>
                   {overallTier.badgeSymbol}
                 </div>

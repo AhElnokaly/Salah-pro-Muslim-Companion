@@ -39,7 +39,7 @@ export const SpiritualNotificationsModal: React.FC<SpiritualNotificationsModalPr
         role="dialog"
         aria-modal="true"
         aria-label="نافذة النفحات والإشعارات الإيمانية"
-        className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl border border-slate-100 dark:border-slate-800/80 shadow-2xl p-5 flex flex-col gap-4 relative z-10 animate-scale-up text-end"
+        className="bg-white dark:bg-[#161d26] w-full max-w-sm rounded-3xl border border-slate-100 dark:border-slate-800/80 shadow-2xl p-5 flex flex-col gap-4 relative z-10 animate-scale-up text-right"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">

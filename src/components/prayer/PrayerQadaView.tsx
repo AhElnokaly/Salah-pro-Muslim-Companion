@@ -84,7 +84,7 @@ export const PrayerQadaView: React.FC<PrayerQadaViewProps> = ({
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📊</span>
-                <div className="text-end">
+                <div className="text-right">
                   <h4 className="text-xs font-black text-slate-800 dark:text-white">خطة قضاء الفوائت الحية</h4>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">توقع موعد إتمام كافة الفوائت حسب معدل إنجازك اليومي</p>
                 </div>
@@ -95,7 +95,7 @@ export const PrayerQadaView: React.FC<PrayerQadaViewProps> = ({
             </div>
 
             <div className="space-y-1.5 pt-1">
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold block text-end">اختر معدل القضاء اليومي:</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold block text-right">اختر معدل القضاء اليومي:</span>
               <div className="grid grid-cols-3 gap-2 text-[11px] font-extrabold">
                 <button
                   type="button"

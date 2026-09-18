@@ -19,7 +19,7 @@ import type {
   RelativePrayerTarget 
 } from '../../types';
 import { FIVE_PRAYERS_ONLY } from '../../utils/alarmUtils';
-import { playSpiritualSound } from '../../utils/spiritualAudio';
+import { playSpiritualSound, stopSpiritualSound } from '../../utils/spiritualAudio';
 import { PRESET_NAMES } from './alarmModalConstants';
 import { AlarmTimingSection } from './AlarmTimingSection';
 import { AlarmSoundAndDaysSection } from './AlarmSoundAndDaysSection';
@@ -89,9 +89,8 @@ export default function AlarmEditModal({
 
   // Clean audio on close
   useEffect(() => {
-    if (!isOpen && testAudioRef.current) {
-      testAudioRef.current.pause();
-      testAudioRef.current = null;
+    if (!isOpen) {
+      stopSpiritualSound(testAudioRef);
       setTestPlaying(false);
     }
   }, [isOpen]);
@@ -99,9 +98,8 @@ export default function AlarmEditModal({
   if (!isOpen) return null;
 
   const handleTestSound = () => {
-    if (testPlaying && testAudioRef.current) {
-      testAudioRef.current.pause();
-      testAudioRef.current = null;
+    if (testPlaying) {
+      stopSpiritualSound(testAudioRef);
       setTestPlaying(false);
       return;
     }
@@ -116,7 +114,12 @@ export default function AlarmEditModal({
     );
 
     if (testAudioRef.current) {
-      testAudioRef.current.onended = () => setTestPlaying(false);
+      testAudioRef.current.onended = () => {
+        setTestPlaying(false);
+      };
+      testAudioRef.current.onerror = () => {
+        setTestPlaying(false);
+      };
     } else {
       setTimeout(() => setTestPlaying(false), 3000);
     }

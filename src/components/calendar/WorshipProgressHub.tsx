@@ -97,7 +97,7 @@ export default function WorshipProgressHub({
       <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/40 pb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">📈</span>
-          <div className="text-end">
+          <div className="text-right">
             <h3 className="text-sm font-black text-slate-800 dark:text-white leading-none">مؤشر التقدم والعبادات</h3>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold mt-1">حصاد طاعاتك ودرجة التزامك بالأوراد</p>
           </div>

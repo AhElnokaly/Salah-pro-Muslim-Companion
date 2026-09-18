@@ -106,7 +106,7 @@ export default function QadaSettingsTab({
 
         {ramadanQada.trackMode === 'fasting' ? (
           <div className="space-y-4">
-            <div className="flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/10 p-4 rounded-2xl border border-amber-500/10 text-end">
+            <div className="flex items-center justify-between bg-amber-50/50 dark:bg-amber-950/10 p-4 rounded-2xl border border-amber-500/10 text-right">
               <div className="space-y-1">
                 <span className="text-xs font-black text-slate-700 dark:text-slate-200">الأيام المتبقية في ذمتك</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500 font-semibold block">سجل الأيام التي أفطرتها بعذر شرعي لقضائها</span>
@@ -153,7 +153,7 @@ export default function QadaSettingsTab({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/10 p-4 rounded-2xl border border-emerald-500/10 text-end">
+            <div className="flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-950/10 p-4 rounded-2xl border border-emerald-500/10 text-right">
               <div className="space-y-1">
                 <span className="text-xs font-black text-slate-750 dark:text-slate-200">فدية إطعام مسكين</span>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium block">للعاجز عن الصوم بمرض مستمر أو كبر سن.</span>

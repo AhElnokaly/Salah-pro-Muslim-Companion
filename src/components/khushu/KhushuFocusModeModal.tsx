@@ -102,7 +102,7 @@ export const KhushuFocusModeModal: React.FC<KhushuFocusModeModalProps> = ({
         </div>
 
         {/* Live Supplication Selection Box */}
-        <div className="p-4 bg-indigo-950/60 border border-indigo-500/30 rounded-3xl text-end space-y-2">
+        <div className="p-4 bg-indigo-950/60 border border-indigo-500/30 rounded-3xl text-right space-y-2">
           <span className="text-xs font-black text-indigo-300 block text-center">دعاء ومناجاة حية للمحراب:</span>
           <p className="text-sm font-black text-amber-100 leading-relaxed font-serif text-center py-2">
             «{selectedFocusDua}»

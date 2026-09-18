@@ -149,7 +149,7 @@ export default function ThemeSettingsTab({
                 key={style.id}
                 type="button"
                 onClick={() => setSettings(prev => ({ ...prev, appStyle: style.id }))}
-                className={`p-3 rounded-2xl border text-end flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer ${
+                className={`p-3 rounded-2xl border text-right flex flex-col justify-between gap-1 transition-all duration-200 cursor-pointer ${
                   isSelected
                     ? 'border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20 ring-2 ring-indigo-400/20 shadow-xs'
                     : 'border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/40 text-slate-500'

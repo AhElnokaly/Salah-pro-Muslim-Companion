@@ -52,7 +52,7 @@ export const MuezzinSelectionSection: React.FC<MuezzinSelectionSectionProps> = (
   onTogglePlayAudio,
 }) => {
   return (
-    <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-end">
+    <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/40 text-right">
       <label className="text-xs font-black text-slate-500 dark:text-slate-400 block">
         {label}
       </label>

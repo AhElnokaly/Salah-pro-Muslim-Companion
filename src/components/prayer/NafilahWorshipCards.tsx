@@ -29,7 +29,7 @@ export const NafilahWorshipCards: React.FC<NafilahWorshipCardsProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <span className="text-lg">☀️</span>
-            <div className="text-end">
+            <div className="text-right">
               <h4 className="text-sm font-black text-amber-800 dark:text-amber-400">
                 صلاة الضحى (سنة مؤكدة)
               </h4>
@@ -103,7 +103,7 @@ export const NafilahWorshipCards: React.FC<NafilahWorshipCardsProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <span className="text-lg">🌃</span>
-            <div className="text-end">
+            <div className="text-right">
               <h4 className="text-sm font-black text-indigo-800 dark:text-indigo-400">
                 صلاة قيام الليل والتهجد
               </h4>
@@ -167,7 +167,7 @@ export const NafilahWorshipCards: React.FC<NafilahWorshipCardsProps> = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <span className="text-lg">🌟</span>
-            <div className="text-end">
+            <div className="text-right">
               <h4 className="text-sm font-black text-purple-800 dark:text-purple-400">
                 صلاة الشفع والوتر
               </h4>

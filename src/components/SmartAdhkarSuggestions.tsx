@@ -128,7 +128,7 @@ export default function SmartAdhkarSuggestions({
   };
 
   return (
-    <div className="space-y-6 text-end" dir="rtl">
+    <div className="space-y-6 text-right" dir="rtl">
       
       {/* HEADER BANNER */}
       <div className="p-6 bg-gradient-to-r from-indigo-900 via-indigo-800 to-[#111720] text-white rounded-3xl shadow-lg border border-indigo-700/50 relative overflow-hidden">
@@ -268,7 +268,7 @@ export default function SmartAdhkarSuggestions({
               return (
                 <div
                   key={item.id}
-                  className={`p-5 rounded-3xl border transition-all space-y-4 text-end shadow-xs ${
+                  className={`p-5 rounded-3xl border transition-all space-y-4 text-right shadow-xs ${
                     isDone
                       ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
                       : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'

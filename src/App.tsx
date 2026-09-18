@@ -46,7 +46,7 @@ import { trackFeatureUsage } from './utils/analyticsStorage';
 import { PrayerKey } from './utils/adhkarCalc';
 
 // Import Hemmaty app logo icon
-import companionIcon from './assets/images/hemmaty_logo.jpg';
+import companionIcon from './assets/images/hemmaty_logo.png';
 
 // Calculations for standalone widget state synchronization
 import { getArabicPrayerName } from './utils/prayerCalc';
@@ -64,7 +64,7 @@ export default function App() {
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<AppReleaseInfo | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => safeGetItem('salah_show_post_onboarding_welcome') === 'true');
-  const [, setNotificationsCount] = useState<number>(0);
+  const [notificationsCount, setNotificationsCount] = useState<number>(0);
 
   // Modular App Permissions, Network & Auxiliary Alerts Hook
   const {
@@ -209,7 +209,7 @@ export default function App() {
     setFiqhWarning
   });
 
-  const { now, hijri, gregorianStr, times, current, next, timeRemainingStr, dayNameArabic } = usePrayerClock(settings);
+  const { now, hijri, gregorianStr, times, current, next, timeRemainingStr, dayNameArabic, remainingMs, targetTimestampMs } = usePrayerClock(settings);
   const activePrayerName = current === 'Sunrise' ? 'Fajr' : (current || 'Dhuhr');
 
   // Window events, Service Worker messages, URL parameters, and Quick Logs
@@ -235,9 +235,10 @@ export default function App() {
   useSmartNotificationsSystemSync({
     cityName: settings.cityName || 'موقعي',
     hijriDateStr: hijri.fullString,
-    nextPrayerNameArabic: getArabicPrayerName(next),
+    nextPrayerNameArabic: getArabicPrayerName(next, now),
     nextPrayerTimeFormatted: times[next] || '',
-    remainingMsToNextPrayer: 0,
+    remainingMsToNextPrayer: remainingMs,
+    targetTimestampMs,
   });
 
   // Register Android Hardware Back Button Handling (Task 26)
@@ -327,7 +328,7 @@ export default function App() {
             src={companionIcon} 
             alt="Hemmaty Logo" 
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.jpg';
+              (e.currentTarget as HTMLImageElement).src = '/hemmaty_logo.png';
             }}
             className="w-full h-full object-cover select-none" 
             referrerPolicy="no-referrer" 
@@ -348,7 +349,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-end flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
+    <div className="min-h-screen bg-[#faf7f0] dark:bg-[#0e1217] pb-24 text-right flex flex-col items-center font-sans transition-colors duration-300 text-slate-800 dark:text-slate-100 w-full" dir="rtl">
       
       {/* 1. Sticky Top Header Bar */}
       <AppHeader
@@ -356,6 +357,8 @@ export default function App() {
         setSettings={setSettings}
         setIsSidebarOpen={setIsSidebarOpen}
         setActiveTab={setActiveTab}
+        activeTab={activeTab}
+        notificationsCount={notificationsCount}
         setIsTourModalOpen={setIsTourModalOpen}
         setShowSpiritualModal={setShowSpiritualModal}
         headerRippleActive={headerRippleActive}

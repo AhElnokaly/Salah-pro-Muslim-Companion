@@ -87,6 +87,18 @@ export const playSpiritualSpeech = async (text: string, volume: number = 0.8): P
   }
 };
 
+export const SPIRITUAL_AUDIO_FILES: Record<string, string> = {
+  takbeer: '/audio/takbeer.mp3',
+  alsalatu_khayr: '/audio/alsalatu-khayr.mp3',
+  hayya: '/audio/hayya.mp3',
+  adhan: '/audio/adhan.mp3',
+  salawat: '/audio/salawat.mp3',
+  istighfar: '/audio/istighfar.mp3',
+  duaa: '/audio/duaa.mp3',
+  beep: '/audio/beep.mp3',
+  reminder: '/audio/reminder.mp3',
+};
+
 export const playSpiritualSound = (
   soundType: string,
   title: string,
@@ -101,22 +113,75 @@ export const playSpiritualSound = (
     return;
   }
 
-  if (soundType === 'chime' || soundType === 'beep') {
-    playSpiritualChime(soundType === 'chime' ? 523.25 : 440);
+  // Handle chime or synthetic fallback
+  if (soundType === 'chime') {
+    playSpiritualChime(523.25);
     return;
   }
 
-  // If audio element exists, play audio track
-  if (audioRef && audioRef.current) {
+  const audioFilePath = SPIRITUAL_AUDIO_FILES[soundType];
+
+  if (audioFilePath) {
+    try {
+      let audio: HTMLAudioElement;
+      if (audioRef && audioRef.current) {
+        audio = audioRef.current;
+        try {
+          audio.pause();
+        } catch {
+          // ignore
+        }
+        audio.src = audioFilePath;
+      } else {
+        audio = new Audio(audioFilePath);
+        if (audioRef) {
+          audioRef.current = audio;
+        }
+      }
+
+      audio.volume = Math.max(0, Math.min(1, volume));
+      audio.currentTime = 0;
+      audio.play().catch(e => {
+        console.warn('Real spiritual audio file playback failed, falling back to chime:', e);
+        playSpiritualChime(523.25);
+      });
+      return;
+    } catch (e) {
+      console.warn('Audio initialization error, falling back to chime:', e);
+    }
+  }
+
+  // If audio element already exists with a source, attempt playing it
+  if (audioRef && audioRef.current && audioRef.current.src) {
     try {
       audioRef.current.volume = Math.max(0, Math.min(1, volume));
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.warn('Audio playback prevented:', e));
+      audioRef.current.play().catch(e => {
+        console.warn('Audio playback prevented:', e);
+        playSpiritualChime(523.25);
+      });
+      return;
     } catch (e) {
       console.warn('Audio ref play error:', e);
     }
-  } else {
-    // Default fallback to gentle chime
-    playSpiritualChime(523.25);
+  }
+
+  // Default fallback if no file found
+  playSpiritualChime(soundType === 'beep' ? 440 : 523.25);
+};
+
+export const stopSpiritualSound = (
+  audioRef?: MutableRefObject<HTMLAudioElement | null>
+): void => {
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (audioRef && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  } catch (e) {
+    console.warn('Error stopping spiritual sound:', e);
   }
 };

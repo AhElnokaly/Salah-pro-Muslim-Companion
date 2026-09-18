@@ -77,7 +77,7 @@ export default function PrayerSettingsTab({
                 key={item.id}
                 type="button"
                 onClick={() => setSettings((prev) => ({ ...prev, madhab: item.id as AppSettings['madhab'] }))}
-                className={`p-3.5 rounded-2xl border text-end transition-all cursor-pointer flex flex-col justify-between ${
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
                   settings.madhab === item.id
                     ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-350'
                     : 'border-[#e2e8f0] dark:border-slate-800 bg-slate-50/55 dark:bg-[#111720] text-slate-600 dark:text-slate-400'
@@ -104,7 +104,7 @@ export default function PrayerSettingsTab({
                 key={item.id}
                 type="button"
                 onClick={() => setSettings((prev) => ({ ...prev, gender: item.id }))}
-                className={`p-3.5 rounded-2xl border text-end transition-all cursor-pointer flex flex-col justify-between ${
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
                   (settings.gender || 'male') === item.id
                     ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/25 text-indigo-700 dark:text-indigo-350 font-black'
                     : 'border-[#e2e8f0] dark:border-slate-800 bg-slate-50/55 dark:bg-[#111720] text-slate-600 dark:text-slate-400'
@@ -117,7 +117,7 @@ export default function PrayerSettingsTab({
           </div>
 
           {settings.gender === 'female' && (
-            <div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/5 border border-indigo-500/20 rounded-2xl text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed font-semibold mt-2 animate-fade-in text-end">
+            <div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/5 border border-indigo-500/20 rounded-2xl text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed font-semibold mt-2 animate-fade-in text-right">
               ✨ <strong>رخصة العذر الشرعي مفعلة:</strong> لقد تم تفعيل وضع المرأة المسلمة. يتيح لكِ التطبيق الآن تسجيل صلواتكِ كـ «عذر شرعي رخصة» في لوحة التحكم أثناء أيام عذركِ الشرعي. لن تؤثر هذه الأيام بالسلب على نسب إتمام العبادات أو تهدم تتابع السلاسل الإيمانية الخاص بكِ تيسيراً ورفقاً بكِ 🤍.
             </div>
           )}

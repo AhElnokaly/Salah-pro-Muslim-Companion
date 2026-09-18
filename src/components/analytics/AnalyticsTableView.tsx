@@ -40,7 +40,7 @@ export default function AnalyticsTableView({ filteredCards, onSelectTab }: Analy
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-end border-collapse">
+        <table className="w-full text-right border-collapse">
           <thead>
             <tr className="bg-slate-100/70 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 text-[11px] font-black border-b border-slate-200/80 dark:border-slate-800">
               <th className="p-3.5 pe-5">الخدمة الإيمانية</th>

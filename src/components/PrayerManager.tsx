@@ -94,7 +94,7 @@ export default function PrayerManager({
   });
 
   return (
-    <div id="prayer-manager-root" className="space-y-4 text-end" dir="rtl">
+    <div id="prayer-manager-root" className="space-y-4 text-right" dir="rtl">
       {/* Sleek Header Tabs & Notifications */}
       <PrayerManagerHeader
         activeSubTab={activeSubTab}

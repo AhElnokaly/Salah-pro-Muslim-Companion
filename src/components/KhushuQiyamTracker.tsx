@@ -291,7 +291,7 @@ export default function KhushuQiyamTracker({
   const { qiyamDaysCount } = getQiyamStats();
 
   return (
-    <div className="space-y-6 text-end pb-12 animate-fade-in" dir="rtl">
+    <div className="space-y-6 text-right pb-12 animate-fade-in" dir="rtl">
       {/* 1. HERO BANNER & LIVE FOCUS MODE TRIGGER */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c121e] via-[#151c2d] to-[#1f1636] p-6 text-white border border-indigo-500/30 shadow-xl">
         <div className="absolute top-0 end-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />

@@ -51,7 +51,7 @@ export const TimelineGridTealWidgets: React.FC<TimelineGridTealWidgetsProps> = (
               <span className="text-[6.5px] font-bold block text-white/40 mt-0.5">{toArabicNumbers(gregorianClean.split(' ').slice(0, 2).join(' '))}</span>
             </div>
           </div>
-          <div className="text-end">
+          <div className="text-right">
             <span className="text-[6.5px] font-bold block text-white/40">متبقي للأذان</span>
             <span className="text-[11px] font-extrabold block text-amber-400 font-mono leading-none mt-0.5" dir="ltr">
               -{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}

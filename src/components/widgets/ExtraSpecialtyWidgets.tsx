@@ -179,7 +179,7 @@ export const ExtraSpecialtyWidgets: React.FC<ExtraSpecialtyWidgetsProps> = ({
             <span className="text-[7.5px] font-bold text-white/50 block">موقعك الحالي: {cityName || 'الإسكندرية'}</span>
           </div>
         </div>
-        <div className="text-end bg-black/20 px-2 py-1 rounded-lg border border-white/5">
+        <div className="text-right bg-black/20 px-2 py-1 rounded-lg border border-white/5">
           <span className="text-[6px] font-bold text-white/40 block">الأذان القادم</span>
           <span className="text-[9px] font-black text-amber-400 font-mono">{toArabicNumbers(timeRemainingStr.split(':').slice(0, 2).join(':'))}</span>
         </div>
@@ -201,7 +201,7 @@ export const ExtraSpecialtyWidgets: React.FC<ExtraSpecialtyWidgetsProps> = ({
               <span className="text-[7px] font-extrabold text-amber-300 block">{toArabicNumbers(currentYear)} هجرية</span>
             </div>
           </div>
-          <div className="text-end bg-white/10 px-2 py-1 rounded-lg border border-white/10">
+          <div className="text-right bg-white/10 px-2 py-1 rounded-lg border border-white/10">
             <span className="text-[6.5px] font-bold text-emerald-200 block">حالة اليوم</span>
             <span className="text-[8px] font-black text-white">مستحب الصيام 🌙</span>
           </div>

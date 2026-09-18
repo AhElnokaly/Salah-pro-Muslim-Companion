@@ -255,7 +255,8 @@ export async function sendPushNotification(
   const settings = getPushSettings();
   
   if (!settings.enabled) return false;
-  if (isInQuietHours(settings)) {
+  const isSilentOngoing = options?.silent || options?.tag === 'ongoing_prayer_tracker';
+  if (!isSilentOngoing && isInQuietHours(settings)) {
     console.log('[PushService] Notification suppressed due to quiet hours');
     return false;
   }
@@ -269,13 +270,13 @@ export async function sendPushNotification(
     badge: '/icon-192.png',
     dir: 'rtl',
     lang: 'ar',
-    vibrate: settings.vibrateEnabled ? [200, 100, 200] : undefined,
+    vibrate: (settings.vibrateEnabled && !options?.silent) ? [200, 100, 200] : undefined,
     ...options,
   };
 
   try {
     const shown = await showAppNotification(title, defaultOptions);
-    if (shown) {
+    if (shown && !options?.silent) {
       triggerNotificationSound(options?.soundType, settings);
     }
     return shown;
