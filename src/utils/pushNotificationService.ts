@@ -5,7 +5,7 @@
 
 import { safeSetItem, safeGetJSON, safeSetJSON } from './storage';
 import { parseTimeToMinutes } from './prayerCalc';
-import { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
+import AthanAlarm, { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
 
 export interface PushNotificationSettings {
   enabled: boolean;
@@ -70,6 +70,24 @@ export function savePushSettings(settings: PushNotificationSettings): void {
 }
 
 /**
+ * Get current push permission status across Native Android and Browser
+ */
+export async function getPushPermissionStatus(): Promise<NotificationPermission> {
+  if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
+    try {
+      const res = await AthanAlarm.checkNotificationPermission();
+      return res.granted ? 'granted' : 'denied';
+    } catch {
+      return 'denied';
+    }
+  }
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    return Notification.permission;
+  }
+  return 'denied';
+}
+
+/**
  * Check if current time is inside quiet hours
  */
 export function isInQuietHours(settings: PushNotificationSettings = getPushSettings()): boolean {
@@ -93,20 +111,22 @@ export function isInQuietHours(settings: PushNotificationSettings = getPushSetti
  * Request notification permission from browser or native Android environment
  */
 export async function requestPushPermission(): Promise<NotificationPermission> {
-  // First, if running in native Android / Capacitor container, request POST_NOTIFICATIONS
-  try {
-    const nativeGranted = await requestNativeNotificationPermission();
-    if (nativeGranted && typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'granted') {
-        await registerServiceWorker();
+  // If running in native Android / Capacitor container, request native POST_NOTIFICATIONS
+  if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
+    try {
+      const res = await AthanAlarm.requestNotificationPermission();
+      if (res.granted) {
         return 'granted';
       }
+      const check = await AthanAlarm.checkNotificationPermission();
+      return check.granted ? 'granted' : 'denied';
+    } catch (nativeErr) {
+      console.warn('[PushService]: Native permission check error:', nativeErr);
+      return 'denied';
     }
-  } catch (nativeErr) {
-    console.warn('[PushService]: Native permission check error:', nativeErr);
   }
 
-  if (!('Notification' in window)) {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'denied';
   }
 
@@ -261,6 +281,27 @@ export async function sendPushNotification(
     return false;
   }
 
+  // 1. Native Android dispatch via Capacitor plugin
+  if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform()) {
+    try {
+      const perm = await AthanAlarm.checkNotificationPermission();
+      if (!perm.granted) {
+        console.warn('[PushService] Native notification permission not granted');
+        return false;
+      }
+      const res = await AthanAlarm.sendNotification?.({
+        title,
+        body: options?.body || '',
+        soundType: options?.soundType || 'default'
+      });
+      return res?.success ?? false;
+    } catch (nativeErr) {
+      console.warn('[PushService] Native send notification error:', nativeErr);
+      return false;
+    }
+  }
+
+  // 2. Web browser dispatch
   if (!('Notification' in window) || Notification.permission !== 'granted') {
     return false;
   }

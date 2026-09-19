@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useAuthoritativeClock } from '../../hooks/useAuthoritativeClock';
 import { toArabicNumbers } from '../../utils/hijri';
 import { parseTimeToMinutes } from '../../utils/prayerCalc';
 import { AppSettings, PrayerTimes } from '../../types';
@@ -58,7 +59,7 @@ export function useWidgetSimulatorLogic({
     (settings?.pinnedWidget?.theme as WidgetTheme) || 'dark-blue'
   );
   const [activeWallpaper, setActiveWallpaper] = useState(settings?.pinnedWidget?.wallpaper || 'starry');
-  const [internalTime, setInternalTime] = useState<Date>(new Date());
+  const internalTime = useAuthoritativeClock();
   const [subhaCount, setSubhaCount] = useState<number>(0);
   const [, setIsPinned] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -98,14 +99,6 @@ export function useWidgetSimulatorLogic({
   const [showKhushuBtn, setShowKhushuBtn] = useState<boolean>(
     settings?.pinnedWidget?.showKhushuBtn ?? true
   );
-
-  // Local timer for mock clock hands and updates
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setInternalTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const currentWallpaper = WALLPAPERS.find((w) => w.id === activeWallpaper) || WALLPAPERS[0];
 

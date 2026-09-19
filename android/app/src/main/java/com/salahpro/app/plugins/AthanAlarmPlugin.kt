@@ -12,6 +12,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -21,6 +22,11 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.salahpro.app.widget.SalahWidgetProvider
 import org.json.JSONArray
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 @CapacitorPlugin(
     name = "AthanAlarm",
@@ -352,7 +358,14 @@ class AthanAlarmPlugin : Plugin() {
 
     @PluginMethod
     fun checkNotificationPermission(call: PluginCall) {
-        val isGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val context = context
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        val areNotificationsEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            notificationManager?.areNotificationsEnabled() ?: true
+        } else {
+            true
+        }
+        val isRuntimeGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
@@ -360,9 +373,10 @@ class AthanAlarmPlugin : Plugin() {
         } else {
             true
         }
+        val isGranted = areNotificationsEnabled && isRuntimeGranted
         val ret = JSObject()
         ret.put("granted", isGranted)
-        ret.put("status", if (isGranted) "granted" else "prompt")
+        ret.put("status", if (isGranted) "granted" else "denied")
         call.resolve(ret)
     }
 
@@ -405,6 +419,100 @@ class AthanAlarmPlugin : Plugin() {
         ret.put("granted", isGranted)
         ret.put("status", if (isGranted) "granted" else "denied")
         call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun openNotificationSettings(call: PluginCall) {
+        val context = context
+        try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(intent)
+            val res = JSObject()
+            res.put("opened", true)
+            call.resolve(res)
+        } catch (e: Exception) {
+            try {
+                val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallbackIntent)
+                val res = JSObject()
+                res.put("opened", true)
+                call.resolve(res)
+            } catch (fallbackEx: Exception) {
+                Log.e(TAG, "Failed to open notification settings", fallbackEx)
+                call.reject("Failed to open notification settings: ${e.message}")
+            }
+        }
+    }
+
+    @PluginMethod
+    fun sendNotification(call: PluginCall) {
+        val title = call.getString("title", "تطبيق هِمَّتِي") ?: "تطبيق هِمَّتِي"
+        val body = call.getString("body", "") ?: ""
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        if (notificationManager == null) {
+            val res = JSObject()
+            res.put("success", false)
+            call.resolve(res)
+            return
+        }
+
+        val channelId = "athan_general_notifications"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "إشعارات هِمَّتِي والتنبيهات العامة",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "إشعارات الأذكار، التذكيرات الإيمانية، والإشعارات الفورية"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pIntent = if (launchIntent != null) {
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
+        } else null
+
+        val notifBuilder = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setDefaults(androidx.core.app.NotificationCompat.DEFAULT_ALL)
+
+        if (pIntent != null) {
+            notifBuilder.setContentIntent(pIntent)
+        }
+
+        val notifId = (System.currentTimeMillis() % 100000).toInt() + 3000
+        notificationManager.notify(notifId, notifBuilder.build())
+
+        val res = JSObject()
+        res.put("success", true)
+        res.put("notificationId", notifId)
+        call.resolve(res)
     }
 
     @PluginMethod
@@ -658,6 +766,156 @@ class AthanAlarmPlugin : Plugin() {
         ret.put("cancelled", success)
         ret.put("requestCode", reqCode)
         call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun canRequestPackageInstalls(call: PluginCall) {
+        val context = context
+        val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true
+        }
+        val ret = JSObject()
+        ret.put("canInstall", canInstall)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun openInstallPermissionSettings(call: PluginCall) {
+        val context = context
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                val ret = JSObject()
+                ret.put("opened", true)
+                call.resolve(ret)
+            } else {
+                val ret = JSObject()
+                ret.put("opened", true)
+                call.resolve(ret)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open unknown app sources settings", e)
+            call.reject("Could not open install permission settings: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun downloadAndInstallApk(call: PluginCall) {
+        val apkUrl = call.getString("url")
+        if (apkUrl.isNullOrBlank()) {
+            call.reject("Missing APK download URL")
+            return
+        }
+
+        val context = context
+        thread {
+            try {
+                Log.d(TAG, "Starting native in-app APK download from: $apkUrl")
+                val downloadDir = File(context.cacheDir, "updates")
+                if (!downloadDir.exists()) {
+                    downloadDir.mkdirs()
+                }
+
+                val apkFile = File(downloadDir, "hemmaty-update.apk")
+                if (apkFile.exists()) {
+                    apkFile.delete()
+                }
+
+                // Download with redirect following
+                var currentUrl = apkUrl
+                var connection: HttpURLConnection
+                var redirects = 0
+                while (true) {
+                    val urlObj = URL(currentUrl)
+                    connection = urlObj.openConnection() as HttpURLConnection
+                    connection.instanceFollowRedirects = false
+                    connection.connectTimeout = 30000
+                    connection.readTimeout = 30000
+                    connection.setRequestProperty("User-Agent", "HemmatyApp-Android")
+                    connection.connect()
+
+                    val responseCode = connection.responseCode
+                    if (responseCode in 300..399) {
+                        val newLocation = connection.getHeaderField("Location")
+                        connection.disconnect()
+                        if (!newLocation.isNullOrEmpty() && redirects < 5) {
+                            currentUrl = newLocation
+                            redirects++
+                            continue
+                        }
+                    }
+                    break
+                }
+
+                val totalBytes = connection.contentLength.toLong()
+                var downloadedBytes = 0L
+
+                val inputStream = connection.inputStream
+                val outputStream = FileOutputStream(apkFile)
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var lastReportedProgress = -1
+
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    downloadedBytes += bytesRead
+
+                    if (totalBytes > 0) {
+                        val progressPercent = ((downloadedBytes * 100) / totalBytes).toInt()
+                        if (progressPercent != lastReportedProgress) {
+                            lastReportedProgress = progressPercent
+                            val progressData = JSObject().apply {
+                                put("progress", progressPercent)
+                                put("downloadedBytes", downloadedBytes)
+                                put("totalBytes", totalBytes)
+                            }
+                            notifyListeners("apkDownloadProgress", progressData)
+                        }
+                    }
+                }
+
+                outputStream.flush()
+                outputStream.close()
+                inputStream.close()
+                connection.disconnect()
+
+                Log.d(TAG, "APK successfully downloaded to: ${apkFile.absolutePath}, size: ${apkFile.length()} bytes")
+
+                // Launch Android Package Installer
+                val authority = "${context.packageName}.fileprovider"
+                val apkUri = FileProvider.getUriForFile(context, authority, apkFile)
+
+                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                context.startActivity(installIntent)
+
+                val completeData = JSObject().apply {
+                    put("success", true)
+                    put("message", "Package installer launched successfully")
+                }
+                notifyListeners("apkDownloadComplete", completeData)
+                call.resolve(completeData)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in downloading/installing APK in-app", e)
+                val errorData = JSObject().apply {
+                    put("success", false)
+                    put("error", e.message ?: "Unknown error downloading APK")
+                }
+                notifyListeners("apkDownloadError", errorData)
+                call.reject("Failed to download/install update: ${e.message}")
+            }
+        }
     }
 
     private fun processAndScheduleTimes(

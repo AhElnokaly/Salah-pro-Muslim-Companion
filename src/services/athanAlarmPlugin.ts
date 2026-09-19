@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, Capacitor } from '@capacitor/core';
 import { parseTimeToMinutes } from '../utils/prayerCalc';
 import { PrayerTimes } from '../types';
 import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
@@ -57,7 +57,13 @@ export interface AthanAlarmPlugin {
   requestIgnoreBatteryOptimization(): Promise<{ requested: boolean }>;
   checkNotificationPermission(): Promise<{ granted: boolean; status: string }>;
   requestNotificationPermission(): Promise<{ granted: boolean; status: string }>;
+  openNotificationSettings?(): Promise<{ opened: boolean }>;
+  sendNotification?(options: { title: string; body: string; soundType?: string }): Promise<{ success: boolean; notificationId?: number }>;
   updateOngoingPrayerNotification?(options: { enabled: boolean; title?: string; body?: string; targetTimestamp?: number }): Promise<{ success: boolean; posted?: boolean; cleared?: boolean }>;
+  canRequestPackageInstalls?(): Promise<{ canInstall: boolean }>;
+  openInstallPermissionSettings?(): Promise<{ opened: boolean }>;
+  downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
+  addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
 }
 
 const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
@@ -108,6 +114,28 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
         return { granted: res === 'granted', status: res };
       }
       return { granted: false, status: 'denied' };
+    },
+    openNotificationSettings: async () => {
+      return { opened: true };
+    },
+    sendNotification: async (options) => {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(options.title, { body: options.body });
+        return { success: true };
+      }
+      return { success: false };
+    },
+    canRequestPackageInstalls: async () => {
+      return { canInstall: true };
+    },
+    openInstallPermissionSettings: async () => {
+      return { opened: true };
+    },
+    downloadAndInstallApk: async (options) => {
+      if (typeof window !== 'undefined') {
+        window.open(options.url, '_blank', 'noopener,noreferrer');
+      }
+      return { success: true };
     }
   }
 });
@@ -135,6 +163,32 @@ export async function requestNotificationPermission(): Promise<boolean> {
       const res = await Notification.requestPermission();
       return res === 'granted';
     }
+    return false;
+  }
+}
+
+export async function openAppNotificationSettings(): Promise<boolean> {
+  try {
+    if (Capacitor.isNativePlatform() && AthanAlarm.openNotificationSettings) {
+      const res = await AthanAlarm.openNotificationSettings();
+      return res.opened ?? false;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[AthanAlarm]: Failed to open notification settings:', err);
+    return false;
+  }
+}
+
+export async function sendNativeNotification(title: string, body: string, soundType?: string): Promise<boolean> {
+  try {
+    if (Capacitor.isNativePlatform() && AthanAlarm.sendNotification) {
+      const res = await AthanAlarm.sendNotification({ title, body, soundType });
+      return res.success ?? false;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[AthanAlarm]: Failed to send native notification:', err);
     return false;
   }
 }
@@ -374,6 +428,47 @@ export async function updateNativeWidgetData(
   } catch (e) {
     console.warn('[AthanAlarm]: Failed to update widget data:', e);
     return false;
+  }
+}
+
+export async function downloadAndInstallAppUpdate(
+  apkUrl: string,
+  onProgress?: (progress: number, downloadedBytes: number, totalBytes: number) => void
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    if (Capacitor.isNativePlatform() && AthanAlarm.downloadAndInstallApk) {
+      let removeListener: any = null;
+      if (onProgress && AthanAlarm.addListener) {
+        removeListener = await AthanAlarm.addListener('apkDownloadProgress', (data: any) => {
+          onProgress(data.progress || 0, data.downloadedBytes || 0, data.totalBytes || 0);
+        });
+      }
+
+      // Check if install from unknown sources is allowed
+      if (AthanAlarm.canRequestPackageInstalls) {
+        const { canInstall } = await AthanAlarm.canRequestPackageInstalls();
+        if (!canInstall && AthanAlarm.openInstallPermissionSettings) {
+          await AthanAlarm.openInstallPermissionSettings();
+        }
+      }
+
+      const res = await AthanAlarm.downloadAndInstallApk({ url: apkUrl });
+      if (removeListener && typeof removeListener.remove === 'function') {
+        removeListener.remove();
+      }
+      return { success: res.success, message: res.message };
+    } else {
+      if (typeof window !== 'undefined') {
+        window.open(apkUrl, '_blank', 'noopener,noreferrer');
+      }
+      return { success: true, message: 'Browser download opened' };
+    }
+  } catch (error: any) {
+    console.error('[AthanAlarmPlugin] downloadAndInstallAppUpdate failed:', error);
+    if (typeof window !== 'undefined') {
+      window.open(apkUrl, '_blank', 'noopener,noreferrer');
+    }
+    return { success: false, message: error?.message || 'Error occurred during in-app update' };
   }
 }
 

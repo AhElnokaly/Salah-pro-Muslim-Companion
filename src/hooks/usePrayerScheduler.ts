@@ -138,9 +138,7 @@ export function usePrayerScheduler({
       const prayerTimeStr = currentTimes[prayer];
       if (prayerTimeStr) {
         const prayerMins = parseTimeToMinutes(prayerTimeStr);
-        let diff = currentMins - prayerMins;
-        if (diff < -720) diff += 1440;
-        if (diff > 720) diff -= 1440;
+        const diff = currentMins - prayerMins;
 
         const playedKey = `salah_played_${todayStr}_${prayer}`;
         const attemptedKey = `salah_attempted_${todayStr}_${prayer}`;
@@ -178,9 +176,7 @@ export function usePrayerScheduler({
           const targetMins = calculateTriggerMinutes(alarm, prayerTimeStr);
           if (targetMins === null) return;
 
-          let diff = currentMins - targetMins;
-          if (diff < -720) diff += 1440;
-          if (diff > 720) diff -= 1440;
+          const diff = currentMins - targetMins;
 
           const triggeredKey = `salah_triggered_${alarm.id}_${pTarget}_${todayStr}`;
           const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);
@@ -204,9 +200,7 @@ export function usePrayerScheduler({
         // Fixed Time Alarm
         if (!alarm.time) return;
         const alarmMins = parseTimeToMinutes(alarm.time);
-        let diff = currentMins - alarmMins;
-        if (diff < -720) diff += 1440;
-        if (diff > 720) diff -= 1440;
+        const diff = currentMins - alarmMins;
 
         const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
         const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);

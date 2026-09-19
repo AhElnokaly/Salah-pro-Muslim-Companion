@@ -170,7 +170,7 @@ export default function Dashboard({
   }, []);
 
   // محرك أتمتة الخشوع التلقائي مع وقت الإقامة
-  useKhushuAutoScheduler({
+  const { iqamaInfo } = useKhushuAutoScheduler({
     settings: khushuSettings,
     times,
     isActive: isKhushuActive,
@@ -338,10 +338,12 @@ export default function Dashboard({
         durationMinutes={khushuDuration}
         formatRemainingTime={formatKhushuRemainingTime}
         onOpenSheet={() => setIsKhushuSheetOpen(true)}
-        onQuickActivate={() => activateKhushu()}
+        onQuickActivate={(duration?: number) => activateKhushu(duration)}
         onDeactivate={deactivateKhushu}
         isLoading={isKhushuLoading}
         appStyle={currentStyle}
+        iqamaInfo={iqamaInfo}
+        autoWithIqama={khushuSettings.autoWithIqama}
       />
 
       {/* Dashboard Banners & Notifications */}

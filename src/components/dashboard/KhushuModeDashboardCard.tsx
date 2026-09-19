@@ -6,6 +6,7 @@
 import React from 'react';
 import { KhushuModeType } from '../../services/khushuModePlugin';
 import { toArabicNumbers } from '../../utils/hijri';
+import { IqamaWindowInfo } from '../../domain/khushu/khushuFlowUtils';
 
 interface KhushuModeDashboardCardProps {
   isActive: boolean;
@@ -13,10 +14,12 @@ interface KhushuModeDashboardCardProps {
   durationMinutes: number;
   formatRemainingTime: () => string;
   onOpenSheet: () => void;
-  onQuickActivate: () => Promise<boolean>;
+  onQuickActivate: (duration?: number) => Promise<boolean>;
   onDeactivate: () => Promise<void>;
   isLoading: boolean;
   appStyle?: string;
+  iqamaInfo?: IqamaWindowInfo | null;
+  autoWithIqama?: boolean;
 }
 
 export const KhushuModeDashboardCard: React.FC<KhushuModeDashboardCardProps> = ({
@@ -28,12 +31,20 @@ export const KhushuModeDashboardCard: React.FC<KhushuModeDashboardCardProps> = (
   onQuickActivate,
   onDeactivate,
   isLoading,
+  iqamaInfo,
+  autoWithIqama,
 }) => {
+  const isInIqamaWindow = !isActive && !!iqamaInfo?.isInAdhanIqamaWindow;
+
   return (
     <div
       id="khushu-mode-card"
       dir="rtl"
-      className="w-full rounded-2xl p-3.5 sm:p-4 bg-slate-900/60 backdrop-blur-md border border-slate-800/80 shadow-md transition-all duration-300"
+      className={`w-full rounded-2xl p-3.5 sm:p-4 backdrop-blur-md border shadow-md transition-all duration-300 ${
+        isInIqamaWindow
+          ? 'bg-gradient-to-r from-emerald-950/60 via-slate-900/80 to-slate-900/80 border-emerald-500/40 shadow-emerald-950/30'
+          : 'bg-slate-900/60 border-slate-800/80'
+      }`}
     >
       {isActive ? (
         /* Active Khushu State */
@@ -84,6 +95,55 @@ export const KhushuModeDashboardCard: React.FC<KhushuModeDashboardCardProps> = (
             </button>
           </div>
         </div>
+      ) : isInIqamaWindow && iqamaInfo ? (
+        /* Adhan -> Iqama Reminder State (Active window) */
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg">
+                🕌
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+            </div>
+
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <span>أُذّن لصلاة {iqamaInfo.prayerName}</span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">
+                  الإقامة بعد {toArabicNumbers(iqamaInfo.minutesToIqama)} د
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 truncate mt-0.5">
+                {autoWithIqama
+                  ? 'سيتفعل وضع الخشوع تلقائياً مع الإقامة'
+                  : 'استعد للصلاة واكتم الهاتف الآن لحضور القلب'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onQuickActivate(iqamaInfo.suggestedDuration)}
+              disabled={isLoading}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1"
+            >
+              <span>{isLoading ? '...' : 'تفعيل الخشوع'}</span>
+              <span className="text-[10px] opacity-80">({toArabicNumbers(iqamaInfo.suggestedDuration)}د)</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenSheet}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              title="خيارات"
+            >
+              ⚙️
+            </button>
+          </div>
+        </div>
       ) : (
         /* Inactive State - Quick Access */
         <div className="flex items-center justify-between gap-3">
@@ -104,7 +164,7 @@ export const KhushuModeDashboardCard: React.FC<KhushuModeDashboardCardProps> = (
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={onQuickActivate}
+              onClick={() => onQuickActivate()}
               disabled={isLoading}
               className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer flex items-center gap-1"
             >

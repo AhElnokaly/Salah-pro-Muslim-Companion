@@ -124,9 +124,15 @@ export async function checkForAppUpdates(options?: {
     let apkSizeFormatted: string | undefined;
 
     if (Array.isArray(data.assets) && data.assets.length > 0) {
-      const apkAsset = data.assets.find((asset: { name?: string; browser_download_url?: string; size?: number }) =>
+      // Prioritize official release APK (app-release.apk or similar) over debug
+      const releaseApk = data.assets.find((asset: { name?: string }) => {
+        const name = asset.name?.toLowerCase() || '';
+        return name.endsWith('.apk') && (name.includes('release') || !name.includes('debug'));
+      });
+      const anyApk = data.assets.find((asset: { name?: string }) =>
         asset.name?.toLowerCase().endsWith('.apk')
       );
+      const apkAsset = releaseApk || anyApk;
       if (apkAsset) {
         apkDownloadUrl = apkAsset.browser_download_url || null;
         apkFileName = apkAsset.name;

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Download, ExternalLink, Sparkles, AlertCircle, FileDown, CheckCircle2 } from 'lucide-react';
+import { X, Download, ExternalLink, Sparkles, AlertCircle, FileDown, CheckCircle2, Loader2 } from 'lucide-react';
 import { AppReleaseInfo } from '../../services/updateChecker';
 import { CURRENT_RELEASE } from '../../data/changelog';
+import { downloadAndInstallAppUpdate } from '../../services/athanAlarmPlugin';
 
 interface UpdateNotificationModalProps {
   isOpen: boolean;
@@ -15,11 +16,43 @@ export default function UpdateNotificationModal({
   onClose,
   releaseInfo,
 }: UpdateNotificationModalProps) {
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   if (!isOpen || !releaseInfo) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const url = releaseInfo.apkDownloadUrl || releaseInfo.htmlUrl;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    if (!releaseInfo.apkDownloadUrl) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+      setErrorMsg(null);
+      setStatusMessage('جارٍ تنزيل ملف التحديث...');
+      setDownloadProgress(0);
+
+      const result = await downloadAndInstallAppUpdate(releaseInfo.apkDownloadUrl, (progress) => {
+        setDownloadProgress(progress);
+        setStatusMessage(`جارٍ تنزيل التحديث (${progress}%)...`);
+      });
+
+      if (!result.success && result.message) {
+        // Fallback message or error
+        setErrorMsg(result.message);
+      } else {
+        setStatusMessage('تم التنزيل بنجاح! جارٍ فتح مثبت الحزم...');
+      }
+    } catch (err: any) {
+      console.error('Update install error:', err);
+      setErrorMsg('حدث خطأ أثناء التنزيل التلقائي. يمكنك التنزيل عبر المتصفح.');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -92,16 +125,41 @@ export default function UpdateNotificationModal({
 
             {/* APK details */}
             {releaseInfo.apkDownloadUrl && (
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300">
-                <div className="flex items-center gap-2">
-                  <FileDown className="w-4 h-4 text-indigo-500" />
-                  <span className="truncate max-w-[200px]">{releaseInfo.apkFileName || 'ملف التثبيت (APK)'}</span>
+              <div className="p-3 bg-slate-50 dark:bg-[#121820] border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <FileDown className="w-4 h-4 text-indigo-500" />
+                    <span className="truncate max-w-[200px]">{releaseInfo.apkFileName || 'ملف التثبيت (APK)'}</span>
+                  </div>
+                  {releaseInfo.apkSizeFormatted && (
+                    <span className="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">
+                      {releaseInfo.apkSizeFormatted}
+                    </span>
+                  )}
                 </div>
-                {releaseInfo.apkSizeFormatted && (
-                  <span className="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">
-                    {releaseInfo.apkSizeFormatted}
-                  </span>
+
+                {/* Progress bar during download */}
+                {isUpdating && downloadProgress !== null && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      <span>{statusMessage}</span>
+                      <span className="font-mono">{downloadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-200 rounded-full"
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="flex items-center gap-2 p-2.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-500/20 rounded-xl text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{errorMsg}</span>
               </div>
             )}
 
@@ -109,7 +167,7 @@ export default function UpdateNotificationModal({
             <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-500/20 rounded-xl text-[10.5px] font-bold text-amber-800 dark:text-amber-300">
               <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
               <span>
-                التحديث متسلسل ومعتمد، وسيثبت مباشرة فوق نسختك الحالية دون أي مساس بصلواتك الفائتة أو إعداداتك المحفوظة.
+                يتم التنزيل والتثبيت مباشرة من داخل التطبيق فوق نسختك الحالية دون أي مساس بصلواتك الفائتة أو إعداداتك.
               </span>
             </div>
           </div>
@@ -118,11 +176,21 @@ export default function UpdateNotificationModal({
           <div className="p-4 bg-slate-50 dark:bg-[#121820] border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-2 shrink-0">
             <button
               type="button"
+              disabled={isUpdating}
               onClick={handleDownload}
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer active:scale-98 flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-60 text-white font-black text-xs sm:text-sm rounded-xl shadow-md transition-all cursor-pointer active:scale-98 flex items-center justify-center gap-2"
             >
-              <Download className="w-4 h-4" />
-              <span>تحميل وتثبيت التحديث الآن 🚀</span>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{statusMessage || 'جارٍ التنزيل والتثبيت...'}</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>تحديث وتثبيت الآن من داخل التطبيق 🚀</span>
+                </>
+              )}
             </button>
 
             <div className="flex items-center justify-between gap-2 pt-1">
@@ -139,6 +207,7 @@ export default function UpdateNotificationModal({
               <button
                 type="button"
                 onClick={onClose}
+                disabled={isUpdating}
                 className="text-[10.5px] font-extrabold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
               >
                 تحديث لاحقاً

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useAuthoritativeClock } from '../../hooks/useAuthoritativeClock';
 import { AppSettings, PrayerTimes } from '../../types';
 import { 
   calculatePrayerTimes, 
@@ -28,14 +29,7 @@ export interface UseDashboardTimeAndPrayersProps {
 }
 
 export function useDashboardTimeAndPrayers({ settings }: UseDashboardTimeAndPrayersProps) {
-  const [now, setNow] = useState<Date>(() => new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useAuthoritativeClock();
 
   const todayStr = formatDateKey(now);
   const hijri = getHijriDate(now, settings.hijriOffset);

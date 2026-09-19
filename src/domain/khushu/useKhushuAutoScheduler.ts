@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useEffect, useState } from 'react';
 import { KhushuSettings } from './khushuTypes';
 import { PrayerTimes } from '../../types';
+import { getIqamaWindowInfo, IqamaWindowInfo } from './khushuFlowUtils';
 
 interface AutoSchedulerProps {
   settings: KhushuSettings;
@@ -16,65 +22,39 @@ export function useKhushuAutoScheduler({
   times,
   isActive,
   activate,
-}: AutoSchedulerProps) {
+}: AutoSchedulerProps): { iqamaInfo: IqamaWindowInfo | null } {
+  const [iqamaInfo, setIqamaInfo] = useState<IqamaWindowInfo | null>(() =>
+    getIqamaWindowInfo(times, settings, new Date())
+  );
+
   useEffect(() => {
-    if (!settings.autoWithIqama || isActive || !times) {
+    if (!times) {
+      setIqamaInfo(null);
       return;
     }
 
-    const checkIqamaAutoTrigger = () => {
+    const checkCycle = () => {
       const now = new Date();
-      const isFriday = now.getDay() === 5;
-      const todayKey = now.toISOString().split('T')[0];
+      const currentInfo = getIqamaWindowInfo(times, settings, now);
+      setIqamaInfo(currentInfo);
 
-      // قراءة سجل التفعيلات التلقائية لليوم
-      let triggeredMap: Record<string, boolean> = {};
-      try {
-        const raw = sessionStorage.getItem(AUTO_TRIGGERED_KEY);
-        if (raw) triggeredMap = JSON.parse(raw);
-      } catch {
-        triggeredMap = {};
+      if (!currentInfo || isActive || !settings.autoWithIqama) {
+        return;
       }
 
-      const prayersToCheck: Array<{ id: 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha'; timeStr: string }> = [
-        { id: 'fajr', timeStr: times.Fajr },
-        { id: 'dhuhr', timeStr: times.Dhuhr },
-        { id: 'asr', timeStr: times.Asr },
-        { id: 'maghrib', timeStr: times.Maghrib },
-        { id: 'isha', timeStr: times.Isha },
-      ];
+      if (currentInfo.isExactIqamaMoment) {
+        const todayKey = now.toISOString().split('T')[0];
+        const triggerKey = `${todayKey}_${currentInfo.prayerId}`;
 
-      for (const item of prayersToCheck) {
-        if (!item.timeStr) continue;
-        const prayerId = item.id;
-
-        const [pTime, modifier] = item.timeStr.trim().split(/\s+/);
-        if (!pTime) continue;
-        const [hStr, mStr] = pTime.split(':');
-        let hours = parseInt(hStr, 10);
-        const minutes = parseInt(mStr, 10);
-
-        if (modifier === 'PM' && hours < 12) hours += 12;
-        if (modifier === 'AM' && hours === 12) hours = 0;
-
-        const athanDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0);
-
-        // تحديد فارق الإقامة ومدة الصلاة
-        let iqamaOffset = settings.iqamaOffsets[prayerId] || 15;
-        let prayerDuration = settings.prayerDurations[prayerId] || 15;
-
-        // استثناء صلاة الجمعة
-        if (isFriday && prayerId === 'dhuhr' && settings.enableFridaySpecial) {
-          iqamaOffset = settings.iqamaOffsets.friday || 25;
-          prayerDuration = settings.prayerDurations.friday || 45;
+        let triggeredMap: Record<string, boolean> = {};
+        try {
+          const raw = sessionStorage.getItem(AUTO_TRIGGERED_KEY);
+          if (raw) triggeredMap = JSON.parse(raw);
+        } catch {
+          triggeredMap = {};
         }
 
-        const iqamaTime = new Date(athanDate.getTime() + iqamaOffset * 60 * 1000);
-        const diffSeconds = Math.round((now.getTime() - iqamaTime.getTime()) / 1000);
-
-        // تفعيل إذا كانت اللحظة الحالية في نافذة الإقامة (خلال 90 ثانية من وقت الإقامة المحسوب)
-        const triggerKey = `${todayKey}_${prayerId}`;
-        if (diffSeconds >= 0 && diffSeconds <= 90 && !triggeredMap[triggerKey]) {
+        if (!triggeredMap[triggerKey]) {
           triggeredMap[triggerKey] = true;
           try {
             sessionStorage.setItem(AUTO_TRIGGERED_KEY, JSON.stringify(triggeredMap));
@@ -82,16 +62,19 @@ export function useKhushuAutoScheduler({
             // ignore
           }
 
-          console.log(`[useKhushuAutoScheduler] Auto-activating Khushu for ${prayerId} at Iqama time (${prayerDuration} mins)`);
-          activate(prayerDuration);
-          break;
+          console.log(
+            `[useKhushuAutoScheduler] Auto-activating Khushu for ${currentInfo.prayerId} at Iqama time (${currentInfo.suggestedDuration} mins)`
+          );
+          activate(currentInfo.suggestedDuration);
         }
       }
     };
 
-    const interval = setInterval(checkIqamaAutoTrigger, 30000);
-    checkIqamaAutoTrigger();
+    checkCycle();
+    const interval = setInterval(checkCycle, 15000);
 
     return () => clearInterval(interval);
   }, [settings, times, isActive, activate]);
+
+  return { iqamaInfo };
 }

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Sparkles, RefreshCw, CheckCircle2, ShieldCheck, History, ArrowRight, Zap, Wrench, Palette, Download, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 import { RELEASE_HISTORY, CURRENT_RELEASE, markCurrentVersionAsSeen, ChangelogCategory } from '../data/changelog';
 import { checkForAppUpdates, UpdateCheckResult } from '../services/updateChecker';
+import { downloadAndInstallAppUpdate } from '../services/athanAlarmPlugin';
 
 interface VersionInfoModalProps {
   isOpen: boolean;
@@ -13,6 +14,10 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
   const [showHistory, setShowHistory] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState<number | null>(null);
+  const [installStatus, setInstallStatus] = useState<string>('');
+  const [installError, setInstallError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -203,17 +208,73 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
                           <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium whitespace-pre-line line-clamp-3">
                             {updateResult.latestRelease.body || updateResult.latestRelease.name}
                           </p>
+
+                          {/* Progress Bar during download */}
+                          {isInstalling && installProgress !== null && (
+                            <div className="space-y-1.5 pt-1">
+                              <div className="flex justify-between text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                <span>{installStatus}</span>
+                                <span className="font-mono">{installProgress}%</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-500 transition-all duration-200 rounded-full"
+                                  style={{ width: `${installProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {installError && (
+                            <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-600 dark:text-rose-400">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>{installError}</span>
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-2 pt-1">
                             {updateResult.latestRelease.apkDownloadUrl ? (
-                              <a
-                                href={updateResult.latestRelease.apkDownloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-lg shadow-sm text-center flex items-center justify-center gap-1.5 transition-colors"
+                              <button
+                                type="button"
+                                disabled={isInstalling}
+                                onClick={async () => {
+                                  try {
+                                    setIsInstalling(true);
+                                    setInstallError(null);
+                                    setInstallStatus('جارٍ التنزيل...');
+                                    setInstallProgress(0);
+                                    const res = await downloadAndInstallAppUpdate(
+                                      updateResult.latestRelease!.apkDownloadUrl!,
+                                      (p) => {
+                                        setInstallProgress(p);
+                                        setInstallStatus(`جارٍ التنزيل (${p}%)...`);
+                                      }
+                                    );
+                                    if (!res.success && res.message) {
+                                      setInstallError(res.message);
+                                    } else {
+                                      setInstallStatus('تم التنزيل! جارٍ التثبيت...');
+                                    }
+                                  } catch (e: any) {
+                                    setInstallError('فشل التثبيت التلقائي');
+                                  } finally {
+                                    setIsInstalling(false);
+                                  }
+                                }}
+                                className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs rounded-lg shadow-sm text-center flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                               >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>تحميل ملف APK المباشر</span>
-                              </a>
+                                {isInstalling ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>{installStatus || 'جارٍ التحديث...'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>تثبيت التحديث مباشرة من التطبيق</span>
+                                  </>
+                                )}
+                              </button>
                             ) : null}
                             <a
                               href={updateResult.latestRelease.htmlUrl}

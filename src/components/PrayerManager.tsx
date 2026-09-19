@@ -38,6 +38,7 @@ interface PrayerManagerProps {
 
 export default function PrayerManager({
   settings,
+  setSettings,
   prayerLogs,
   setPrayerLogs,
   pendingQadaPrayers,
@@ -108,6 +109,8 @@ export default function PrayerManager({
         <PrayerTimesView
           times={times}
           currentTime={currentTime}
+          targetDate={targetDate}
+          hijri={hijri}
           clockFace={clockFace}
           setClockFace={setClockFace}
           dayLogs={dayLogs}
@@ -119,6 +122,10 @@ export default function PrayerManager({
           targetTimestamp={targetTimestamp.getTime()}
           handleLogPrayerStatus={handleLogPrayerStatus}
           settings={settings}
+          setSettings={setSettings}
+          setLogSuccessMessage={setLogSuccessMessage}
+          setShowDuhaModal={setShowDuhaModal}
+          setShowNightPrayersModal={setShowNightPrayersModal}
           onNavigateTab={onNavigateTab}
         />
       )}

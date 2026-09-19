@@ -156,16 +156,14 @@ class SalahWidgetProvider : AppWidgetProvider() {
             }
             views.setInt(R.id.widget_root, "setBackgroundResource", bgResId)
 
-            // Fallback for current digital time
-            if (currentTime.isEmpty()) {
-                val timeFormat = SimpleDateFormat("hh:mm:ss a", Locale("ar"))
-                currentTime = timeFormat.format(Date())
+            // TextClock ticks autonomously via the Android OS system clock.
+            // If custom timeZone is provided, configure it.
+            val widgetTimeZone = if (widgetDataJson != null) {
+                try { JSONObject(widgetDataJson).optString("timeZone", "") } catch (_: Exception) { "" }
+            } else ""
+            if (widgetTimeZone.isNotEmpty()) {
+                views.setString(R.id.widget_clock_time, "setTimeZone", widgetTimeZone)
             }
-
-            // Apply Texts
-            views.setTextViewText(R.id.widget_date_text, hijriDate)
-            views.setTextViewText(R.id.widget_moon_phase, moonPhase)
-            views.setTextViewText(R.id.widget_clock_time, currentTime)
             views.setTextViewText(R.id.widget_clock_label, "التوقيت المحلي")
 
             views.setTextViewText(R.id.widget_next_prayer_title, nextPrayerTitle)

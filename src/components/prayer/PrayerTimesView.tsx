@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, ClockFace, PrayerName, PrayerLog, PrayerStatus } from '../../types';
 import { getArabicPrayerName } from '../../utils/prayerCalc';
 import { getHijriDate } from '../../utils/hijri';
 import { safeSetItem, safeGetItem, safeGetJSON } from '../../utils/storage';
-import { AudioTrack } from '../../utils/audioStorage';
+import { StorageFacade } from '../../domain/storage/StorageFacade';
+import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO } from '../../utils/audioStorage';
 import { getExactCountdown } from './prayerUtils';
 import { PrayerCityCountdownCard } from './PrayerCityCountdownCard';
 import { PrayerTimeRowItem } from './PrayerTimeRowItem';
@@ -105,24 +111,84 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_yusuf';
   const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || 'makkah';
 
+  // Dedicated Audio Preview Controller for Responsive Playback
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingPrayer, setPlayingPrayer] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleRowTogglePlay = async (
+    pName: PrayerName | 'Sunrise', 
+    arabicName: string, 
+    activeMuezzinId: string, 
+    prayerVol: number
+  ) => {
+    if (playingPrayer === pName) {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      setPlayingPrayer(null);
+      setLogSuccessMessage(`تم إيقاف صوت ${arabicName}`);
+      return;
+    }
+
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+
+    try {
+      const isFajr = pName === 'Fajr';
+      const track = muezzins.find(m => m.id === activeMuezzinId) || muezzins[0];
+      const audioSrc = await getAudioUrl(track?.url || '', track?.id);
+      const finalSrc = audioSrc || (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general);
+      
+      const audio = new Audio(finalSrc);
+      audio.volume = Math.max(0, Math.min(1, prayerVol));
+
+      audio.onended = () => {
+        setPlayingPrayer(null);
+      };
+
+      audio.onerror = () => {
+        setPlayingPrayer(null);
+        setLogSuccessMessage('تعذر تشغيل الصوت تلقائياً. يرجى التحقق من اتصال الإنترنت.');
+      };
+
+      previewAudioRef.current = audio;
+      await audio.play();
+      setPlayingPrayer(pName);
+      setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة...`);
+    } catch (err) {
+      console.warn('Direct preview play error, falling back to global simulation:', err);
+      togglePlayAthan(pName as PrayerName, activeMuezzinId);
+    }
+  };
+
   const updateSoundModes = (updater: (prev: Record<string, 'adhan' | 'beep' | 'vibrate' | 'silent'>) => Record<string, 'adhan' | 'beep' | 'vibrate' | 'silent'>) => {
     if (setSoundModes) {
       setSoundModes(updater);
-    } else {
-      setLocalSoundModes(prev => {
-        const next = updater(prev);
-        safeSetItem('salah_sound_modes', JSON.stringify(next));
-        return next;
-      });
     }
+    setLocalSoundModes(prev => {
+      const next = updater(prev);
+      safeSetItem('salah_sound_modes', JSON.stringify(next));
+      return next;
+    });
   };
 
   const updatePrayerMuezzin = (pName: string, val: string) => {
     if (propSetPrayerMuezzins) {
       propSetPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
-    } else {
-      setLocalPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
     }
+    setLocalPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
     safeSetItem(`salah_muezzin_${pName}`, val);
 
     if (pName === 'Fajr') {
@@ -141,13 +207,16 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
       setSettings(prev => {
         const currentOffsets = prev.prayerOffsets || {};
         const current = currentOffsets[prayer as PrayerName] || 0;
-        return {
+        const newOffset = current + amount;
+        const updated = {
           ...prev,
           prayerOffsets: {
             ...currentOffsets,
-            [prayer]: current + amount
+            [prayer]: newOffset
           }
         };
+        StorageFacade.saveSettings(updated);
+        return updated;
       });
     }
   };
@@ -156,13 +225,17 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     if (handleUpdateVolume) {
       handleUpdateVolume(prayer, value);
     } else if (setSettings) {
-      setSettings(prev => ({
-        ...prev,
-        prayerVolumes: {
-          ...(prev.prayerVolumes || {}),
-          [prayer]: value
-        }
-      }));
+      setSettings(prev => {
+        const updated = {
+          ...prev,
+          prayerVolumes: {
+            ...(prev.prayerVolumes || {}),
+            [prayer]: value
+          }
+        };
+        StorageFacade.saveSettings(updated);
+        return updated;
+      });
     }
   };
 
@@ -183,7 +256,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
       />
 
       {/* List of Prayer Times with Sound Mode Switcher */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as (PrayerName | 'Sunrise')[]).map((pName) => {
           const pTime = times[pName as PrayerName];
           const isNext = pName === nextPrayerName;
@@ -208,6 +281,8 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
             setLogSuccessMessage(`تم تغيير وضع تنبيه صلاة ${arabicName} إلى: ${modesText[nextMode]}`);
           };
 
+          const isItemPlaying = playingPrayer === pName || (isPlaying && currentPlayingPrayer === pName);
+
           return (
             <PrayerTimeRowItem
               key={pName}
@@ -216,8 +291,8 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
               isNext={isNext}
               sMode={sMode}
               arabicName={arabicName}
-              isPlaying={isPlaying}
-              currentPlayingPrayer={currentPlayingPrayer}
+              isPlaying={isItemPlaying}
+              currentPlayingPrayer={playingPrayer || (currentPlayingPrayer as string | null)}
               activeHijriMonth={activeHijri.month}
               prayerOffset={prayerOffset}
               activeMuezzinId={activeMuezzinId}
@@ -225,22 +300,25 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
               downloadedTrackIds={downloadedTrackIds}
               prayerVolume={prayerVolume}
               onCycleSoundMode={handleCycleSoundMode}
-              onTogglePlayAthan={() => togglePlayAthan(pName as PrayerName)}
+              onTogglePlayAthan={() => handleRowTogglePlay(pName, arabicName, activeMuezzinId, prayerVolume)}
               onOpenDuhaModal={() => setShowDuhaModal(true)}
               onOpenNightPrayersModal={() => setShowNightPrayersModal(true)}
               onUpdateOffset={(amount) => {
                 onUpdateOffset(pName as PrayerName, amount);
+                const currentVal = prayerOffset + amount;
                 setLogSuccessMessage(
                   amount > 0
-                    ? `تم تقديم وقت صلاة ${arabicName} بمقدار دقيقة واحدة`
-                    : `تم تقليل وقت صلاة ${arabicName} بمقدار دقيقة واحدة`
+                    ? `تم تقديم وقت صلاة ${arabicName} بمقدار دقيقة (+${currentVal} د)`
+                    : `تم تأخير وقت صلاة ${arabicName} بمقدار دقيقة (${currentVal} د)`
                 );
               }}
               onSelectMuezzin={(val) => {
                 updatePrayerMuezzin(pName, val);
                 setLogSuccessMessage(`تم تحديد الصوت لـ ${arabicName}`);
               }}
-              onUpdateVolume={(val) => onUpdateVolume(pName, val)}
+              onUpdateVolume={(val) => {
+                onUpdateVolume(pName, val);
+              }}
             />
           );
         })}
@@ -265,3 +343,5 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     </div>
   );
 };
+
+export default PrayerTimesView;

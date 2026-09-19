@@ -4,8 +4,10 @@
  */
 
 import type { AlarmConfig, PrayerName, RelativePrayerTarget } from '../types';
-import { getArabicPrayerName } from './prayerCalc';
+import { getArabicPrayerName, parseTimeToMinutes } from './prayerCalc';
 import { toArabicNumbers } from './hijri';
+
+export { parseTimeToMinutes };
 
 export const ALL_PRAYER_NAMES: RelativePrayerTarget[] = [
   'Fajr',
@@ -150,17 +152,6 @@ export function formatAlarmTimingDesc(alarm: AlarmConfig): string {
   }
 
   return `${unitStr} ${relationStr} ${prayersStr}`;
-}
-
-/**
- * Parses "HH:MM" string to minutes from midnight (0..1439).
- */
-export function parseTimeToMinutes(timeStr: string): number {
-  if (!timeStr) return 0;
-  const parts = timeStr.split(':');
-  const h = parseInt(parts[0], 10) || 0;
-  const m = parseInt(parts[1], 10) || 0;
-  return h * 60 + m;
 }
 
 /**

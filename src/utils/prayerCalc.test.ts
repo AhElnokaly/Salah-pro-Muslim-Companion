@@ -7,6 +7,7 @@ import {
   getArabicPrayerName,
   POPULAR_CITIES 
 } from './prayerCalc';
+import { calculateTriggerMinutes, DEFAULT_WORSHIP_ALARMS } from './alarmUtils';
 
 describe('Prayer Calculation Engine', () => {
   const testDate = new Date(2026, 8, 4); // September 4, 2026
@@ -79,6 +80,25 @@ describe('Prayer Calculation Engine', () => {
     assert.ok(prayerInfo.current, 'Should have current prayer');
     assert.ok(prayerInfo.next, 'Should have next prayer');
     assert.ok(prayerInfo.timeRemainingStr, 'Should have remaining time string');
+    assert.ok(prayerInfo.targetTimestampMs > noonDate.getTime(), 'targetTimestampMs must be strictly in the future');
+    assert.equal(prayerInfo.remainingMs, prayerInfo.targetTimestampMs - noonDate.getTime(), 'remainingMs must equal target - now');
+  });
+
+  test('getCurrentAndNextPrayer recalculates accurately after simulated device pause/sleep', () => {
+    const cairo = POPULAR_CITIES.find(c => c.name === 'Cairo')!;
+    const times = calculatePrayerTimes(testDate, cairo.lat, cairo.lng, 2, 'Egypt', 'standard', {});
+
+    // Initial check at 12:00
+    const t0 = new Date(2026, 8, 4, 12, 0, 0);
+    const info0 = getCurrentAndNextPrayer(times, t0);
+
+    // Simulated 45 minutes background freeze
+    const t1 = new Date(2026, 8, 4, 12, 45, 0);
+    const info1 = getCurrentAndNextPrayer(times, t1);
+
+    // Difference in remaining time must match exactly 45 minutes (2700000 ms)
+    assert.equal(info0.remainingMs - info1.remainingMs, 45 * 60 * 1000);
+    assert.equal(info1.targetTimestampMs, info0.targetTimestampMs);
   });
 
   test('getArabicPrayerName returns proper localized name and detects Friday', () => {
@@ -96,5 +116,24 @@ describe('Prayer Calculation Engine', () => {
     assert.equal(getArabicPrayerName('Asr'), 'العصر');
     assert.equal(getArabicPrayerName('Maghrib'), 'المغرب');
     assert.equal(getArabicPrayerName('Isha'), 'العشاء');
+  });
+
+  test('calculateTriggerMinutes accurately computes trigger times from Arabic prayer times', () => {
+    const beforeAlarm = DEFAULT_WORSHIP_ALARMS[0]; // 10 minutes before salah
+    assert.equal(beforeAlarm.relation, 'before');
+    assert.equal(beforeAlarm.offsetMinutes, 10);
+
+    // Isha at 7:13 PM ("٧:١٣ م" = 1153 mins)
+    const triggerIsha = calculateTriggerMinutes(beforeAlarm, '٧:١٣ م');
+    assert.equal(triggerIsha, 1153 - 10, '10 minutes before Isha should be 1143 (19:03)');
+
+    // Fajr at 4:15 AM ("٤:١٥ ص" = 255 mins)
+    const triggerFajr = calculateTriggerMinutes(beforeAlarm, '٤:١٥ ص');
+    assert.equal(triggerFajr, 255 - 10, '10 minutes before Fajr should be 245 (04:05)');
+
+    // After salah alarm (15 minutes after)
+    const afterAlarm = DEFAULT_WORSHIP_ALARMS[1];
+    const triggerAfterIsha = calculateTriggerMinutes(afterAlarm, '٧:١٣ م');
+    assert.equal(triggerAfterIsha, 1153 + 15, '15 minutes after Isha should be 1168 (19:28)');
   });
 });

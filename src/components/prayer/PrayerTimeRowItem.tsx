@@ -13,7 +13,10 @@ import {
   Pause, 
   Plus, 
   Minus, 
-  Music 
+  Music,
+  ChevronDown,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { PrayerName } from '../../types';
 import { toArabicNumbers } from '../../utils/hijri';
@@ -26,7 +29,7 @@ export interface PrayerTimeRowItemProps {
   sMode: 'adhan' | 'beep' | 'vibrate' | 'silent';
   arabicName: string;
   isPlaying: boolean;
-  currentPlayingPrayer: PrayerName | null;
+  currentPlayingPrayer: string | null;
   activeHijriMonth: number;
   prayerOffset: number;
   activeMuezzinId: string;
@@ -64,6 +67,8 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
   onSelectMuezzin,
   onUpdateVolume,
 }) => {
+  const isCurrentlyPlaying = isPlaying && currentPlayingPrayer === pName;
+
   const getSoundIcon = () => {
     if (sMode === 'adhan') return <Volume2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
     if (sMode === 'beep') return <Bell className="w-3.5 h-3.5 text-amber-500" />;
@@ -72,8 +77,8 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
   };
 
   const getSoundText = () => {
-    if (sMode === 'adhan') return 'أذان كامل';
-    if (sMode === 'beep') return 'تنبيه فقط';
+    if (sMode === 'adhan') return pName === 'Sunrise' ? 'تنبيه الشروق' : 'أذان كامل';
+    if (sMode === 'beep') return 'رنين التنبيه';
     if (sMode === 'vibrate') return 'اهتزاز';
     return 'صامت';
   };
@@ -89,21 +94,22 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
 
   return (
     <div 
-      className={`bg-white dark:bg-[#161d26] rounded-xl p-3 border transition-all duration-300 flex flex-col gap-2 ${
+      id={`prayer_card_${pName}`}
+      className={`bg-white dark:bg-[#161d26] rounded-2xl p-3.5 sm:p-4 border transition-all duration-300 flex flex-col gap-2.5 ${
         isNext 
-          ? 'border-indigo-500 ring-1 ring-indigo-500/10 shadow-sm bg-indigo-500/5' 
-          : 'border-[#e2e8f0]/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
+          ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md bg-indigo-50/20 dark:bg-indigo-950/20' 
+          : 'border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
       }`}
     >
       {/* Row 1: Info & Sound Settings */}
       <div className="flex items-center justify-between w-full">
         {/* Right side: Dot, Name, Badge */}
-        <div className="flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${isNext ? 'bg-indigo-600 dark:bg-indigo-400 animate-ping' : 'bg-slate-300 dark:bg-slate-700'}`} />
-          <span className={`text-xs sm:text-sm font-black flex items-center gap-1.5 ${isNext ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-800 dark:text-white'}`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${isNext ? 'bg-indigo-600 dark:bg-indigo-400 animate-ping' : 'bg-slate-300 dark:bg-slate-700'}`} />
+          <span className={`text-xs sm:text-sm font-black flex items-center gap-1.5 ${isNext ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-white'}`}>
             {arabicName}
             {isNext && (
-              <span className="text-[8px] sm:text-[9px] bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 px-1 py-0.5 rounded-md font-bold">
+              <span className="text-[9px] sm:text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded-md font-bold">
                 القادمة
               </span>
             )}
@@ -111,39 +117,41 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
         </div>
 
         {/* Left side: Time, Sound Mode, and Play Test */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs sm:text-sm font-black font-mono text-slate-800 dark:text-slate-200">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs sm:text-sm font-black font-mono text-slate-800 dark:text-slate-100">
             {toArabicNumbers(pTime)}
           </span>
 
           {/* Sound Mode Selector Button */}
           <button
+            id={`sound_mode_btn_${pName}`}
             type="button"
             onClick={onCycleSoundMode}
-            className="py-1 px-1.5 sm:px-2 hover:bg-slate-100 dark:hover:bg-slate-850 rounded-lg transition-all border border-slate-100 dark:border-slate-800/40 cursor-pointer flex items-center gap-1 justify-center min-w-[65px] sm:min-w-[75px]"
+            className="py-1.5 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-700/60 cursor-pointer flex items-center gap-1 justify-center min-w-[75px] sm:min-w-[85px] active:scale-95 shadow-2xs"
             title="اضغط لتغيير وضع الصوت والتنبيه"
             aria-label={`تغيير وضع تنبيه ${arabicName}`}
           >
             {getSoundIcon()}
-            <span className="text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400">{getSoundText()}</span>
+            <span className="text-[9px] sm:text-[10px] font-black text-slate-600 dark:text-slate-300">{getSoundText()}</span>
           </button>
 
           {/* Play Test Button for Adhan / Sunrise Sound */}
           <button
+            id={`play_athan_btn_${pName}`}
             type="button"
             onClick={onTogglePlayAthan}
-            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all flex items-center justify-center cursor-pointer shrink-0 ${
-              isPlaying && currentPlayingPrayer === pName
-                ? 'bg-rose-500 text-white animate-pulse shadow-md'
-                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all flex items-center justify-center cursor-pointer shrink-0 active:scale-90 ${
+              isCurrentlyPlaying
+                ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-500/20'
+                : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-2xs'
             }`}
-            title={isPlaying && currentPlayingPrayer === pName ? "إيقاف سماع الصوت" : "تجربة سماع الصوت"}
-            aria-label={isPlaying && currentPlayingPrayer === pName ? `إيقاف صوت أذان ${arabicName}` : `تجربة الاستماع لصوت أذان ${arabicName}`}
+            title={isCurrentlyPlaying ? "إيقاف سماع الصوت" : "تجربة سماع الصوت"}
+            aria-label={isCurrentlyPlaying ? `إيقاف صوت أذان ${arabicName}` : `تجربة الاستماع لصوت أذان ${arabicName}`}
           >
-            {isPlaying && currentPlayingPrayer === pName ? (
-              <Pause className="w-3 h-3" />
+            {isCurrentlyPlaying ? (
+              <Pause className="w-3.5 h-3.5" />
             ) : (
-              <Play className="w-3 h-3 fill-current" />
+              <Play className="w-3.5 h-3.5 fill-current ms-0.5" />
             )}
           </button>
         </div>
@@ -152,68 +160,83 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
       {/* Quick Voluntary Prayer Action Buttons */}
       {pName === 'Sunrise' && (
         <button
+          id="duha_quick_log_btn"
           type="button"
           onClick={onOpenDuhaModal}
-          className="w-full py-1.5 px-3 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+          className="w-full py-2 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-300/50 dark:border-amber-700/50 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-0.5 active:scale-[0.98]"
           aria-label="تسجيل صلاة الضحى"
         >
+          <Sun className="w-4 h-4 text-amber-500 shrink-0" />
           <span>☀️ تسجيل صلاة الضحى (صلاة الأوابين)</span>
         </button>
       )}
 
       {pName === 'Isha' && (
         <button
+          id="night_prayers_quick_log_btn"
           type="button"
           onClick={onOpenNightPrayersModal}
-          className="w-full py-1.5 px-3 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+          className="w-full py-2 px-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-900 dark:text-indigo-200 border border-indigo-300/50 dark:border-indigo-700/50 rounded-xl text-xs font-black cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-0.5 active:scale-[0.98]"
           aria-label="تسجيل صلوات الليل والقيام والشفع والوتر"
         >
+          <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
           <span>🌃 تسجيل صلوات الليل (قيام، شفع، وتر{activeHijriMonth === 9 ? '، تراويح' : ''})</span>
         </button>
       )}
 
       {/* Row 2: Settings & Adjustments */}
-      <div className="border-t border-slate-100 dark:border-slate-800/30 pt-2.5 mt-1 flex flex-col gap-2">
+      <div className="border-t border-slate-100 dark:border-slate-800/60 pt-2.5 mt-0.5 flex flex-col gap-2.5">
         {/* First sub-row: Offset & Muezzin */}
         <div className="flex items-center gap-2">
           {/* Offset Adjuster (الضبط لأقرب مسجد) */}
-          <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 text-right" title="الضبط لأقرب مسجد">
-            <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold ms-1.5 shrink-0">المسجد:</span>
+          <div 
+            id={`offset_container_${pName}`}
+            className="flex-1 flex items-center justify-between bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800"
+            title="الضبط لأقرب مسجد"
+          >
+            <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-extrabold shrink-0">المسجد:</span>
             <div className="flex items-center gap-1">
               <button
+                id={`offset_minus_btn_${pName}`}
                 type="button"
                 onClick={() => onUpdateOffset(-1)}
-                className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-200/40 dark:border-slate-700/40 w-5.5 h-5.5 bg-white dark:bg-slate-800 shadow-3xs"
+                className="w-7 h-7 sm:w-8 sm:h-8 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-300 dark:border-slate-700 shadow-xs active:scale-90"
                 title="تأخير دقيقة"
                 aria-label={`تأخير دقيقة لوقت صلاة ${arabicName}`}
               >
-                <Minus className="w-2.5 h-2.5" />
+                <Minus className="w-3.5 h-3.5" />
               </button>
               
-              <span className="text-xs font-mono font-black text-slate-700 dark:text-slate-200 min-w-[24px] text-center">
+              <span className="text-xs font-mono font-black text-slate-800 dark:text-slate-100 min-w-[28px] text-center">
                 {toArabicNumbers(prayerOffset > 0 ? `+${prayerOffset}` : `${prayerOffset}`)} د
               </span>
 
               <button
+                id={`offset_plus_btn_${pName}`}
                 type="button"
                 onClick={() => onUpdateOffset(1)}
-                className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-200/40 dark:border-slate-700/40 w-5.5 h-5.5 bg-white dark:bg-slate-800 shadow-3xs"
+                className="w-7 h-7 sm:w-8 sm:h-8 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-lg transition-all cursor-pointer flex items-center justify-center border border-slate-300 dark:border-slate-700 shadow-xs active:scale-90"
                 title="تقديم دقيقة"
                 aria-label={`تقديم دقيقة لوقت صلاة ${arabicName}`}
               >
-                <Plus className="w-2.5 h-2.5" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
           {/* Muezzin / Audio Selector */}
-          <div className="flex-1 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1 rounded-xl border border-slate-100 dark:border-slate-800/40 min-w-0">
+          <div 
+            id={`muezzin_select_box_${pName}`}
+            className="flex-1 flex items-center justify-between bg-slate-50 dark:bg-slate-900/60 px-2.5 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800 min-w-0 relative"
+          >
             <div className="flex items-center gap-1.5 min-w-0 w-full">
               <Music className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <select
+                id={`muezzin_select_${pName}`}
                 value={activeMuezzinId}
                 onChange={(e) => onSelectMuezzin(e.target.value)}
-                className="bg-transparent text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pe-1 ms-0.5 min-w-0 flex-1 appearance-none"
+                aria-label={`اختيار صوت أذان ${arabicName}`}
+                className="bg-transparent text-[11px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pe-4 ms-0.5 min-w-0 flex-1 truncate"
               >
                 {muezzins.map((m) => (
                   <option key={m.id} value={m.id} className="dark:bg-[#161d26] text-slate-800 dark:text-slate-200">
@@ -221,26 +244,32 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
                   </option>
                 ))}
               </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2 pointer-events-none shrink-0" />
             </div>
           </div>
         </div>
 
         {/* Second sub-row: Per-Prayer Volume Slider */}
-        <div className="flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/40 px-2.5 py-1.5 rounded-xl border border-slate-100/40 dark:border-slate-800/40">
-          <div className="flex items-center gap-2 flex-1">
+        <div 
+          id={`volume_container_${pName}`}
+          className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800"
+        >
+          <div className="flex items-center gap-2.5 flex-1">
             <Volume2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <input
+              id={`volume_slider_${pName}`}
               type="range"
               min="0"
               max="1"
               step="0.05"
               value={prayerVolume}
               onChange={(e) => onUpdateVolume(parseFloat(e.target.value))}
-              className="flex-1 h-1.5 accent-emerald-600 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
+              aria-label={`تحديد حجم صوت ${arabicName}`}
+              className="flex-1 h-2 accent-emerald-600 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer"
               title="حجم الصوت لهذا التنبيه"
             />
           </div>
-          <span className="text-[10px] sm:text-xs font-mono text-slate-500 dark:text-slate-400 font-bold me-3 min-w-[32px] text-start">
+          <span className="text-[11px] sm:text-xs font-mono text-slate-600 dark:text-slate-300 font-bold me-2 min-w-[34px] text-start">
             {toArabicNumbers(Math.round(prayerVolume * 100))}%
           </span>
         </div>

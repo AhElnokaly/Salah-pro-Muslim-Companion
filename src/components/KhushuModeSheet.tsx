@@ -16,6 +16,7 @@ import {
 import { KhushuModeType } from '../services/khushuModePlugin';
 import { KhushuSettings } from '../domain/khushu/khushuTypes';
 import { toArabicNumbers } from '../utils/hijri';
+import { KhushuPermissionOnboardingModal } from './khushu/KhushuPermissionOnboardingModal';
 
 interface KhushuModeSheetProps {
   isOpen: boolean;
@@ -57,10 +58,15 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
   const [selectedDuration, setSelectedDuration] = useState(settings.defaultDurationMinutes || 15);
   const [selectedMode, setSelectedMode] = useState<KhushuModeType>(settings.preferredMode || 'silent');
   const [activeTab, setActiveTab] = useState<'quick' | 'settings'>('quick');
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   if (!isOpen) return null;
 
   const handleActivate = async () => {
+    if (selectedMode === 'dnd' && !hasPermission) {
+      setShowPermissionModal(true);
+      return;
+    }
     const success = await onActivate(selectedDuration, selectedMode);
     if (success) onClose();
   };
@@ -213,13 +219,14 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
                 {selectedMode === 'dnd' && !hasPermission && (
                   <div className="bg-amber-950/40 border border-amber-600/40 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-300">
                     <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                    <div>
+                    <div className="flex-1">
                       <span>يتطلب وضع عدم الإزعاج إذناً خاصاً من النظام.</span>
                       <button
-                        onClick={onRequestPermission}
-                        className="block mt-1 text-amber-200 underline font-bold"
+                        type="button"
+                        onClick={() => setShowPermissionModal(true)}
+                        className="block mt-1 text-amber-200 underline font-bold cursor-pointer"
                       >
-                        منح الإذن الآن
+                        دليل منح الإذن والتفعيل
                       </button>
                     </div>
                   </div>
@@ -357,6 +364,16 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
           </div>
         )}
       </div>
+
+      <KhushuPermissionOnboardingModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onRequestPermission={onRequestPermission}
+        onSelectSilentFallback={() => {
+          setSelectedMode('silent');
+          onUpdateSettings({ preferredMode: 'silent' });
+        }}
+      />
     </div>
   );
 };

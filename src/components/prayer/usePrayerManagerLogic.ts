@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useAuthoritativeClock } from '../../hooks/useAuthoritativeClock';
 import { 
   AppSettings, 
   PendingQadaPrayer, 
@@ -57,8 +58,8 @@ export function usePrayerManagerLogic({
   const [showDuhaModal, setShowDuhaModal] = useState<boolean>(false);
   const [showNightPrayersModal, setShowNightPrayersModal] = useState<boolean>(false);
 
-  // Real-time ticking date/time
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // Real-time authoritative date/time
+  const currentTime = useAuthoritativeClock();
 
   useEffect(() => {
     const handleSubtabNav = (e: Event) => {
@@ -96,13 +97,6 @@ export function usePrayerManagerLogic({
     window.addEventListener('salah_android_back', handleAndroidBack);
     return () => window.removeEventListener('salah_android_back', handleAndroidBack);
   }, [showDuhaModal, showNightPrayersModal]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Clock face selection state
   const [clockFace, setClockFace] = useState<ClockFace>(() => {

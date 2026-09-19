@@ -1,18 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useAuthoritativeClock } from './useAuthoritativeClock';
 
 /**
- * Custom hook to provide real-time clock state updated every second.
+ * Custom hook to provide authoritative real-time clock state updated every second
+ * and instantly resynchronized on app resume / screen on.
  */
 export function useCurrentTime(): Date {
-  const [now, setNow] = useState<Date>(() => new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  return now;
+  return useAuthoritativeClock();
 }

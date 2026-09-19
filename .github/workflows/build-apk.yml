@@ -96,7 +96,7 @@ jobs:
         id: versioning
         run: |
           BUILD_CODE=$(( 1000 + ${{ github.run_number }} ))
-          PKG_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.7")
+          PKG_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.8")
           echo "version_code=$BUILD_CODE" >> "$GITHUB_OUTPUT"
           echo "version_name=${PKG_VERSION}-debug" >> "$GITHUB_OUTPUT"
           echo "Sequential Versioning -> versionCode: $BUILD_CODE, versionName: ${PKG_VERSION}-debug"

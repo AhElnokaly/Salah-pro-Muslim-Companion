@@ -110,7 +110,7 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF_NAME#v}"
           else
-            VERSION_NAME=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.7")
+            VERSION_NAME=$(node -p "require('./package.json').version" 2>/dev/null || echo "1.0.8")
           fi
           TAG_NAME="v${VERSION_NAME}"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -128,7 +128,7 @@ jobs:
         env:
           APP_VERSION_CODE: ${{ steps.versioning.outputs.version_code }}
           APP_VERSION_NAME: ${{ steps.versioning.outputs.version_name }}
-          RELEASE_KEYSTORE_PATH: 'release-key.jks'
+          RELEASE_KEYSTORE_PATH: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && 'release-key.jks' || '' }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
@@ -163,16 +163,16 @@ jobs:
           zipalign -c -v 4 "$RELEASE_APK"
 
           # Cryptographic signature verification
-          if [ "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" != "" ] || [ "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" != "" ]; then
-            if ! command -v apksigner >/dev/null 2>&1; then
-              echo "ERROR: apksigner is required for signed release verification but was not found in PATH or $ANDROID_HOME/build-tools!"
-              exit 1
-            fi
-            echo "Verifying cryptographic APK signature with apksigner..."
-            apksigner verify --verbose "$RELEASE_APK"
-          else
-            echo "Notice: Unsigned release build generated (no keystore secret provided). Skipping apksigner verification."
+          if ! command -v apksigner >/dev/null 2>&1; then
+            echo "ERROR: apksigner is required for release verification but was not found in PATH or $ANDROID_HOME/build-tools!"
+            exit 1
           fi
+          echo "Verifying cryptographic APK signature with apksigner on $RELEASE_APK..."
+          if ! apksigner verify --verbose "$RELEASE_APK"; then
+            echo "CRITICAL ERROR: Release APK is NOT signed or signature verification failed! Failing build to prevent distributing unsigned/invalid APK."
+            exit 1
+          fi
+          echo "Signature verification passed successfully!"
 
           # Compute SHA-256 checksums for all release APKs
           sha256sum *.apk > release-checksums.sha256

@@ -1,19 +1,10 @@
-import { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
+import { useAuthoritativeClock } from './useAuthoritativeClock';
 import { calculatePrayerTimes, getCurrentAndNextPrayer, getArabicPrayerName, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { getHijriDate, formatGregorianFullDateArabic } from '../utils/hijri';
 
 export function usePrayerClock(settings: AppSettings) {
-  const [now, setNow] = useState<Date>(() => new Date());
-
-  useEffect(() => {
-    // Update UI clock every second to maintain live countdown accuracy
-    const timer = setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
+  const now = useAuthoritativeClock();
 
   const hijri = getHijriDate(now, settings.hijriOffset);
   const gregorianStr = formatGregorianFullDateArabic(now);
