@@ -306,8 +306,10 @@ export async function dispatchSmartNotification(
               body,
               targetTimestamp: contextData.targetTimestamp,
             });
+            return true;
           } catch (nativeErr) {
             console.warn('[SmartNotificationService] Native ongoing notification notice:', nativeErr);
+            return false;
           }
         }
         break;

@@ -110,6 +110,7 @@ export function useSmartNotificationsSystemSync({
           timePeriod = 'day';
         }
 
+        const pinned = settings.pinnedWidget;
         updateNativeWidgetData(times, cityName, {
           hijriDate: hDate,
           moonPhase: moonPhaseText || '🌓 التربيع الأول',
@@ -121,6 +122,18 @@ export function useSmartNotificationsSystemSync({
           activePrayer: (nextPrayerKey || 'dhuhr').toLowerCase(),
           isJumuah: Boolean(isJumuah),
           timePeriod,
+          theme: pinned?.theme,
+          widgetTheme: pinned?.theme,
+          clockStyle: pinned?.clockStyle,
+          showMoonPhase: pinned?.showMoonPhase,
+          prayerDisplay: pinned?.prayerDisplay,
+          showDate: pinned?.showDate,
+          showDhikr: pinned?.showDhikr,
+          showSubhaBtn: pinned?.showSubhaBtn,
+          showKhushuBtn: pinned?.showKhushuBtn,
+          showProgressBar: pinned?.showProgressBar,
+          cardSize: pinned?.cardSize,
+          pinnedWidget: pinned,
         }).catch(() => {});
       }
 

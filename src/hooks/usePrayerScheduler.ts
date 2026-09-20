@@ -292,6 +292,17 @@ export function usePrayerScheduler({
         UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List).catch(err => {
           console.warn('[usePrayerScheduler] Notification orchestration error:', err);
         });
+
+        const handleKhushuChange = () => {
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List).catch(err => {
+            console.warn('[usePrayerScheduler] Notification re-orchestration on khushu change error:', err);
+          });
+        };
+
+        window.addEventListener('khushu-settings-changed', handleKhushuChange);
+        return () => {
+          window.removeEventListener('khushu-settings-changed', handleKhushuChange);
+        };
       }
     }
   }, [isLoaded, settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets, settings.cityName, checkTimesAndAlarms]);

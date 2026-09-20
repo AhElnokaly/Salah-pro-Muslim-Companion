@@ -4,7 +4,7 @@ import { AppSettings, PendingQadaPrayer, RamadanQadaTracker, PrayerLog, CustomDu
 import { safeSetItem, safeGetJSON, safeGetItem } from '../../utils/storage';
 import { formatDateKey } from '../../utils/prayerDayBoundary';
 import { getDashboardSectionsConfig } from '../dashboard/dashboardSections';
-import { checkForAppUpdates, UpdateCheckResult } from '../../services/updateChecker';
+import { checkForAppUpdates, UpdateCheckResult, compareSemver } from '../../services/updateChecker';
 import { CURRENT_RELEASE } from '../../data/changelog';
 import { downloadAndInstallAppUpdate } from '../../services/athanAlarmPlugin';
 
@@ -344,7 +344,7 @@ export default function BackupSettingsTab({
 
         {updateResult && (
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-            {updateResult.hasUpdate && updateResult.latestRelease ? (
+            {updateResult.hasUpdate && updateResult.latestRelease && compareSemver(updateResult.latestRelease.version, updateResult.currentVersion) > 0 ? (
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 p-4 rounded-2xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">

@@ -60,14 +60,29 @@ class AthanAlarmPlugin : Plugin() {
             prayerName: String = "الصلاة",
             isFajr: Boolean = false,
             prayerKey: String = "",
-            timeMs: Long = 0L
+            timeMs: Long = 0L,
+            alarmType: String = "",
+            durationMinutes: Int = 15,
+            khushuMode: String = "silent"
         ): Intent {
+            val resolvedType = if (alarmType.isNotEmpty()) {
+                alarmType
+            } else if (prayerKey.contains("prealert")) {
+                "prealert"
+            } else if (prayerKey.contains("khushu")) {
+                "khushu"
+            } else {
+                "athan"
+            }
             return Intent(context, AthanAlarmReceiver::class.java).apply {
                 action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
                 putExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME, prayerName)
                 putExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, isFajr)
                 putExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY, prayerKey)
                 putExtra(AthanAlarmReceiver.EXTRA_PRAYER_TIME, timeMs)
+                putExtra(AthanAlarmReceiver.EXTRA_ALARM_TYPE, resolvedType)
+                putExtra(AthanAlarmReceiver.EXTRA_DURATION_MINUTES, durationMinutes)
+                putExtra(AthanAlarmReceiver.EXTRA_KHUSHU_MODE, khushuMode)
             }
         }
 
@@ -168,6 +183,9 @@ class AthanAlarmPlugin : Plugin() {
                 val prayerName = item.optString("prayerName", "الصلاة")
                 val isFajr = item.optBoolean("isFajr", false)
                 val prayerKey = item.optString("prayerKey", "")
+                val alarmType = item.optString("alarmType", if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("khushu")) "khushu" else "athan")
+                val durationMinutes = item.optInt("durationMinutes", 15)
+                val khushuMode = item.optString("khushuMode", "silent")
 
                 newSavedAlarms.put(item)
 
@@ -182,7 +200,10 @@ class AthanAlarmPlugin : Plugin() {
                             prayerName = prayerName,
                             isFajr = isFajr,
                             prayerKey = prayerKey,
-                            timeMs = timeMs
+                            timeMs = timeMs,
+                            alarmType = alarmType,
+                            durationMinutes = durationMinutes,
+                            khushuMode = khushuMode
                         )
                         val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -672,6 +693,15 @@ class AthanAlarmPlugin : Plugin() {
         }
         if (call.hasOption("ishaOffset")) {
             editor.putFloat("ishaOffset", call.getDouble("ishaOffset", 0.0)?.toFloat() ?: 0f)
+        }
+        if (call.hasOption("prayerPreAlert")) {
+            editor.putBoolean("prayerPreAlert", call.getBoolean("prayerPreAlert", false) ?: false)
+        }
+        if (call.hasOption("preAlertMinutes")) {
+            editor.putInt("preAlertMinutes", call.getInt("preAlertMinutes", 15) ?: 15)
+        }
+        if (call.hasOption("khushuAutoWithIqama")) {
+            editor.putBoolean("khushuAutoWithIqama", call.getBoolean("khushuAutoWithIqama", false) ?: false)
         }
         editor.apply()
 

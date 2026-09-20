@@ -2,12 +2,16 @@ import { registerPlugin, Capacitor } from '@capacitor/core';
 import { parseTimeToMinutes } from '../utils/prayerCalc';
 import { PrayerTimes } from '../types';
 import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
+import { KhushuSettings } from '../domain/khushu/khushuTypes';
 
 export interface PrayerTimeAlarm {
   prayerKey: string;
   prayerName: string;
   timeMs: number;
   isFajr?: boolean;
+  alarmType?: string;
+  durationMinutes?: number;
+  khushuMode?: string;
 }
 
 export interface ScheduleAthanResult {
@@ -43,6 +47,9 @@ export interface AthanAlarmPlugin {
     asrOffset?: number;
     maghribOffset?: number;
     ishaOffset?: number;
+    prayerPreAlert?: boolean;
+    preAlertMinutes?: number;
+    khushuAutoWithIqama?: boolean;
   }): Promise<ScheduleAthanResult>;
   reconcileAthanAlarms(options: {
     times: PrayerTimeAlarm[];
@@ -258,6 +265,10 @@ export async function scheduleNativeAthanAlarms(
     asrOffset?: number;
     maghribOffset?: number;
     ishaOffset?: number;
+    prayerPreAlert?: boolean;
+    preAlertMinutes?: number;
+    khushuAutoWithIqama?: boolean;
+    khushuSettings?: KhushuSettings;
   }
 ): Promise<number> {
   try {
@@ -272,9 +283,14 @@ export async function scheduleNativeAthanAlarms(
       isha: 'العشاء',
     };
 
+    const ks = calcParams?.khushuSettings;
+    const khushuEnabled = Boolean(calcParams?.khushuAutoWithIqama);
+
     if (Array.isArray(daysListOrTodayMap)) {
       daysListOrTodayMap.forEach((entry) => {
         const dayDate = new Date(entry.date);
+        const isFriday = dayDate.getDay() === 5;
+
         Object.entries(entry.timesMap).forEach(([key, timeStr]) => {
           const lowerKey = key.toLowerCase();
           if (!prayerArabicNames[lowerKey]) return;
@@ -295,11 +311,48 @@ export async function scheduleNativeAthanAlarms(
               isFajr: lowerKey === 'fajr',
             });
           }
+
+          if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+            const preMins = calcParams.preAlertMinutes || 15;
+            const preTimeMs = timeMs - preMins * 60000;
+            if (preTimeMs > now) {
+              times.push({
+                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
+                prayerName: prayerArabicNames[lowerKey],
+                timeMs: preTimeMs,
+                isFajr: lowerKey === 'fajr',
+                alarmType: 'prealert',
+              });
+            }
+          }
+
+          if (khushuEnabled && lowerKey !== 'sunrise') {
+            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
+            if (isFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
+              iqamaOffset = ks.iqamaOffsets.friday || 25;
+              duration = ks.prayerDurations.friday || 45;
+            }
+            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            if (iqamaTimeMs > now) {
+              times.push({
+                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
+                prayerName: prayerArabicNames[lowerKey],
+                timeMs: iqamaTimeMs,
+                isFajr: lowerKey === 'fajr',
+                alarmType: 'khushu',
+                durationMinutes: duration,
+                khushuMode: ks?.preferredMode || 'silent',
+              });
+            }
+          }
         });
       });
     } else {
       // Fallback for single today/tomorrow maps
       const today = new Date();
+      const isTodayFriday = today.getDay() === 5;
+
       Object.entries(daysListOrTodayMap).forEach(([key, timeStr]) => {
         const lowerKey = key.toLowerCase();
         if (!prayerArabicNames[lowerKey]) return;
@@ -320,11 +373,48 @@ export async function scheduleNativeAthanAlarms(
             isFajr: lowerKey === 'fajr',
           });
         }
+
+        if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+          const preMins = calcParams.preAlertMinutes || 15;
+          const preTimeMs = timeMs - preMins * 60000;
+          if (preTimeMs > now) {
+            times.push({
+              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
+              prayerName: prayerArabicNames[lowerKey],
+              timeMs: preTimeMs,
+              isFajr: lowerKey === 'fajr',
+              alarmType: 'prealert',
+            });
+          }
+        }
+
+        if (khushuEnabled && lowerKey !== 'sunrise') {
+          let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
+          if (isTodayFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
+            iqamaOffset = ks.iqamaOffsets.friday || 25;
+            duration = ks.prayerDurations.friday || 45;
+          }
+          const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+          if (iqamaTimeMs > now) {
+            times.push({
+              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
+              prayerName: prayerArabicNames[lowerKey],
+              timeMs: iqamaTimeMs,
+              isFajr: lowerKey === 'fajr',
+              alarmType: 'khushu',
+              durationMinutes: duration,
+              khushuMode: ks?.preferredMode || 'silent',
+            });
+          }
+        }
       });
 
       if (tomorrowPrayerTimesMap) {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
+        const isTomorrowFriday = tomorrow.getDay() === 5;
+
         Object.entries(tomorrowPrayerTimesMap).forEach(([key, timeStr]) => {
           const lowerKey = key.toLowerCase();
           if (!prayerArabicNames[lowerKey]) return;
@@ -344,6 +434,41 @@ export async function scheduleNativeAthanAlarms(
               timeMs,
               isFajr: lowerKey === 'fajr',
             });
+          }
+
+          if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+            const preMins = calcParams.preAlertMinutes || 15;
+            const preTimeMs = timeMs - preMins * 60000;
+            if (preTimeMs > now) {
+              times.push({
+                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
+                prayerName: prayerArabicNames[lowerKey],
+                timeMs: preTimeMs,
+                isFajr: lowerKey === 'fajr',
+                alarmType: 'prealert',
+              });
+            }
+          }
+
+          if (khushuEnabled && lowerKey !== 'sunrise') {
+            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
+            if (isTomorrowFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
+              iqamaOffset = ks.iqamaOffsets.friday || 25;
+              duration = ks.prayerDurations.friday || 45;
+            }
+            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            if (iqamaTimeMs > now) {
+              times.push({
+                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
+                prayerName: prayerArabicNames[lowerKey],
+                timeMs: iqamaTimeMs,
+                isFajr: lowerKey === 'fajr',
+                alarmType: 'khushu',
+                durationMinutes: duration,
+                khushuMode: ks?.preferredMode || 'silent',
+              });
+            }
           }
         });
       }
@@ -369,6 +494,9 @@ export async function scheduleNativeAthanAlarms(
       asrOffset: calcParams?.asrOffset,
       maghribOffset: calcParams?.maghribOffset,
       ishaOffset: calcParams?.ishaOffset,
+      prayerPreAlert: calcParams?.prayerPreAlert,
+      preAlertMinutes: calcParams?.preAlertMinutes,
+      khushuAutoWithIqama: calcParams?.khushuAutoWithIqama,
     });
     if (res.exactAlarmPermissionMissing) {
       console.warn('[AthanAlarm]: Exact alarm permission is missing on Android 12+');
@@ -403,6 +531,18 @@ export interface NativeWidgetPayload {
   isJumuah?: boolean;
   dhikrText?: string;
   timePeriod?: string;
+  theme?: string;
+  widgetTheme?: string;
+  clockStyle?: string;
+  showMoonPhase?: boolean;
+  prayerDisplay?: string;
+  showDate?: boolean;
+  showDhikr?: boolean;
+  showSubhaBtn?: boolean;
+  showKhushuBtn?: boolean;
+  showProgressBar?: boolean;
+  cardSize?: string;
+  pinnedWidget?: any;
 }
 
 export async function updateNativeWidgetData(

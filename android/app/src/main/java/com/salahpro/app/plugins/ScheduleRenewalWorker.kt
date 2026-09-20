@@ -83,6 +83,10 @@ class ScheduleRenewalWorker(
                         "isha" to "Isha"
                     )
 
+                    val prayerPreAlert = prefs.getBoolean("prayerPreAlert", false)
+                    val preAlertMinutes = prefs.getInt("preAlertMinutes", 15)
+                    val khushuAutoWithIqama = prefs.getBoolean("khushuAutoWithIqama", false)
+
                     for (p in prayers) {
                         if (p.third > now) {
                             val exists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - p.third) < 60000L }
@@ -94,6 +98,44 @@ class ScheduleRenewalWorker(
                                 obj.put("timeMs", p.third)
                                 obj.put("isFajr", p.first == "fajr")
                                 updatedList.add(obj)
+                            }
+                        }
+
+                        if (prayerPreAlert) {
+                            val preTimeMs = p.third - preAlertMinutes * 60000L
+                            if (preTimeMs > now) {
+                                val preExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - preTimeMs) < 60000L && it.optString("prayerKey").contains("prealert") }
+                                if (!preExists) {
+                                    val preObj = JSONObject()
+                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_prealert"
+                                    preObj.put("prayerKey", canonicalKey)
+                                    preObj.put("prayerName", p.second)
+                                    preObj.put("timeMs", preTimeMs)
+                                    preObj.put("isFajr", p.first == "fajr")
+                                    preObj.put("alarmType", "prealert")
+                                    updatedList.add(preObj)
+                                }
+                            }
+                        }
+
+                        if (khushuAutoWithIqama) {
+                            val iqamaOffset = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 25L else 15L
+                            val durationMinutes = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 45 else 15
+                            val iqamaTimeMs = p.third + iqamaOffset * 60000L
+                            if (iqamaTimeMs > now) {
+                                val khushuExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - iqamaTimeMs) < 60000L && it.optString("prayerKey").contains("khushu") }
+                                if (!khushuExists) {
+                                    val khushuObj = JSONObject()
+                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_khushu"
+                                    khushuObj.put("prayerKey", canonicalKey)
+                                    khushuObj.put("prayerName", p.second)
+                                    khushuObj.put("timeMs", iqamaTimeMs)
+                                    khushuObj.put("isFajr", p.first == "fajr")
+                                    khushuObj.put("alarmType", "khushu")
+                                    khushuObj.put("durationMinutes", durationMinutes)
+                                    khushuObj.put("khushuMode", "silent")
+                                    updatedList.add(khushuObj)
+                                }
                             }
                         }
                     }

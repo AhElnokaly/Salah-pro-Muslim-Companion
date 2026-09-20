@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Download, ExternalLink, Sparkles, AlertCircle, FileDown, CheckCircle2, Loader2 } from 'lucide-react';
-import { AppReleaseInfo } from '../../services/updateChecker';
+import { AppReleaseInfo, compareSemver } from '../../services/updateChecker';
 import { CURRENT_RELEASE } from '../../data/changelog';
 import { downloadAndInstallAppUpdate } from '../../services/athanAlarmPlugin';
 
@@ -21,7 +21,10 @@ export default function UpdateNotificationModal({
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (!isOpen || !releaseInfo) return null;
+  // Strictly ensure the release is newer than current running version
+  if (!isOpen || !releaseInfo || compareSemver(releaseInfo.version, CURRENT_RELEASE.version) <= 0) {
+    return null;
+  }
 
   const handleDownload = async () => {
     const url = releaseInfo.apkDownloadUrl || releaseInfo.htmlUrl;

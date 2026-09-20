@@ -54,7 +54,8 @@ import { toArabicNumbers } from './utils/hijri';
 import { getMoonPhaseInfo } from './utils/moonPhase';
 import { getPrayerProgressPercentage } from './utils/dashboardSky';
 import { getUnreadVersionStatus } from './data/changelog';
-import { checkForAppUpdates, AppReleaseInfo } from './services/updateChecker';
+import { checkForAppUpdates, AppReleaseInfo, compareSemver } from './services/updateChecker';
+import { CURRENT_RELEASE } from './data/changelog';
 import UpdateNotificationModal from './components/common/UpdateNotificationModal';
 
 export default function App() {
@@ -134,8 +135,14 @@ export default function App() {
       const timer = setTimeout(() => {
         checkForAppUpdates({ force: false })
           .then((result) => {
-            if (result.hasUpdate && result.latestRelease) {
+            if (
+              result.hasUpdate &&
+              result.latestRelease &&
+              compareSemver(result.latestRelease.version, CURRENT_RELEASE.version) > 0
+            ) {
               setAvailableUpdate(result.latestRelease);
+            } else {
+              setAvailableUpdate(null);
             }
           })
           .catch(() => {

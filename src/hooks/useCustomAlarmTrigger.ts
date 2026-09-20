@@ -35,6 +35,15 @@ export function useCustomAlarmTrigger({
       playSpiritualSound(alarm.soundType || 'speech', fullTitle, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
     }
 
+    if (alarm.autoKhushu) {
+      import('../services/khushuModePlugin').then(({ KhushuMode }) => {
+        KhushuMode.activate({
+          durationMinutes: alarm.khushuDurationMinutes || 15,
+          mode: 'silent',
+        }).catch((e) => console.warn('[useCustomAlarmTrigger] autoKhushu error:', e));
+      });
+    }
+
     setActiveRingingAlarm({
       ...alarm,
       title: fullTitle

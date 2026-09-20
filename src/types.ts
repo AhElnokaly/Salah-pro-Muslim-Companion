@@ -203,6 +203,8 @@ export interface AppSettings {
   };
   mainCardLayout?: MainCardLayout;
   notifyHijriMonthStart?: boolean;
+  prayerPreAlert?: boolean;
+  preAlertMinutes?: number;
 }
 
 export type CardBlockId =
@@ -264,6 +266,8 @@ export interface AlarmConfig {
   days: number[]; // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
   soundType: AlarmSoundType;
   notifyMode?: AlarmNotifyMode;
+  autoKhushu?: boolean;
+  khushuDurationMinutes?: number;
 }
 
 export interface SpiritualAlertRule {

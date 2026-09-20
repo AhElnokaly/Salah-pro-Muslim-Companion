@@ -96,6 +96,9 @@ export function useKhushuMode() {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       KhushuStorage.saveSettings(updated);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('khushu-settings-changed', { detail: updated }));
+      }
       return updated;
     });
   }, []);

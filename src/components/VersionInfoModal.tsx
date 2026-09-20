@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Sparkles, RefreshCw, CheckCircle2, ShieldCheck, History, ArrowRight, Zap, Wrench, Palette, Download, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 import { RELEASE_HISTORY, CURRENT_RELEASE, markCurrentVersionAsSeen, ChangelogCategory } from '../data/changelog';
-import { checkForAppUpdates, UpdateCheckResult } from '../services/updateChecker';
+import { checkForAppUpdates, UpdateCheckResult, compareSemver } from '../services/updateChecker';
 import { downloadAndInstallAppUpdate } from '../services/athanAlarmPlugin';
 
 interface VersionInfoModalProps {
@@ -192,7 +192,7 @@ export default function VersionInfoModal({ isOpen, onClose }: VersionInfoModalPr
                   {/* Result display */}
                   {updateResult && (
                     <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 animate-fade-in">
-                      {updateResult.hasUpdate && updateResult.latestRelease ? (
+                      {updateResult.hasUpdate && updateResult.latestRelease && compareSemver(updateResult.latestRelease.version, updateResult.currentVersion) > 0 ? (
                         <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-500/30 p-3 rounded-xl space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">

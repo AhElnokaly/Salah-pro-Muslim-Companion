@@ -8,6 +8,7 @@ import { useAuthoritativeClock } from '../../hooks/useAuthoritativeClock';
 import { toArabicNumbers } from '../../utils/hijri';
 import { parseTimeToMinutes } from '../../utils/prayerCalc';
 import { AppSettings, PrayerTimes } from '../../types';
+import { updateNativeWidgetData } from '../../services/athanAlarmPlugin';
 import { generateWidgetSvg } from './widgetSvgGenerator';
 import { WidgetType, WidgetTheme } from './WidgetControls';
 
@@ -186,32 +187,54 @@ export function useWidgetSimulatorLogic({
   const currentMonthName = hijri?.monthName || 'شوال';
   const currentYear = hijri?.year || 1448;
 
-  // Pin Widget configuration to local settings (which persist)
+  // Pin Widget configuration to local settings and sync to native Android Widget
   const handlePinWidget = () => {
+    const pinned = {
+      type: widgetType,
+      theme: widgetTheme,
+      wallpaper: activeWallpaper,
+      clockStyle,
+      showMoonPhase,
+      prayerDisplay,
+      showDate,
+      showDhikr,
+      showAyah,
+      showQibla,
+      showSubhaBtn,
+      showProgressBar,
+      cardSize,
+      showKhushuBtn,
+    };
+
     if (setSettings) {
       setSettings((prev) => ({
         ...prev,
-        pinnedWidget: {
-          type: widgetType,
-          theme: widgetTheme,
-          wallpaper: activeWallpaper,
-          clockStyle,
-          showMoonPhase,
-          prayerDisplay,
-          showDate,
-          showDhikr,
-          showAyah,
-          showQibla,
-          showSubhaBtn,
-          showProgressBar,
-          cardSize,
-          showKhushuBtn,
-        },
+        pinnedWidget: pinned,
       }));
       setIsPinned(true);
-      setToastMessage('📌 تم تثبيت الـ Widget المخصص بنجاح! سيظهر الآن بجميع مكوناته على شاشتك الرئيسية 🥳🤍');
+      setToastMessage('📌 تم تثبيت الـ Widget المخصص وتحديثه على شاشتك الرئيسية بنجاح! 🥳🤍');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 5000);
+    }
+
+    // Immediately push new widget configuration to native Android home screen widget
+    if (prayerTimes) {
+      updateNativeWidgetData(prayerTimes, settings?.cityName || 'مواقيت الصلاة', {
+        theme: widgetTheme,
+        widgetTheme,
+        clockStyle,
+        showMoonPhase,
+        prayerDisplay,
+        showDate,
+        showDhikr,
+        showSubhaBtn,
+        showKhushuBtn,
+        showProgressBar,
+        cardSize,
+        pinnedWidget: pinned,
+      }).catch((err) => {
+        console.warn('[useWidgetSimulatorLogic] Failed to update native widget data:', err);
+      });
     }
   };
 

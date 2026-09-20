@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.view.View
 import android.widget.RemoteViews
 import com.salahpro.app.MainActivity
 import com.salahpro.app.R
@@ -118,6 +119,18 @@ class SalahWidgetProvider : AppWidgetProvider() {
             var dhikrText = "«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»"
             var timePeriod = ""
 
+            // Customization options from in-app Widget Simulator
+            var widgetTheme = "auto"
+            var clockStyle = "digital"
+            var showMoonPhase = true
+            var prayerDisplay = "all_prayers"
+            var showDate = true
+            var showDhikr = true
+            var showSubhaBtn = true
+            var showKhushuBtn = true
+            var showProgressBar = true
+            var cardSize = "medium"
+
             if (widgetDataJson != null) {
                 try {
                     val json = JSONObject(widgetDataJson)
@@ -137,26 +150,51 @@ class SalahWidgetProvider : AppWidgetProvider() {
                     isJumuah = json.optBoolean("isJumuah", false)
                     dhikrText = json.optString("dhikrText", dhikrText)
                     timePeriod = json.optString("timePeriod", "")
+
+                    // Read customization properties (direct or nested in pinnedWidget)
+                    val pinnedObj = json.optJSONObject("pinnedWidget")
+                    val targetObj = pinnedObj ?: json
+                    widgetTheme = targetObj.optString("theme", targetObj.optString("widgetTheme", widgetTheme))
+                    clockStyle = targetObj.optString("clockStyle", clockStyle)
+                    showMoonPhase = targetObj.optBoolean("showMoonPhase", showMoonPhase)
+                    prayerDisplay = targetObj.optString("prayerDisplay", prayerDisplay)
+                    showDate = targetObj.optBoolean("showDate", showDate)
+                    showDhikr = targetObj.optBoolean("showDhikr", showDhikr)
+                    showSubhaBtn = targetObj.optBoolean("showSubhaBtn", showSubhaBtn)
+                    showKhushuBtn = targetObj.optBoolean("showKhushuBtn", showKhushuBtn)
+                    showProgressBar = targetObj.optBoolean("showProgressBar", showProgressBar)
+                    cardSize = targetObj.optString("cardSize", cardSize)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
 
-            // Dynamic Spiritual Background matching time of day / Hero card
+            // Dynamic Spiritual or Explicit Background matching in-app widget appearance
             val cal = Calendar.getInstance()
             val hour = cal.get(Calendar.HOUR_OF_DAY)
             val isDaytime = hour in 6..17
 
-            val bgResId = when {
-                timePeriod.equals("friday", ignoreCase = true) || (isJumuah && isDaytime) -> R.drawable.widget_card_bg_friday
-                timePeriod.equals("fajr", ignoreCase = true) || activePrayer == "fajr" -> R.drawable.widget_card_bg_fajr
-                timePeriod.equals("sunset", ignoreCase = true) || activePrayer == "maghrib" -> R.drawable.widget_card_bg_sunset
-                timePeriod.equals("day", ignoreCase = true) || (isDaytime && (activePrayer == "dhuhr" || activePrayer == "asr")) -> R.drawable.widget_card_bg_day
-                else -> R.drawable.widget_card_bg_night
+            val bgResId = when (widgetTheme.lowercase()) {
+                "green" -> R.drawable.widget_card_bg_green
+                "gold" -> R.drawable.widget_card_bg_gold
+                "amber" -> R.drawable.widget_card_bg_amber
+                "onyx" -> R.drawable.widget_card_bg_onyx
+                "teal" -> R.drawable.widget_card_bg_teal
+                "dark-blue", "dark_blue" -> R.drawable.widget_card_bg_dark_blue
+                else -> {
+                    // "auto" or dynamic time-of-day
+                    when {
+                        timePeriod.equals("friday", ignoreCase = true) || (isJumuah && isDaytime) -> R.drawable.widget_card_bg_friday
+                        timePeriod.equals("fajr", ignoreCase = true) || activePrayer == "fajr" -> R.drawable.widget_card_bg_fajr
+                        timePeriod.equals("sunset", ignoreCase = true) || activePrayer == "maghrib" -> R.drawable.widget_card_bg_sunset
+                        timePeriod.equals("day", ignoreCase = true) || (isDaytime && (activePrayer == "dhuhr" || activePrayer == "asr")) -> R.drawable.widget_card_bg_day
+                        else -> R.drawable.widget_card_bg_night
+                    }
+                }
             }
             views.setInt(R.id.widget_root, "setBackgroundResource", bgResId)
 
-            // TextClock ticks autonomously via the Android OS system clock.
+            // 1. TextClock ticks autonomously via the Android OS system clock.
             // If custom timeZone is provided, configure it.
             val widgetTimeZone = if (widgetDataJson != null) {
                 try { JSONObject(widgetDataJson).optString("timeZone", "") } catch (_: Exception) { "" }
@@ -166,11 +204,35 @@ class SalahWidgetProvider : AppWidgetProvider() {
             }
             views.setTextViewText(R.id.widget_clock_label, "التوقيت المحلي")
 
+            // Clock visibility based on in-app clockStyle
+            val isClockVisible = !clockStyle.equals("none", ignoreCase = true)
+            views.setViewVisibility(R.id.widget_clock_box, if (isClockVisible) View.VISIBLE else View.GONE)
+
+            // Header Row (Date & Moon Phase) visibility
+            views.setTextViewText(R.id.widget_date_text, hijriDate)
+            views.setViewVisibility(R.id.widget_date_text, if (showDate) View.VISIBLE else View.GONE)
+            views.setTextViewText(R.id.widget_moon_phase, moonPhase)
+            views.setViewVisibility(R.id.widget_moon_phase, if (showMoonPhase) View.VISIBLE else View.GONE)
+            val isHeaderVisible = showDate || showMoonPhase
+            views.setViewVisibility(R.id.widget_header_row, if (isHeaderVisible) View.VISIBLE else View.GONE)
+
+            // Next Prayer Box visibility
+            val isNextPrayerVisible = !prayerDisplay.equals("none", ignoreCase = true)
+            views.setViewVisibility(R.id.widget_next_prayer_box, if (isNextPrayerVisible) View.VISIBLE else View.GONE)
             views.setTextViewText(R.id.widget_next_prayer_title, nextPrayerTitle)
             views.setTextViewText(R.id.widget_next_prayer_time_badge, nextPrayerTime)
             views.setTextViewText(R.id.widget_remaining_text, remainingText)
+
+            // Progress bar visibility
+            val isProgressVisible = showProgressBar && isNextPrayerVisible
+            views.setViewVisibility(R.id.widget_progress_bar, if (isProgressVisible) View.VISIBLE else View.GONE)
+            views.setViewVisibility(R.id.widget_progress_percent, if (isProgressVisible) View.VISIBLE else View.GONE)
             views.setTextViewText(R.id.widget_progress_percent, "(%${toArabicDigits(progressPercent)})")
             views.setProgressBar(R.id.widget_progress_bar, 100, progressPercent.coerceIn(0, 100), false)
+
+            // Prayers Grid visibility: all_prayers, or medium/large cards
+            val isAllPrayersVisible = prayerDisplay.equals("all_prayers", ignoreCase = true) || (!prayerDisplay.equals("none", ignoreCase = true) && !cardSize.equals("compact", ignoreCase = true))
+            views.setViewVisibility(R.id.widget_prayers_grid, if (isAllPrayersVisible) View.VISIBLE else View.GONE)
 
             views.setTextViewText(R.id.widget_time_fajr, fajr)
             views.setTextViewText(R.id.widget_time_dhuhr, dhuhr)
@@ -203,13 +265,17 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            // Spiritual Dhikr Quote
+            // Spiritual Dhikr Quote visibility
+            val isDhikrVisible = showDhikr && !cardSize.equals("compact", ignoreCase = true)
+            views.setViewVisibility(R.id.widget_dhikr_text, if (isDhikrVisible) View.VISIBLE else View.GONE)
             views.setTextViewText(R.id.widget_dhikr_text, dhikrText)
 
-            // Tasbeeh Button
+            // Tasbeeh Button visibility & text
+            views.setViewVisibility(R.id.widget_tasbeeh_btn, if (showSubhaBtn) View.VISIBLE else View.GONE)
             views.setTextViewText(R.id.widget_tasbeeh_btn, "📿 تسبيح (${toArabicDigits(tasbeehCount)})")
 
-            // Khushu Button State
+            // Khushu Button State & visibility
+            views.setViewVisibility(R.id.widget_khushu_btn, if (showKhushuBtn) View.VISIBLE else View.GONE)
             val isKhushuActive = KhushuRestoreReceiver.isKhushuActive(context)
             if (isKhushuActive) {
                 views.setTextViewText(R.id.widget_khushu_btn, "الخشوع نشط 🔕")
@@ -220,6 +286,10 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 views.setInt(R.id.widget_khushu_btn, "setBackgroundResource", R.drawable.widget_khushu_btn_bg)
                 views.setTextColor(R.id.widget_khushu_btn, 0xFFFFFFFF.toInt())
             }
+
+            // Action row visibility
+            val isBottomActionsVisible = showSubhaBtn || showKhushuBtn
+            views.setViewVisibility(R.id.widget_bottom_actions_row, if (isBottomActionsVisible) View.VISIBLE else View.GONE)
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }

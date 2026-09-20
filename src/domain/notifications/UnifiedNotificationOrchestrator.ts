@@ -10,9 +10,10 @@
 
 import { AlarmIdentifier } from './AlarmIdentifier';
 import { NotificationScheduler } from '../../services/NotificationScheduler';
-import { syncPrayerScheduleWithSW } from '../../utils/pushNotificationService';
+import { syncPrayerScheduleWithSW, getPushSettings } from '../../utils/pushNotificationService';
 import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { AppSettings, PrayerTimes } from '../../types';
+import { KhushuStorage } from '../khushu/khushuStorage';
 import AthanAlarm, {
   PrayerTimeAlarm,
   DailyPrayerTimesEntry,
@@ -66,6 +67,11 @@ export class UnifiedNotificationOrchestrator {
     try {
       if (days60List && days60List.length > 0) {
         const userTz = settings.timezoneId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
+        const pushSettings = getPushSettings();
+        const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
+        const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+        const khushuSettings = KhushuStorage.getSettings();
+
         scheduledCount = await scheduleNativeAthanAlarms(days60List, undefined, {
           lat: settings.latitude,
           lng: settings.longitude,
@@ -77,12 +83,30 @@ export class UnifiedNotificationOrchestrator {
           asrOffset: settings.prayerOffsets?.Asr || 0,
           maghribOffset: settings.prayerOffsets?.Maghrib || 0,
           ishaOffset: settings.prayerOffsets?.Isha || 0,
+          prayerPreAlert: preAlertEnabled,
+          preAlertMinutes: preAlertMins,
+          khushuAutoWithIqama: khushuSettings.autoWithIqama,
+          khushuSettings,
         });
 
         // 3. Update Native Android Widget
         const currentTimes = days60List[0]?.timesMap;
         if (currentTimes) {
-          await updateNativeWidgetData(currentTimes, settings.cityName || 'مواقيت الصلاة').catch(err => {
+          const pinned = settings.pinnedWidget;
+          await updateNativeWidgetData(currentTimes, settings.cityName || 'مواقيت الصلاة', {
+            theme: pinned?.theme,
+            widgetTheme: pinned?.theme,
+            clockStyle: pinned?.clockStyle,
+            showMoonPhase: pinned?.showMoonPhase,
+            prayerDisplay: pinned?.prayerDisplay,
+            showDate: pinned?.showDate,
+            showDhikr: pinned?.showDhikr,
+            showSubhaBtn: pinned?.showSubhaBtn,
+            showKhushuBtn: pinned?.showKhushuBtn,
+            showProgressBar: pinned?.showProgressBar,
+            cardSize: pinned?.cardSize,
+            pinnedWidget: pinned,
+          }).catch(err => {
             console.warn('[NotificationOrchestrator] Native widget update error:', err);
           });
         }
@@ -125,6 +149,10 @@ export class UnifiedNotificationOrchestrator {
     try {
       const keys = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
       const nativeAlarmsToSchedule: PrayerTimeAlarm[] = [];
+      const pushSettings = getPushSettings();
+      const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
+      const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+      const khushuSettings = KhushuStorage.getSettings();
 
       for (const key of keys) {
         if (!enabledPrayers[key] || !prayerTimes[key as keyof PrayerTimes]) continue;
@@ -136,18 +164,61 @@ export class UnifiedNotificationOrchestrator {
         const [y, m, d] = dateStr.split('-').map(Number);
         const triggerDate = new Date(y, m - 1, d, hours, minutes, 0, 0);
 
-        if (triggerDate.getTime() <= Date.now()) continue;
+        if (triggerDate.getTime() > Date.now()) {
+          nativeAlarmsToSchedule.push({
+            prayerKey: key,
+            prayerName: key,
+            timeMs: triggerDate.getTime(),
+            isFajr: key === 'Fajr',
+          });
+        }
 
-        nativeAlarmsToSchedule.push({
-          prayerKey: key,
-          prayerName: key,
-          timeMs: triggerDate.getTime(),
-          isFajr: key === 'Fajr',
-        });
+        // Pre-alert alarm before prayer time (excluding sunrise)
+        if (preAlertEnabled && key !== 'Sunrise') {
+          const preAlertTimeMs = triggerDate.getTime() - preAlertMins * 60000;
+          if (preAlertTimeMs > Date.now()) {
+            nativeAlarmsToSchedule.push({
+              prayerKey: `${key}_prealert`,
+              prayerName: key,
+              timeMs: preAlertTimeMs,
+              isFajr: key === 'Fajr',
+              alarmType: 'prealert',
+            });
+          }
+        }
+
+        // Auto Khushu alarm at Iqama moment (excluding sunrise)
+        if (khushuSettings.autoWithIqama && key !== 'Sunrise') {
+          const lowerKey = key.toLowerCase();
+          const isFriday = triggerDate.getDay() === 5;
+          let iqamaOffset = (khushuSettings.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          let duration = (khushuSettings.prayerDurations as any)?.[lowerKey] ?? 15;
+          if (isFriday && lowerKey === 'dhuhr' && khushuSettings.enableFridaySpecial) {
+            iqamaOffset = khushuSettings.iqamaOffsets.friday || 25;
+            duration = khushuSettings.prayerDurations.friday || 45;
+          }
+          const iqamaTimeMs = triggerDate.getTime() + iqamaOffset * 60000;
+          if (iqamaTimeMs > Date.now()) {
+            nativeAlarmsToSchedule.push({
+              prayerKey: `${key}_khushu`,
+              prayerName: key,
+              timeMs: iqamaTimeMs,
+              isFajr: key === 'Fajr',
+              alarmType: 'khushu',
+              durationMinutes: duration,
+              khushuMode: khushuSettings.preferredMode || 'silent',
+            });
+          }
+        }
       }
 
       if (nativeAlarmsToSchedule.length > 0) {
-        const res = await AthanAlarm.scheduleAthanAlarms({ times: nativeAlarmsToSchedule });
+        const res = await AthanAlarm.scheduleAthanAlarms({
+          times: nativeAlarmsToSchedule,
+          prayerPreAlert: preAlertEnabled,
+          preAlertMinutes: preAlertMins,
+          khushuAutoWithIqama: khushuSettings.autoWithIqama,
+        });
         nativeScheduledCount = res.scheduledCount;
       }
     } catch (err) {

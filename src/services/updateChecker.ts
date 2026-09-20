@@ -84,7 +84,16 @@ export async function checkForAppUpdates(options?: {
       if (rawCached) {
         const cached = JSON.parse(rawCached) as UpdateCheckResult;
         if (cached && now - (cached.lastCheckedAt || 0) < THROTTLE_DURATION_MS) {
-          return cached;
+          // Re-evaluate whether the cached release is strictly newer than currently running app
+          const stillHasUpdate = Boolean(
+            cached.latestRelease?.version &&
+            compareSemver(cached.latestRelease.version, currentVersion) > 0
+          );
+          return {
+            ...cached,
+            hasUpdate: stillHasUpdate,
+            currentVersion,
+          };
         }
       }
     } catch {

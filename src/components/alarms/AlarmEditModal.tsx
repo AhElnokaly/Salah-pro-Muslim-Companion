@@ -8,7 +8,8 @@ import {
   X, 
   Bell, 
   Trash2, 
-  Check
+  Check,
+  VolumeX
 } from 'lucide-react';
 import type { 
   AlarmConfig, 
@@ -53,6 +54,8 @@ export default function AlarmEditModal({
   const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [soundType, setSoundType] = useState<AlarmSoundType>('takbeer');
   const [notifyMode, setNotifyMode] = useState<AlarmNotifyMode>('both');
+  const [autoKhushu, setAutoKhushu] = useState<boolean>(false);
+  const [khushuDurationMinutes, setKhushuDurationMinutes] = useState<number>(15);
 
   // In-modal delete confirmation state (avoids window.confirm browser blocks)
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
@@ -73,6 +76,8 @@ export default function AlarmEditModal({
       setDays(alarm.days || [0, 1, 2, 3, 4, 5, 6]);
       setSoundType(alarm.soundType || 'takbeer');
       setNotifyMode(alarm.notifyMode || 'both');
+      setAutoKhushu(Boolean(alarm.autoKhushu));
+      setKhushuDurationMinutes(alarm.khushuDurationMinutes || 15);
     } else {
       setTitle('');
       setTimingType('prayer_relative');
@@ -83,6 +88,8 @@ export default function AlarmEditModal({
       setDays([0, 1, 2, 3, 4, 5, 6]);
       setSoundType('takbeer');
       setNotifyMode('both');
+      setAutoKhushu(false);
+      setKhushuDurationMinutes(15);
     }
     setConfirmDelete(false);
   }, [alarm, isOpen]);
@@ -141,6 +148,8 @@ export default function AlarmEditModal({
       days,
       soundType,
       notifyMode,
+      autoKhushu,
+      khushuDurationMinutes: autoKhushu ? khushuDurationMinutes : undefined,
       ...(timingType === 'prayer_relative' 
         ? {
             prayers,
@@ -261,6 +270,52 @@ export default function AlarmEditModal({
             testPlaying={testPlaying}
             onTestSound={handleTestSound}
           />
+
+          {/* Auto Khushu Option */}
+          <div className="p-3.5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <VolumeX className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+                    تفعيل وضع الخشوع تلقائياً مع هذا المنبه
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                    كتم أصوات وإشعارات الجهاز فور انطلاق المنبه لأداء الصلاة بسكينة
+                  </span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={autoKhushu}
+                onChange={(e) => setAutoKhushu(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 rounded-sm border-slate-300 focus:ring-emerald-500 cursor-pointer"
+              />
+            </div>
+            {autoKhushu && (
+              <div className="flex items-center justify-between pt-2 border-t border-amber-500/15">
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-bold">
+                  مدة كتم الأصوات:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {[10, 15, 20, 30, 45].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setKhushuDurationMinutes(mins)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        khushuDurationMinutes === mins
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {mins} د
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </form>
 
         {/* Footer Actions */}
