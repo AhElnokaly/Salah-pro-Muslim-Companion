@@ -18,11 +18,22 @@ export interface ReleaseNote {
 
 export const RELEASE_HISTORY: ReleaseNote[] = [
   {
+    version: '1.0.9',
+    buildNumber: 109,
+    date: '20 سبتمبر 2026',
+    title: 'تحديث الخشوع التلقائي مع الإقامة وتخصيص الويدجت الشامل',
+    isCurrent: true,
+    highlights: [
+      { category: 'feature', text: 'تفعيل وضع الخشوع التلقائي مع موعد الإقامة لإسكات الهاتف أثناء الصلاة واستعادة وضع الرنين تلقائياً عبر المنبه الدقيق' },
+      { category: 'feature', text: 'تخصيص كامل لويدجت الشاشة الرئيسية (6 سمات لونية فاخرة، التحكم في ظهور العناصر، ومزامنة فورية بنقرة واحدة)' },
+      { category: 'improvement', text: 'تطوير دقة فحص التحديثات ومنع التنبيهات المكررة مع دعم التثبيت المباشر للـ APK' }
+    ]
+  },
+  {
     version: '1.0.8',
     buildNumber: 108,
     date: '18 سبتمبر 2026',
     title: 'تحديث التثبيت التلقائي المباشر من داخل التطبيق',
-    isCurrent: true,
     highlights: [
       { category: 'feature', text: 'تحديث وتثبيت الإصدارات الجديدة بضغطة زر مباشرة من داخل التطبيق دون فتح المتصفح مع مؤشر تقدم حقيقي' },
       { category: 'improvement', text: 'استدعاء مثبت الحزم الرسمي لأندرويد (Package Installer) تلقائياً فور اكتمال التنزيل' },
