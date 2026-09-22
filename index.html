@@ -31,7 +31,7 @@
         }
       })();
     </script>
-    <script type="module" crossorigin src="./assets/index-Cr8UneAw.js"></script>
+    <script type="module" crossorigin src="./assets/index-DirzCzIm.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-libs-Bb8JjhAW.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-core-CXc0DJPl.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-BRmJg-ml.js">
@@ -53,39 +53,35 @@
       </div>
     </div>
     <script>
-      var hasRecovered = false;
-      var retryCount = 0;
-
-      // Global resource error detection (catches 404/503 on JS/CSS modules)
+      // Global resource error detection (catches network hiccups or cold container boots)
       window.addEventListener('error', function(e) {
         if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
           var src = e.target.src || e.target.href || '';
           console.warn('[BootGuard] Network hiccup loading module asset:', src);
 
-          // If main entry point failed to load (e.g. cold start / SW cache conflict), attempt self-healing retry
-          if (src.indexOf('/src/main.tsx') !== -1 && retryCount < 2 && !hasRecovered) {
-            retryCount++;
-            console.log('[BootGuard] Attempting automatic self-healing reload for main entry point (attempt ' + retryCount + ')...');
-            
-            // Clean service worker registrations
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.getRegistrations().then(function(regs) {
-                for (var i = 0; i < regs.length; i++) regs[i].unregister();
-              }).catch(function() {});
-            }
+          // If main entry point failed to load (e.g. cold start / container waking up), attempt clean self-healing reload
+          if (src.indexOf('/src/main.tsx') !== -1) {
+            try {
+              var retryCount = parseInt(sessionStorage.getItem('boot_retry_count') || '0', 10);
+              if (retryCount < 2) {
+                sessionStorage.setItem('boot_retry_count', String(retryCount + 1));
+                console.log('[BootGuard] Container waking up, scheduling self-healing reload (attempt ' + (retryCount + 1) + ')...');
 
-            // Retry importing main.tsx dynamically with cache-busting
-            setTimeout(function() {
-              import('/src/main.tsx?t=' + Date.now()).then(function() {
-                hasRecovered = true;
-                console.log('[BootGuard] Self-healing module load succeeded!');
-              }).catch(function(err) {
-                console.error('[BootGuard] Retry failed:', err);
-                var box = document.getElementById('recovery-box');
-                if (box) box.style.display = 'block';
-              });
-            }, 600);
-            return;
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    for (var i = 0; i < regs.length; i++) regs[i].unregister();
+                  }).catch(function() {});
+                }
+
+                setTimeout(function() {
+                  window.location.reload();
+                }, 1200);
+                return;
+              }
+              sessionStorage.removeItem('boot_retry_count');
+            } catch (err) {
+              // Ignore storage errors
+            }
           }
 
           var box = document.getElementById('recovery-box');
