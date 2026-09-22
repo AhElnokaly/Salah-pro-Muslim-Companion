@@ -78,56 +78,7 @@ class KhushuModePlugin : Plugin() {
         val durationMinutes = call.getInt("durationMinutes") ?: 30
 
         try {
-            // Check if already active to avoid overwriting original normal device state
-            val alreadyActive = prefs.getBoolean(KhushuRestoreReceiver.KEY_IS_ACTIVE, false)
-            if (!alreadyActive) {
-                val originalFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    notificationManager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
-                } else {
-                    NotificationManager.INTERRUPTION_FILTER_ALL
-                }
-                val originalRinger = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
-
-                prefs.edit()
-                    .putInt(KhushuRestoreReceiver.KEY_ORIGINAL_FILTER, originalFilter)
-                    .putInt(KhushuRestoreReceiver.KEY_ORIGINAL_RINGER, originalRinger)
-                    .apply()
-                Log.d(TAG, "Saved initial device state - filter: $originalFilter, ringer: $originalRinger")
-            }
-
-            // Apply selected Khushu Mode
-            when (mode) {
-                "dnd" -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        if (notificationManager?.isNotificationPolicyAccessGranted == true) {
-                            notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
-                            Log.d(TAG, "Set interruption filter to INTERRUPTION_FILTER_NONE")
-                        } else {
-                            Log.w(TAG, "DND requested but permission not granted, falling back to silent ringer")
-                            audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-                        }
-                    } else {
-                        audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-                    }
-                }
-                "silent" -> {
-                    audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-                    Log.d(TAG, "Set ringer mode to RINGER_MODE_SILENT")
-                }
-            }
-
-            val now = System.currentTimeMillis()
-            prefs.edit()
-                .putBoolean(KhushuRestoreReceiver.KEY_IS_ACTIVE, true)
-                .putString(KhushuRestoreReceiver.KEY_MODE, mode)
-                .putInt(KhushuRestoreReceiver.KEY_DURATION_MINUTES, durationMinutes)
-                .putLong(KhushuRestoreReceiver.KEY_ACTIVATED_AT, now)
-                .apply()
-
-            // Schedule reliable native restore alarm
-            scheduleRestoreAlarm(durationMinutes)
-
-            SalahWidgetProvider.updateAllWidgets(context)
+            KhushuRestoreReceiver.activateKhushuDirectly(context, mode, durationMinutes)
 
             val ret = JSObject()
             ret.put("active", true)
@@ -144,10 +95,7 @@ class KhushuModePlugin : Plugin() {
     @PluginMethod
     fun deactivate(call: PluginCall) {
         try {
-            restoreOriginalStateNow()
-            cancelRestoreAlarm()
-
-            SalahWidgetProvider.updateAllWidgets(context)
+            KhushuRestoreReceiver.restoreOriginalState(context)
 
             val ret = JSObject()
             ret.put("active", false)
@@ -161,7 +109,7 @@ class KhushuModePlugin : Plugin() {
     // 5. حالة الوضع الحالية (للـUI عشان يعرف يعرض إيه والوقت المتبقي)
     @PluginMethod
     fun getStatus(call: PluginCall) {
-        val isActive = prefs.getBoolean(KhushuRestoreReceiver.KEY_IS_ACTIVE, false)
+        val isActive = KhushuRestoreReceiver.isKhushuActive(context)
         val mode = prefs.getString(KhushuRestoreReceiver.KEY_MODE, "silent") ?: "silent"
         val durationMinutes = prefs.getInt(KhushuRestoreReceiver.KEY_DURATION_MINUTES, 30)
         val activatedAt = prefs.getLong(KhushuRestoreReceiver.KEY_ACTIVATED_AT, 0L)
@@ -179,8 +127,7 @@ class KhushuModePlugin : Plugin() {
             val leftMs = totalMs - elapsedMs
             remainingSeconds = if (leftMs > 0L) (leftMs / 1000L).toInt() else 0
             if (leftMs <= 0L) {
-                // Time has passed, ensure restored
-                restoreOriginalStateNow()
+                KhushuRestoreReceiver.restoreOriginalState(context)
             }
         }
 
@@ -191,71 +138,5 @@ class KhushuModePlugin : Plugin() {
         ret.put("remainingSeconds", remainingSeconds)
         ret.put("hasPermission", hasPermission)
         call.resolve(ret)
-    }
-
-    private fun scheduleRestoreAlarm(durationMinutes: Int) {
-        val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
-            action = KhushuRestoreReceiver.ACTION_RESTORE_KHUSHU
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            KhushuRestoreReceiver.KHUSHU_RESTORE_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val triggerAt = System.currentTimeMillis() + (durationMinutes * 60_000L)
-
-        if (alarmManager != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager?.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-            } else {
-                alarmManager?.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-            }
-            Log.d(TAG, "Scheduled Khushu restore alarm in $durationMinutes minutes with requestCode ${KhushuRestoreReceiver.KHUSHU_RESTORE_REQUEST_CODE}")
-        }
-    }
-
-    private fun cancelRestoreAlarm() {
-        val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
-            action = KhushuRestoreReceiver.ACTION_RESTORE_KHUSHU
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            KhushuRestoreReceiver.KHUSHU_RESTORE_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
-        if (pendingIntent != null && alarmManager != null) {
-            alarmManager?.cancel(pendingIntent)
-            pendingIntent.cancel()
-            Log.d(TAG, "Cancelled Khushu restore alarm")
-        }
-    }
-
-    private fun restoreOriginalStateNow() {
-        val originalFilter = prefs.getInt(KhushuRestoreReceiver.KEY_ORIGINAL_FILTER, NotificationManager.INTERRUPTION_FILTER_ALL)
-        val originalRinger = prefs.getInt(KhushuRestoreReceiver.KEY_ORIGINAL_RINGER, AudioManager.RINGER_MODE_NORMAL)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                if (notificationManager?.isNotificationPolicyAccessGranted == true) {
-                    notificationManager?.setInterruptionFilter(originalFilter)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed restoring interruption filter in plugin", e)
-            }
-        }
-
-        try {
-            audioManager?.ringerMode = originalRinger
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed restoring ringer mode in plugin", e)
-        }
-
-        prefs.edit()
-            .putBoolean(KhushuRestoreReceiver.KEY_IS_ACTIVE, false)
-            .putLong(KhushuRestoreReceiver.KEY_ACTIVATED_AT, 0L)
-            .putInt(KhushuRestoreReceiver.KEY_DURATION_MINUTES, 0)
-            .apply()
     }
 }

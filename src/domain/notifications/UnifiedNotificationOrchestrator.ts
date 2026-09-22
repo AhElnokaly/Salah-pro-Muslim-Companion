@@ -12,7 +12,7 @@ import { AlarmIdentifier } from './AlarmIdentifier';
 import { NotificationScheduler } from '../../services/NotificationScheduler';
 import { syncPrayerScheduleWithSW, getPushSettings } from '../../utils/pushNotificationService';
 import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
-import { AppSettings, PrayerTimes } from '../../types';
+import { AppSettings, PrayerTimes, AlarmConfig } from '../../types';
 import { KhushuStorage } from '../khushu/khushuStorage';
 import AthanAlarm, {
   PrayerTimeAlarm,
@@ -46,7 +46,8 @@ export class UnifiedNotificationOrchestrator {
    */
   static async orchestratePrayerAlarms(
     settings: AppSettings,
-    days60List: DailyPrayerTimesEntry[]
+    days60List: DailyPrayerTimesEntry[],
+    customAlarms?: AlarmConfig[]
   ): Promise<OrchestrationResult> {
     let webSynced = false;
     let scheduledCount = 0;
@@ -70,7 +71,19 @@ export class UnifiedNotificationOrchestrator {
         const pushSettings = getPushSettings();
         const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
         const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+        const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? true;
+        const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
         const khushuSettings = KhushuStorage.getSettings();
+
+        let resolvedCustomAlarms = customAlarms;
+        if (!resolvedCustomAlarms && typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('salah_custom_alarms');
+            if (raw) resolvedCustomAlarms = JSON.parse(raw);
+          } catch (e) {
+            console.warn('[NotificationOrchestrator] Error reading custom alarms:', e);
+          }
+        }
 
         scheduledCount = await scheduleNativeAthanAlarms(days60List, undefined, {
           lat: settings.latitude,
@@ -85,8 +98,11 @@ export class UnifiedNotificationOrchestrator {
           ishaOffset: settings.prayerOffsets?.Isha || 0,
           prayerPreAlert: preAlertEnabled,
           preAlertMinutes: preAlertMins,
+          prayerPostAlert: postAlertEnabled,
+          postAlertMinutes: postAlertMins,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuSettings,
+          customAlarms: resolvedCustomAlarms,
         });
 
         // 3. Update Native Android Widget
@@ -152,6 +168,8 @@ export class UnifiedNotificationOrchestrator {
       const pushSettings = getPushSettings();
       const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
       const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+      const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? true;
+      const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
       const khushuSettings = KhushuStorage.getSettings();
 
       for (const key of keys) {
@@ -187,6 +205,20 @@ export class UnifiedNotificationOrchestrator {
           }
         }
 
+        // Post-alert worship & adhkar reminder after prayer time (excluding sunrise)
+        if (postAlertEnabled && key !== 'Sunrise') {
+          const postAlertTimeMs = triggerDate.getTime() + postAlertMins * 60000;
+          if (postAlertTimeMs > Date.now()) {
+            nativeAlarmsToSchedule.push({
+              prayerKey: `${key}_postalert`,
+              prayerName: key,
+              timeMs: postAlertTimeMs,
+              isFajr: key === 'Fajr',
+              alarmType: 'postalert',
+            });
+          }
+        }
+
         // Auto Khushu alarm at Iqama moment (excluding sunrise)
         if (khushuSettings.autoWithIqama && key !== 'Sunrise') {
           const lowerKey = key.toLowerCase();
@@ -217,7 +249,10 @@ export class UnifiedNotificationOrchestrator {
           times: nativeAlarmsToSchedule,
           prayerPreAlert: preAlertEnabled,
           preAlertMinutes: preAlertMins,
+          prayerPostAlert: postAlertEnabled,
+          postAlertMinutes: postAlertMins,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
+          khushuMode: khushuSettings.preferredMode || 'silent',
         });
         nativeScheduledCount = res.scheduledCount;
       }

@@ -27,6 +27,9 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 const rootElement = document.getElementById('root');
 if (rootElement) {
   try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.removeItem('boot_retry_count');
+    }
     createRoot(rootElement).render(
       <StrictMode>
         <ErrorBoundary>

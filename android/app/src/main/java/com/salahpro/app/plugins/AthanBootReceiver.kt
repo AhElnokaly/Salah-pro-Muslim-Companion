@@ -24,6 +24,24 @@ class AthanBootReceiver : BroadcastReceiver() {
             action == "android.intent.action.QUICKBOOT_POWERON") {
 
             restoreAlarms(context)
+            restoreKhushuState(context)
+        }
+    }
+
+    private fun restoreKhushuState(context: Context) {
+        try {
+            if (KhushuRestoreReceiver.isKhushuActive(context)) {
+                val remainingMins = KhushuRestoreReceiver.getRemainingMinutes(context)
+                if (remainingMins > 0) {
+                    Log.d(TAG, "Khushu mode still active after boot, rescheduling restore in $remainingMins minutes")
+                    KhushuRestoreReceiver.scheduleRestoreAlarm(context, remainingMins)
+                } else {
+                    Log.d(TAG, "Khushu mode expired during reboot, restoring original sound state now")
+                    KhushuRestoreReceiver.restoreOriginalState(context)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed handling Khushu state on boot", e)
         }
     }
 

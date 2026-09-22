@@ -5,6 +5,8 @@
  */
 
 import { APP_VERSION } from '../version';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 
 export interface AppReleaseInfo {
   tagName: string;
@@ -29,6 +31,20 @@ export interface UpdateCheckResult {
 export const DEFAULT_GITHUB_REPO = 'AhElnokaly/Salah-pro-Muslim-Companion';
 const STORAGE_LAST_CHECK_KEY = 'hemmaty_last_update_check_v1';
 const THROTTLE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+export async function getCurrentAppVersion(): Promise<string> {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      const info = await CapacitorApp.getInfo();
+      if (info?.version) {
+        return info.version;
+      }
+    }
+  } catch {
+    // Fallback to JS config
+  }
+  return APP_VERSION.version;
+}
 
 /**
  * Strips 'v' prefix and compares two semantic version strings.
@@ -74,7 +90,7 @@ export async function checkForAppUpdates(options?: {
   repo?: string;
 }): Promise<UpdateCheckResult> {
   const repo = options?.repo || DEFAULT_GITHUB_REPO;
-  const currentVersion = APP_VERSION.version;
+  const currentVersion = await getCurrentAppVersion();
   const now = Date.now();
 
   // Check throttle unless forced

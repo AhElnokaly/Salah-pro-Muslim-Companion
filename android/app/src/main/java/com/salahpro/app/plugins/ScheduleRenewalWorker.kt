@@ -85,7 +85,10 @@ class ScheduleRenewalWorker(
 
                     val prayerPreAlert = prefs.getBoolean("prayerPreAlert", false)
                     val preAlertMinutes = prefs.getInt("preAlertMinutes", 15)
+                    val prayerPostAlert = prefs.getBoolean("prayerPostAlert", false)
+                    val postAlertMinutes = prefs.getInt("postAlertMinutes", 15)
                     val khushuAutoWithIqama = prefs.getBoolean("khushuAutoWithIqama", false)
+                    val khushuMode = prefs.getString("khushuMode", "silent") ?: "silent"
 
                     for (p in prayers) {
                         if (p.third > now) {
@@ -118,6 +121,23 @@ class ScheduleRenewalWorker(
                             }
                         }
 
+                        if (prayerPostAlert) {
+                            val postTimeMs = p.third + postAlertMinutes * 60000L
+                            if (postTimeMs > now) {
+                                val postExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - postTimeMs) < 60000L && it.optString("prayerKey").contains("postalert") }
+                                if (!postExists) {
+                                    val postObj = JSONObject()
+                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_postalert"
+                                    postObj.put("prayerKey", canonicalKey)
+                                    postObj.put("prayerName", p.second)
+                                    postObj.put("timeMs", postTimeMs)
+                                    postObj.put("isFajr", p.first == "fajr")
+                                    postObj.put("alarmType", "postalert")
+                                    updatedList.add(postObj)
+                                }
+                            }
+                        }
+
                         if (khushuAutoWithIqama) {
                             val iqamaOffset = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 25L else 15L
                             val durationMinutes = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 45 else 15
@@ -133,7 +153,7 @@ class ScheduleRenewalWorker(
                                     khushuObj.put("isFajr", p.first == "fajr")
                                     khushuObj.put("alarmType", "khushu")
                                     khushuObj.put("durationMinutes", durationMinutes)
-                                    khushuObj.put("khushuMode", "silent")
+                                    khushuObj.put("khushuMode", khushuMode)
                                     updatedList.add(khushuObj)
                                 }
                             }

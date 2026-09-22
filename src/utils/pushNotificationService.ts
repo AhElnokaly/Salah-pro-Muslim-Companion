@@ -12,6 +12,8 @@ export interface PushNotificationSettings {
   prayerAthan: boolean;
   prayerPreAlert: boolean;
   preAlertMinutes: number; // e.g., 10 or 15 mins before Athan
+  prayerPostAlert: boolean;
+  postAlertMinutes: number; // e.g., 15 or 20 mins after Athan
   adhkarMorning: boolean;
   morningTime: string; // "07:00"
   adhkarEvening: boolean;
@@ -33,6 +35,8 @@ export const DEFAULT_PUSH_SETTINGS: PushNotificationSettings = {
   prayerAthan: true,
   prayerPreAlert: true,
   preAlertMinutes: 15,
+  prayerPostAlert: true,
+  postAlertMinutes: 15,
   adhkarMorning: true,
   morningTime: '07:00',
   adhkarEvening: true,

@@ -61,11 +61,11 @@ describe('GitHub UpdateChecker Engine', () => {
 
     it('successfully parses newer release with APK download link', async () => {
       const fakeRelease = {
-        tag_name: 'v1.1.0',
+        tag_name: 'v1.2.0',
         name: 'هِمَّتِي - التحديث الرمضاني المبارك',
         body: '- إضافة ميزة مواقيت الإمساك\n- تحسين سرعة الويدجت',
         published_at: '2026-09-08T10:00:00Z',
-        html_url: 'https://github.com/AhElnokaly/Salah-pro-Muslim-Companion/releases/tag/v1.1.0',
+        html_url: 'https://github.com/AhElnokaly/Salah-pro-Muslim-Companion/releases/tag/v1.2.0',
         assets: [
           {
             name: 'app-release-signed.apk',
@@ -84,7 +84,7 @@ describe('GitHub UpdateChecker Engine', () => {
       try {
         const result = await checkForAppUpdates({ force: true, repo: DEFAULT_GITHUB_REPO });
         assert.strictEqual(result.hasUpdate, true);
-        assert.strictEqual(result.latestRelease?.version, '1.1.0');
+        assert.strictEqual(result.latestRelease?.version, '1.2.0');
         assert.strictEqual(result.latestRelease?.apkDownloadUrl, 'https://github.com/downloads/app-release-signed.apk');
         assert.strictEqual(result.latestRelease?.apkFileName, 'app-release-signed.apk');
         assert.strictEqual(result.latestRelease?.apkSizeFormatted, '20.0 ميجابايت');

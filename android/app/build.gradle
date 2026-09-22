@@ -14,8 +14,8 @@ android {
     namespace = "com.salahpro.app"
     compileSdk = rootProject.ext.compileSdkVersion
 
-    def defaultVersionCode = 109
-    def defaultVersionName = "1.0.9"
+    def defaultVersionCode = 110
+    def defaultVersionName = "1.1.0"
 
     def appVersionCode = project.hasProperty('appVersionCode') ?
         project.property('appVersionCode').toString().toInteger() :

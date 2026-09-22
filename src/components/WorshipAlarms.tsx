@@ -88,6 +88,7 @@ export default function WorshipAlarms({
     setCustomAlarms(prev => {
       const next = prev.map(a => a.id === id ? { ...a, enabled } : a);
       safeSetItem('salah_custom_alarms', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
       return next;
     });
   };
@@ -109,6 +110,7 @@ export default function WorshipAlarms({
         ? prev.map(a => a.id === savedAlarm.id ? savedAlarm : a)
         : [...prev, savedAlarm];
       safeSetItem('salah_custom_alarms', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
       return next;
     });
   };
@@ -125,6 +127,7 @@ export default function WorshipAlarms({
       setCustomAlarms(prev => {
         const next = prev.filter(a => a.id !== alarmToDelete.id);
         safeSetItem('salah_custom_alarms', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
         return next;
       });
       setAlarmToDelete(null);
@@ -134,6 +137,7 @@ export default function WorshipAlarms({
   const handleRestoreDefaults = () => {
     setCustomAlarms(DEFAULT_WORSHIP_ALARMS);
     safeSetItem('salah_custom_alarms', JSON.stringify(DEFAULT_WORSHIP_ALARMS));
+    window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: DEFAULT_WORSHIP_ALARMS }));
     setShowRestoreConfirm(false);
   };
 

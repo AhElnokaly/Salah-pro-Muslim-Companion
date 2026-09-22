@@ -29,6 +29,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
         const val KEY_DURATION_MINUTES = "khushu_duration_minutes"
         const val KEY_MODE = "khushu_mode"
         const val KHUSHU_RESTORE_REQUEST_CODE = 998877 // Constant, deterministic request code (No index collision)
+        const val KHUSHU_NOTIFICATION_ID = 8888 // Fixed notification ID for Khushu status
 
         fun isKhushuActive(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -122,19 +123,37 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                     .apply()
             }
 
-            // 2. Apply silence / DND
-            if (mode == "dnd" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notificationManager?.isNotificationPolicyAccessGranted == true) {
-                try {
-                    notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
-                } catch (e: Exception) {
-                    audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-                }
+            // 2. Apply silence / DND with graceful fallbacks
+            val hasDndPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.isNotificationPolicyAccessGranted == true
             } else {
+                true
+            }
+
+            if (mode == "dnd" && hasDndPermission) {
                 try {
-                    audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+                        Log.d(TAG, "DND interruption filter set to NONE")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error setting silent ringer mode", e)
+                    Log.w(TAG, "Error setting DND interruption filter", e)
                 }
+            }
+
+            // Always silence ringer, falling back to Vibrate if Android throws SecurityException
+            try {
+                audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+                Log.d(TAG, "Ringer mode set to RINGER_MODE_SILENT")
+            } catch (se: SecurityException) {
+                Log.w(TAG, "RINGER_MODE_SILENT requires DND access. Falling back to RINGER_MODE_VIBRATE", se)
+                try {
+                    audioManager?.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                } catch (ve: Exception) {
+                    Log.e(TAG, "Failed setting ringer mode to vibrate", ve)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting silent ringer mode", e)
             }
 
             // 3. Save active state
@@ -202,7 +221,15 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             cancelRestoreAlarm(context)
             Log.d(TAG, "Khushu mode successfully deactivated and marked inactive")
 
-            // 4. Update Widgets
+            // 4. Dismiss Khushu status notification
+            try {
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                notificationManager?.cancel(KHUSHU_NOTIFICATION_ID)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed cancelling Khushu notification", e)
+            }
+
+            // 5. Update Widgets
             SalahWidgetProvider.updateAllWidgets(context)
         }
     }

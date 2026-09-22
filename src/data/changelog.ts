@@ -18,11 +18,22 @@ export interface ReleaseNote {
 
 export const RELEASE_HISTORY: ReleaseNote[] = [
   {
+    version: '1.1.0',
+    buildNumber: 110,
+    date: '22 سبتمبر 2026',
+    title: 'تكامل المنبهات المخصصة على مستوى النظام والعداد الحي الدقيق للصلاة',
+    isCurrent: true,
+    highlights: [
+      { category: 'feature', text: 'ربط المنبهات المخصصة (الثابتة والمرتبطة بالصلوات) بنظام AlarmManager الأصلي لأندرويد مع خيارات الصوت والاهتزاز والخشوع التلقائي' },
+      { category: 'fix', text: 'معالجة تجمد عداد الوقت المتبقي في إشعار الصلاة الحي عند إغلاق التطبيق عبر العداد الأصلي المباشر (Native Chronometer)' },
+      { category: 'improvement', text: 'تزامن فوري للمنبهات المخصصة والتنبيهات الروحية بمجرد التعديل أو الحذف دون الحاجة لإعادة تشغيل التطبيق' }
+    ]
+  },
+  {
     version: '1.0.9',
     buildNumber: 109,
     date: '20 سبتمبر 2026',
     title: 'تحديث الخشوع التلقائي مع الإقامة وتخصيص الويدجت الشامل',
-    isCurrent: true,
     highlights: [
       { category: 'feature', text: 'تفعيل وضع الخشوع التلقائي مع موعد الإقامة لإسكات الهاتف أثناء الصلاة واستعادة وضع الرنين تلقائياً عبر المنبه الدقيق' },
       { category: 'feature', text: 'تخصيص كامل لويدجت الشاشة الرئيسية (6 سمات لونية فاخرة، التحكم في ظهور العناصر، ومزامنة فورية بنقرة واحدة)' },
@@ -96,9 +107,37 @@ export const CURRENT_RELEASE = RELEASE_HISTORY[0];
 
 const STORAGE_KEY = 'hemmaty_last_seen_version';
 
+export function compareSemverVersions(v1: string, v2: string): number {
+  const clean1 = v1.trim().replace(/^v/i, '');
+  const clean2 = v2.trim().replace(/^v/i, '');
+
+  const parts1 = clean1.split(/[.-]/).map(p => {
+    const num = parseInt(p, 10);
+    return isNaN(num) ? 0 : num;
+  });
+  const parts2 = clean2.split(/[.-]/).map(p => {
+    const num = parseInt(p, 10);
+    return isNaN(num) ? 0 : num;
+  });
+
+  const maxLen = Math.max(parts1.length, parts2.length);
+  for (let i = 0; i < maxLen; i++) {
+    const num1 = parts1[i] ?? 0;
+    const num2 = parts2[i] ?? 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
 export function getUnreadVersionStatus(): { isNew: boolean; lastSeenVersion: string | null } {
   const lastSeen = safeGetItem(STORAGE_KEY);
-  const isNew = lastSeen !== CURRENT_RELEASE.version;
+  if (!lastSeen) {
+    // First launch of fresh install: record current version so user is not prompted for the version they just installed
+    safeSetItem(STORAGE_KEY, CURRENT_RELEASE.version);
+    return { isNew: false, lastSeenVersion: CURRENT_RELEASE.version };
+  }
+  const isNew = compareSemverVersions(CURRENT_RELEASE.version, lastSeen) > 0;
   return { isNew, lastSeenVersion: lastSeen };
 }
 

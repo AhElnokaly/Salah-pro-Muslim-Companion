@@ -14,6 +14,7 @@ import { getSurahForPage } from '../../data/quranSurahPageRanges';
 import { SURAHS_LIST } from '../../data/quranData';
 import { sendPushNotification } from '../../utils/pushNotificationService';
 import { safeGetJSON, safeSetJSON } from '../../utils/storage';
+import { Capacitor } from '@capacitor/core';
 import AthanAlarm from '../../services/athanAlarmPlugin';
 
 export const SMART_NOTIFICATIONS_STORAGE_KEY = 'hemmaty_smart_notifications_config';
@@ -298,12 +299,20 @@ export async function dispatchSmartNotification(
         targetUrl = './?tab=times';
         targetTab = 'times';
 
-        if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform() && AthanAlarm.updateOngoingPrayerNotification) {
+        const isNative = Capacitor.isNativePlatform() || (typeof window !== 'undefined' && Boolean((window as any).Capacitor?.isNativePlatform()));
+        if (isNative && AthanAlarm.updateOngoingPrayerNotification) {
           try {
+            const nativeTitle = barData.isPrayerDue 
+              ? `🕌 حان الآن موعد صلاة ${barData.prayerName}`
+              : `🕌 صلاة ${barData.prayerName}: ${barData.prayerTimeFormatted}`;
+            const nativeBody = barData.isPrayerDue
+              ? `حي على الصلاة • حي على الفلاح${barData.locationAndDate ? `  |  📍 ${barData.locationAndDate}` : ''}`
+              : (barData.locationAndDate ? `📍 ${barData.locationAndDate}` : 'هِمَّتِي — رفيقك اليومي للعبادة');
+
             await AthanAlarm.updateOngoingPrayerNotification({
               enabled: settings.ongoingPrayerBar.enabled,
-              title,
-              body,
+              title: nativeTitle,
+              body: nativeBody,
               targetTimestamp: contextData.targetTimestamp,
             });
             return true;
@@ -312,7 +321,9 @@ export async function dispatchSmartNotification(
             return false;
           }
         }
-        break;
+        // Ongoing prayer bar is exclusively managed via the sticky native notification on mobile.
+        // Never fall through to generic sendPushNotification to avoid notification spam.
+        return true;
       }
       case 'reading': {
         const reading = getReadingPortionInfo(settings.readingPortion);
@@ -350,7 +361,7 @@ export async function dispatchSmartNotification(
       badge: '/images/logo.png',
       url: targetUrl,
       data: { url: targetUrl, tab: targetTab },
-      silent: type === 'ongoing_prayer',
+      silent: false,
       renotify: false,
       actions: [
         { action: 'open_times', title: '🕌 المواقيت' },

@@ -109,8 +109,9 @@ class SalahWidgetProvider : AppWidgetProvider() {
             var nextPrayerTime = "12:54 م"
             var remainingText = "⏳ متبقي: باقي ١ س و ١٢ د"
             var progressPercent = 80
-            var activePrayer = "dhuhr" // fajr, dhuhr, asr, maghrib, isha
+            var activePrayer = "dhuhr" // fajr, sunrise, dhuhr, asr, maghrib, isha
             var fajr = "05:18 ص"
+            var sunrise = "06:40 ص"
             var dhuhr = "12:54 م"
             var asr = "04:23 م"
             var maghrib = "07:02 م"
@@ -143,6 +144,7 @@ class SalahWidgetProvider : AppWidgetProvider() {
                     progressPercent = json.optInt("progressPercent", progressPercent)
                     activePrayer = json.optString("activePrayer", json.optString("nextPrayer", "dhuhr")).lowercase()
                     fajr = json.optString("fajr", fajr)
+                    sunrise = json.optString("sunrise", sunrise)
                     dhuhr = json.optString("dhuhr", dhuhr)
                     asr = json.optString("asr", asr)
                     maghrib = json.optString("maghrib", maghrib)
@@ -175,12 +177,18 @@ class SalahWidgetProvider : AppWidgetProvider() {
             val isDaytime = hour in 6..17
 
             val bgResId = when (widgetTheme.lowercase()) {
-                "green" -> R.drawable.widget_card_bg_green
-                "gold" -> R.drawable.widget_card_bg_gold
-                "amber" -> R.drawable.widget_card_bg_amber
-                "onyx" -> R.drawable.widget_card_bg_onyx
-                "teal" -> R.drawable.widget_card_bg_teal
-                "dark-blue", "dark_blue" -> R.drawable.widget_card_bg_dark_blue
+                "green", "emerald", "emerald_royal" -> R.drawable.widget_card_bg_green
+                "gold", "gold_luxury" -> R.drawable.widget_card_bg_gold
+                "amber", "sunset_amber" -> R.drawable.widget_card_bg_amber
+                "onyx", "dark_onyx" -> R.drawable.widget_card_bg_onyx
+                "teal", "cyan_dome" -> R.drawable.widget_card_bg_teal
+                "dark-blue", "dark_blue", "velvet_night" -> R.drawable.widget_card_bg_dark_blue
+                "glass" -> R.drawable.widget_card_bg
+                "day", "pure_light" -> R.drawable.widget_card_bg_day
+                "night" -> R.drawable.widget_card_bg_night
+                "fajr" -> R.drawable.widget_card_bg_fajr
+                "sunset" -> R.drawable.widget_card_bg_sunset
+                "friday" -> R.drawable.widget_card_bg_friday
                 else -> {
                     // "auto" or dynamic time-of-day
                     when {
@@ -235,6 +243,7 @@ class SalahWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_prayers_grid, if (isAllPrayersVisible) View.VISIBLE else View.GONE)
 
             views.setTextViewText(R.id.widget_time_fajr, fajr)
+            views.setTextViewText(R.id.widget_time_sunrise, sunrise)
             views.setTextViewText(R.id.widget_time_dhuhr, dhuhr)
             views.setTextViewText(R.id.widget_time_asr, asr)
             views.setTextViewText(R.id.widget_time_maghrib, maghrib)
@@ -243,9 +252,10 @@ class SalahWidgetProvider : AppWidgetProvider() {
             val dhuhrLabel = if (isJumuah) "الجمعة" else "الظهر"
             views.setTextViewText(R.id.text_dhuhr_name, dhuhrLabel)
 
-            // Highlight Active Prayer Cell in Gold and rest in normal dark
+            // Highlight Active Prayer Cell in Gold/white and rest in translucent dark
             val prayers = listOf(
                 PrayerCellInfo("fajr", R.id.cell_fajr, R.id.text_fajr_name, R.id.widget_time_fajr),
+                PrayerCellInfo("sunrise", R.id.cell_sunrise, R.id.text_sunrise_name, R.id.widget_time_sunrise),
                 PrayerCellInfo("dhuhr", R.id.cell_dhuhr, R.id.text_dhuhr_name, R.id.widget_time_dhuhr),
                 PrayerCellInfo("asr", R.id.cell_asr, R.id.text_asr_name, R.id.widget_time_asr),
                 PrayerCellInfo("maghrib", R.id.cell_maghrib, R.id.text_maghrib_name, R.id.widget_time_maghrib),

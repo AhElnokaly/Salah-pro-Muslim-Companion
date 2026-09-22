@@ -187,6 +187,71 @@ export function useWidgetSimulatorLogic({
   const currentMonthName = hijri?.monthName || 'شوال';
   const currentYear = hijri?.year || 1448;
 
+  // Auto-sync widget settings whenever options change
+  useEffect(() => {
+    const pinned = {
+      type: widgetType,
+      theme: widgetTheme,
+      wallpaper: activeWallpaper,
+      clockStyle,
+      showMoonPhase,
+      prayerDisplay,
+      showDate,
+      showDhikr,
+      showAyah,
+      showQibla,
+      showSubhaBtn,
+      showProgressBar,
+      cardSize,
+      showKhushuBtn,
+    };
+
+    if (setSettings) {
+      setSettings((prev) => {
+        if (JSON.stringify(prev.pinnedWidget) === JSON.stringify(pinned)) return prev;
+        return {
+          ...prev,
+          pinnedWidget: pinned,
+        };
+      });
+    }
+
+    if (prayerTimes) {
+      const timer = setTimeout(() => {
+        updateNativeWidgetData(prayerTimes, settings?.cityName || 'مواقيت الصلاة', {
+          theme: widgetTheme,
+          widgetTheme,
+          clockStyle,
+          showMoonPhase,
+          prayerDisplay,
+          showDate,
+          showDhikr,
+          showSubhaBtn,
+          showKhushuBtn,
+          showProgressBar,
+          cardSize,
+          pinnedWidget: pinned,
+        }).catch(() => {});
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    widgetType,
+    widgetTheme,
+    activeWallpaper,
+    clockStyle,
+    showMoonPhase,
+    prayerDisplay,
+    showDate,
+    showDhikr,
+    showAyah,
+    showQibla,
+    showSubhaBtn,
+    showProgressBar,
+    cardSize,
+    showKhushuBtn,
+  ]);
+
   // Pin Widget configuration to local settings and sync to native Android Widget
   const handlePinWidget = () => {
     const pinned = {

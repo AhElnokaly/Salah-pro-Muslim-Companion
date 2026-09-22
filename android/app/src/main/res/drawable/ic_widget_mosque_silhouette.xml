@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="800dp"
+    android:height="240dp"
+    android:viewportWidth="800"
+    android:viewportHeight="240">
+
+    <!-- Subtle Twinkling Stars -->
+    <path
+        android:fillColor="#35FFFFFF"
+        android:pathData="M80,30 l2,5 l5,2 l-5,2 l-2,5 l-2,-5 l-5,-2 l5,-2 Z
+                          M180,50 l1.5,3 l3,1.5 l-3,1.5 l-1.5,3 l-1.5,-3 l-3,-1.5 l3,-1.5 Z
+                          M320,25 l2,5 l5,2 l-5,2 l-2,5 l-2,-5 l-5,-2 l5,-2 Z
+                          M480,35 l2,5 l5,2 l-5,2 l-2,5 l-2,-5 l-5,-2 l5,-2 Z
+                          M640,20 l2,5 l5,2 l-5,2 l-2,5 l-2,-5 l-5,-2 l5,-2 Z
+                          M720,55 l1.5,3 l3,1.5 l-3,1.5 l-1.5,3 l-1.5,-3 l-3,-1.5 l3,-1.5 Z" />
+
+    <!-- Crescent Moon in Sky -->
+    <path
+        android:fillColor="#25FCD34D"
+        android:strokeColor="#40FCD34D"
+        android:strokeWidth="1.2"
+        android:pathData="M680,25 A 14,14 0 1,1 666,39 A 11,11 0 1,0 680,25 Z" />
+
+    <!-- Mosque Architectural Base Line -->
+    <path
+        android:strokeColor="#30FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M0,238 L800,238" />
+
+    <!-- Left Minaret -->
+    <!-- Minaret Shaft -->
+    <path
+        android:fillColor="#15FFFFFF"
+        android:strokeColor="#35FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M110,238 L110,95 L128,95 L128,238 Z" />
+    <!-- Minaret Balcony -->
+    <path
+        android:fillColor="#25FFFFFF"
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M104,95 L134,95 L132,85 L106,85 Z" />
+    <!-- Minaret Spire & Crescent -->
+    <path
+        android:fillColor="#20FFFFFF"
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M108,85 L119,45 L130,85 Z
+                          M119,45 L119,30" />
+    <path
+        android:fillColor="#35FCD34D"
+        android:pathData="M119,30 A 3,3 0 1,1 116,33 A 2.2,2.2 0 1,0 119,30 Z" />
+
+    <!-- Left Sub-Dome -->
+    <path
+        android:fillColor="#15FFFFFF"
+        android:strokeColor="#35FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M220,238 L220,165 Q220,115 260,110 Q300,115 300,165 L300,238 Z" />
+    <!-- Left Dome Finial -->
+    <path
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M260,110 L260,96" />
+
+    <!-- GRAND CENTRAL DOME -->
+    <path
+        android:fillColor="#20FFFFFF"
+        android:strokeColor="#50FCD34D"
+        android:strokeWidth="1.6"
+        android:pathData="M340,238 L340,140 Q335,65 400,45 Q465,65 460,140 L460,238 Z" />
+    <!-- Central Dome Crescent & Spire -->
+    <path
+        android:strokeColor="#60FCD34D"
+        android:strokeWidth="1.8"
+        android:pathData="M400,45 L400,22" />
+    <path
+        android:fillColor="#60FCD34D"
+        android:pathData="M400,22 A 4.5,4.5 0 1,1 395.5,26.5 A 3.3,3.3 0 1,0 400,22 Z" />
+
+    <!-- Right Sub-Dome -->
+    <path
+        android:fillColor="#15FFFFFF"
+        android:strokeColor="#35FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M500,238 L500,165 Q500,115 540,110 Q580,115 580,165 L580,238 Z" />
+    <!-- Right Dome Finial -->
+    <path
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M540,110 L540,96" />
+
+    <!-- Right Minaret -->
+    <!-- Minaret Shaft -->
+    <path
+        android:fillColor="#15FFFFFF"
+        android:strokeColor="#35FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M672,238 L672,95 L690,95 L690,238 Z" />
+    <!-- Minaret Balcony -->
+    <path
+        android:fillColor="#25FFFFFF"
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M666,95 L696,95 L694,85 L668,85 Z" />
+    <!-- Minaret Spire & Crescent -->
+    <path
+        android:fillColor="#20FFFFFF"
+        android:strokeColor="#40FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M670,85 L681,45 L692,85 Z
+                          M681,45 L681,30" />
+    <path
+        android:fillColor="#35FCD34D"
+        android:pathData="M681,30 A 3,3 0 1,1 678,33 A 2.2,2.2 0 1,0 681,30 Z" />
+
+    <!-- Central Illuminated Arch Gate (Entrance) -->
+    <path
+        android:fillColor="#25FCD34D"
+        android:strokeColor="#60FCD34D"
+        android:strokeWidth="1.4"
+        android:pathData="M375,238 L375,195 Q375,170 400,170 Q425,170 425,195 L425,238 Z" />
+
+</vector>

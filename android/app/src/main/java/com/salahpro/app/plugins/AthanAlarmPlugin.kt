@@ -63,12 +63,19 @@ class AthanAlarmPlugin : Plugin() {
             timeMs: Long = 0L,
             alarmType: String = "",
             durationMinutes: Int = 15,
-            khushuMode: String = "silent"
+            khushuMode: String = "silent",
+            soundType: String = "takbeer",
+            notifyMode: String = "both",
+            autoKhushu: Boolean = false
         ): Intent {
             val resolvedType = if (alarmType.isNotEmpty()) {
                 alarmType
+            } else if (prayerKey.startsWith("custom_")) {
+                "custom"
             } else if (prayerKey.contains("prealert")) {
                 "prealert"
+            } else if (prayerKey.contains("postalert") || prayerKey.contains("worship")) {
+                "postalert"
             } else if (prayerKey.contains("khushu")) {
                 "khushu"
             } else {
@@ -83,6 +90,9 @@ class AthanAlarmPlugin : Plugin() {
                 putExtra(AthanAlarmReceiver.EXTRA_ALARM_TYPE, resolvedType)
                 putExtra(AthanAlarmReceiver.EXTRA_DURATION_MINUTES, durationMinutes)
                 putExtra(AthanAlarmReceiver.EXTRA_KHUSHU_MODE, khushuMode)
+                putExtra("soundType", soundType)
+                putExtra("notifyMode", notifyMode)
+                putExtra("autoKhushu", autoKhushu)
             }
         }
 
@@ -183,9 +193,12 @@ class AthanAlarmPlugin : Plugin() {
                 val prayerName = item.optString("prayerName", "الصلاة")
                 val isFajr = item.optBoolean("isFajr", false)
                 val prayerKey = item.optString("prayerKey", "")
-                val alarmType = item.optString("alarmType", if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("khushu")) "khushu" else "athan")
+                val alarmType = item.optString("alarmType", if (prayerKey.startsWith("custom_")) "custom" else if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("khushu")) "khushu" else "athan")
                 val durationMinutes = item.optInt("durationMinutes", 15)
                 val khushuMode = item.optString("khushuMode", "silent")
+                val soundType = item.optString("soundType", "takbeer")
+                val notifyMode = item.optString("notifyMode", "both")
+                val autoKhushu = item.optBoolean("autoKhushu", false)
 
                 newSavedAlarms.put(item)
 
@@ -203,7 +216,10 @@ class AthanAlarmPlugin : Plugin() {
                             timeMs = timeMs,
                             alarmType = alarmType,
                             durationMinutes = durationMinutes,
-                            khushuMode = khushuMode
+                            khushuMode = khushuMode,
+                            soundType = soundType,
+                            notifyMode = notifyMode,
+                            autoKhushu = autoKhushu
                         )
                         val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -584,6 +600,9 @@ class AthanAlarmPlugin : Plugin() {
 
         val notificationId = 888801
 
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("ongoing_prayer_bar_enabled", enabled).apply()
+
         if (!enabled) {
             notificationManager.cancel(notificationId)
             val res = JSObject()
@@ -617,6 +636,7 @@ class AthanAlarmPlugin : Plugin() {
                 .setShowWhen(true)
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)
+                .setSubText("الوقت المتبقي")
         }
 
         if (pIntent != null) {
@@ -700,8 +720,17 @@ class AthanAlarmPlugin : Plugin() {
         if (call.hasOption("preAlertMinutes")) {
             editor.putInt("preAlertMinutes", call.getInt("preAlertMinutes", 15) ?: 15)
         }
+        if (call.hasOption("prayerPostAlert")) {
+            editor.putBoolean("prayerPostAlert", call.getBoolean("prayerPostAlert", false) ?: false)
+        }
+        if (call.hasOption("postAlertMinutes")) {
+            editor.putInt("postAlertMinutes", call.getInt("postAlertMinutes", 15) ?: 15)
+        }
         if (call.hasOption("khushuAutoWithIqama")) {
             editor.putBoolean("khushuAutoWithIqama", call.getBoolean("khushuAutoWithIqama", false) ?: false)
+        }
+        if (call.hasOption("khushuMode")) {
+            editor.putString("khushuMode", call.getString("khushuMode", "silent") ?: "silent")
         }
         editor.apply()
 

@@ -109,6 +109,24 @@ export function usePrayerScheduler({
   }, [customAlarms]);
 
   useEffect(() => {
+    const handleAlarmsChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<AlarmConfig[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setCustomAlarms(customEvent.detail);
+      } else {
+        const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
+        if (saved && Array.isArray(saved)) {
+          setCustomAlarms(saved);
+        }
+      }
+    };
+    window.addEventListener('custom-alarms-changed', handleAlarmsChanged);
+    return () => {
+      window.removeEventListener('custom-alarms-changed', handleAlarmsChanged);
+    };
+  }, []);
+
+  useEffect(() => {
     safeSetJSON('salah_alerts', alerts);
   }, [alerts]);
 
@@ -289,23 +307,31 @@ export function usePrayerScheduler({
       }
 
       if (days60List.length > 0) {
-        UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List).catch(err => {
+        UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
           console.warn('[usePrayerScheduler] Notification orchestration error:', err);
         });
 
         const handleKhushuChange = () => {
-          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List).catch(err => {
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
             console.warn('[usePrayerScheduler] Notification re-orchestration on khushu change error:', err);
           });
         };
 
+        const handleAlarmsChange = () => {
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
+            console.warn('[usePrayerScheduler] Notification re-orchestration on custom alarms change error:', err);
+          });
+        };
+
         window.addEventListener('khushu-settings-changed', handleKhushuChange);
+        window.addEventListener('custom-alarms-changed', handleAlarmsChange);
         return () => {
           window.removeEventListener('khushu-settings-changed', handleKhushuChange);
+          window.removeEventListener('custom-alarms-changed', handleAlarmsChange);
         };
       }
     }
-  }, [isLoaded, settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets, settings.cityName, checkTimesAndAlarms]);
+  }, [isLoaded, settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets, settings.cityName, checkTimesAndAlarms, customAlarms]);
 
   // Background Web Worker tick with single fallback interval (Task 2)
   useEffect(() => {

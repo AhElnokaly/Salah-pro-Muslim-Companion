@@ -58,6 +58,12 @@ Status: done
 - [x] Task 57 — [GRADLE & PROGUARD HARDENING] Comprehensive ProGuard/R8 rules for Capacitor, WorkManager, native plugins and services, Java 17 compile options, packaging exclusions, and parallel GC/VFS caching in gradle.properties — verified by AI Tester
 - [x] Task 58 — [CI/CD & WORKFLOWS OPTIMIZATION] Segregated release artifacts directly to GitHub Releases in build-release-apk.yml, integrated strict Type-Check quality gates across all pipelines and local scripts (build_apk.sh / build_apk.bat), eliminated setup-java/setup-gradle caching collision, and enforced concurrency management — verified by AI Tester
 - [x] Image Integration — [ASSET] Integrate official high-res "هِمَّتِي" logo icon across web & Android app resources — commit [Task Logos]
+- [x] Task 59 — [FEATURE/KHUSHU] Automatic Khushu mode integration with Iqama time, Android DND/Silent switching and auto-recovery timer — verified by AI Tester
+- [x] Task 60 — [FEATURE/WIDGET] Modular Home Screen Widget customization with 6 luxury color themes, visibility toggles, and instant sync — verified by AI Tester
+- [x] Task 61 — [FIX/UPDATES] Update checker logic refinement, persistent unread banner prevention, and in-app APK installer flow — verified by AI Tester
+- [x] Task 62 — [FIX/ONGOING NOTIFICATION] Resolved frozen countdown in ongoing prayer notification upon app close via clean Native Chronometer subtitle and receiver sync — verified by AI Tester
+- [x] Task 63 — [FEATURE/CUSTOM ALARMS] Full native pipeline orchestration for Custom Worship Alarms (fixed & prayer-relative) via AlarmManager with audio, vibration, and auto-khushu — verified by AI Tester
+- [x] Task 64 — [RELEASE/v1.1.0] Bumped app version to 1.1.0 (build 110) across package.json, build.gradle, and updated changelog — verified by AI Tester
 
 ## In Progress / Backlog Tasks
 - None
@@ -66,11 +72,10 @@ Status: done
 - None
 
 ## Attempt log (current task only)
-- Task 51 Release Hardening & Verification:
-  - Downloaded and installed official valid `android/gradle/wrapper/gradle-wrapper.jar` (43,583 bytes; SHA-256: `2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046`).
-  - Ran `unzip -t android/gradle/wrapper/gradle-wrapper.jar` confirming: "No errors detected in compressed data".
-  - Enforced strict `npm ci` across `.github/workflows/build-apk.yml`, `.github/workflows/build-release-apk.yml`, and `.github/workflows/deploy.yml`.
-  - Added Gradle wrapper integrity step, zipalign verification, apksigner verification, and SHA-256 checksum generation/upload in CI pipelines.
-  - Verification: `tsc --noEmit` passed with 0 errors, `compile_applet` passed, and `npx cap sync android` completed.
+- Release 1.1.0 Integration & Full Pipeline Hardening:
+  - Fixed frozen ongoing notification countdown issue.
+  - Connected custom alarms to native Android AlarmManager pipeline.
+  - Bumped version to 1.1.0 (build 110) in package.json, android/app/build.gradle, and changelog.ts.
+  - Ran `npm run test` (all 74 tests passing 100%), `npm run lint` (0 errors), `npm run build` and `npx cap sync android` successfully.
 
 
