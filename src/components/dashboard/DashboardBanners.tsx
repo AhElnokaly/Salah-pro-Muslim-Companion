@@ -28,6 +28,7 @@ interface DashboardBannersProps {
   dashboardSections: { sacredHours?: boolean; [key: string]: boolean | undefined };
   settings?: AppSettings;
   onOpenHijriAdjust?: () => void;
+  hideStandaloneActionBanners?: boolean;
 }
 
 export const DashboardBanners: React.FC<DashboardBannersProps> = ({
@@ -52,6 +53,7 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
   dashboardSections,
   settings,
   onOpenHijriAdjust,
+  hideStandaloneActionBanners = true,
 }) => {
   const yesterdayDate = subtractDays(now, 1);
   const yesterdayStr = formatDateKey(yesterdayDate);
@@ -194,7 +196,7 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
         </div>
       )}
       {/* Yesterday's Unlogged Obligatory Prayers Notice Banner */}
-      {missingPrayers.length > 0 && (
+      {missingPrayers.length > 0 && !hideStandaloneActionBanners && (
         <div 
           id="yesterday-unlogged-prayers-banner"
           className="w-full bg-amber-500/10 dark:bg-amber-950/30 border border-amber-300/50 dark:border-amber-700/40 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-xs text-right transition-all animate-fade-in"
@@ -258,7 +260,7 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
       )}
 
       {/* Travel Mode Info Banner */}
-      {!dismissedTravelBanner && (
+      {!dismissedTravelBanner && !hideStandaloneActionBanners && (
         <div className="bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs font-bold text-amber-900 dark:text-amber-200">
           <div className="flex items-center gap-2.5">
             <span className="text-base">🧳</span>
@@ -277,7 +279,7 @@ export const DashboardBanners: React.FC<DashboardBannersProps> = ({
       )}
 
       {/* Backup Reminder Banner */}
-      {needsBackup && !dismissedBackupBanner && (
+      {needsBackup && !dismissedBackupBanner && !hideStandaloneActionBanners && (
         <div className="bg-indigo-500/10 dark:bg-indigo-950/30 border border-indigo-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs font-bold text-indigo-900 dark:text-indigo-200">
           <div className="flex items-center gap-2.5">
             <span className="text-base">🛡️</span>

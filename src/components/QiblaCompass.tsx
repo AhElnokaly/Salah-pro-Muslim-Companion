@@ -3,425 +3,275 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { safeSetItem } from '../utils/storage';
-import { 
-  X, 
-  Compass, 
-  MapPin, 
-  CheckCircle, 
-  AlertTriangle, 
-  Smartphone,
-  HelpCircle,
-  RotateCw,
-  Sparkles,
-  Loader2,
-  Navigation
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { AppSettings, DashboardTab } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Compass, RotateCw, MapPin, Sparkles, Volume2, ShieldCheck } from 'lucide-react';
+import { AppSettings } from '../types';
 import { calculateQiblaBearing, bearingToCompassLabel } from '../utils/qibla';
-import { detectUserLocation } from '../utils/locationService';
+import { getCurrentPositionWithCity, getDistanceKm } from '../utils/locationService';
 import { toArabicNumbers } from '../utils/hijri';
-import darkMosqueBackdrop from '../assets/images/mosque_backdrop_dark.jpg';
-import { QiblaCompassDial } from './qibla/QiblaCompassDial';
-import { KaabaIsometricIcon } from './qibla/KaabaIsometricIcon';
-import { QiblaReadingsPanel } from './qibla/QiblaReadingsPanel';
 import { QiblaModals } from './qibla/QiblaModals';
+import KaabaIsometricIcon from './qibla/KaabaIsometricIcon';
 
-interface QiblaCompassProps {
+export interface QiblaCompassProps {
   settings: AppSettings;
   setSettings?: React.Dispatch<React.SetStateAction<AppSettings>>;
-  setActiveTab?: React.Dispatch<React.SetStateAction<DashboardTab | string>>;
+  setActiveTab?: (tab: any) => void;
 }
 
-type SensorStatus = 'inactive' | 'requesting' | 'active' | 'error';
+const CARDINALS = [
+  { text: 'N', angle: 0, isMajor: true },
+  { text: 'NE', angle: 45, isMajor: false },
+  { text: 'E', angle: 90, isMajor: true },
+  { text: 'SE', angle: 135, isMajor: false },
+  { text: 'S', angle: 180, isMajor: true },
+  { text: 'SW', angle: 225, isMajor: false },
+  { text: 'W', angle: 270, isMajor: true },
+  { text: 'NW', angle: 315, isMajor: false },
+];
 
-export default function QiblaCompass({ settings, setSettings, setActiveTab }: QiblaCompassProps) {
-  useEffect(() => {
-    safeSetItem('salah_visited_qibla', 'true');
-  }, []);
-
+export default function QiblaCompass({
+  settings,
+  setSettings,
+}: QiblaCompassProps) {
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null);
-  const [manualHeading, setManualHeading] = useState<number>(0);
-  const [sensorStatus, setSensorStatus] = useState<SensorStatus>('inactive');
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [isLockedOn, setIsLockedOn] = useState<boolean>(false);
-  const [isTilted, setIsTilted] = useState<boolean>(false);
   const [showCalibrateModal, setShowCalibrateModal] = useState<boolean>(false);
   const [showBraveHelp, setShowBraveHelp] = useState<boolean>(false);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isSyncingLoc, setIsSyncingLoc] = useState<boolean>(false);
   const [locFeedback, setLocFeedback] = useState<string>('');
-  
-  const compassRef = useRef<HTMLDivElement>(null);
-  const dragStartAngle = useRef<number>(0);
-  const dragStartHeading = useRef<number>(0);
-  const lockStartTimeRef = useRef<number>(0);
 
-  const qiblaAngle = calculateQiblaBearing(settings.latitude, settings.longitude);
-  const qiblaCompassLabel = bearingToCompassLabel(qiblaAngle);
+  const lat = settings.latitude || 30.0444;
+  const lng = settings.longitude || 31.2357;
+  const qiblaAngle = Math.round(calculateQiblaBearing(lat, lng));
+  const distanceToMakkah = Math.round(getDistanceKm(lat, lng, 21.4225, 39.8262));
 
-  // Automatically start compass orientation sensors on mount
+  // Listen to Device Orientation
   useEffect(() => {
-    let receivedEvent = false;
-
-    const processHeading = (heading: number | null) => {
-      if (heading === null) return;
-      
-      receivedEvent = true;
-      const targetHeading = Math.round(heading);
-
-      setDeviceHeading((prev) => {
-        if (prev === null) return targetHeading;
-        let diff = targetHeading - prev;
-        while (diff < -180) diff += 360;
-        while (diff > 180) diff -= 360;
-        const factor = 0.15; // Smooth but highly responsive
-        return Math.round((prev + diff * factor + 360) % 360);
-      });
-      setSensorStatus('active');
-      setErrorMessage('');
-    };
-
     const handleOrientation = (e: DeviceOrientationEvent) => {
       let heading: number | null = null;
-      const webkitEvent = e as DeviceOrientationEventWithWebkit;
-      
-      // 1. iOS absolute compass heading
-      if (webkitEvent.webkitCompassHeading !== undefined) {
+      const webkitEvent = e as any;
+      if (typeof webkitEvent.webkitCompassHeading === 'number') {
         heading = webkitEvent.webkitCompassHeading;
-      } 
-      // 2. Android device orientation absolute alpha (if absolute is true)
-      else if (e.alpha !== null && e.alpha !== undefined) {
+      } else if (e.alpha !== null) {
         heading = (360 - e.alpha) % 360;
       }
 
-      // Check if phone is tilted (upright/standing)
-      if (e.beta !== null && e.gamma !== null) {
-        const tilted = Math.abs(e.beta) > 35 || Math.abs(e.gamma) > 35;
-        setIsTilted(tilted);
-      }
-
       if (heading !== null) {
-        processHeading(heading);
+        setDeviceHeading(Math.round(heading));
       }
     };
 
-    const handleAbsoluteOrientation = (e: DeviceOrientationEvent) => {
-      if (e.alpha !== null && e.alpha !== undefined) {
-        const heading = (360 - e.alpha) % 360;
-        processHeading(heading);
-      }
-      if (e.beta !== null && e.gamma !== null) {
-        const tilted = Math.abs(e.beta) > 35 || Math.abs(e.gamma) > 35;
-        setIsTilted(tilted);
-      }
-    };
-
-    // Register both to ensure we catch whatever the browser fires
-    if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
-    }
     window.addEventListener('deviceorientation', handleOrientation, true);
-
-    // Fallback detection: if no events fire after 1500ms, set as inactive (simulation fallback)
-    const timeout = setTimeout(() => {
-      if (!receivedEvent) {
-        setSensorStatus('inactive');
-      }
-    }, 1500);
-
     return () => {
-      clearTimeout(timeout);
-      if ('ondeviceorientationabsolute' in window) {
-        window.removeEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
-      }
       window.removeEventListener('deviceorientation', handleOrientation, true);
     };
   }, []);
 
-  // Manage automatic magnetic lock-on and hold (hysteresis + duration hold)
-  const currentHeading = deviceHeading !== null ? deviceHeading : manualHeading;
-  const relativeDiff = (qiblaAngle - currentHeading + 360) % 360;
-  const normalizedDiff = relativeDiff > 180 ? relativeDiff - 360 : relativeDiff;
-  const absDiff = Math.abs(normalizedDiff);
+  const currentHeading = deviceHeading ?? 0;
+  const angleDiff = ((qiblaAngle - currentHeading + 540) % 360) - 180;
+  const isAligned = Math.abs(angleDiff) <= 4;
 
-  // If locked, we snap visual rotation parameters so they stay completely rock-solid on Qibla
-  const visualHeading = isLockedOn ? qiblaAngle : currentHeading;
-  const dialRotation = -visualHeading;
-  const isAligned = absDiff <= 3;
-
-  useEffect(() => {
-    if (absDiff <= 3) {
-      if (!isLockedOn) {
-        setIsLockedOn(true);
-        lockStartTimeRef.current = Date.now();
-        // Dynamic premium feedback vibration if available
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          try {
-            navigator.vibrate([100]);
-          } catch (e) {
-            console.log('Vibration blocked or unsupported:', e);
-          }
-        }
-      }
-    } else {
-      if (isLockedOn) {
-        const timeElapsed = Date.now() - lockStartTimeRef.current;
-        if (absDiff > 8 || timeElapsed >= 1500) {
-          setIsLockedOn(false);
-        }
-      }
+  const handleSyncLocation = async () => {
+    if (!setSettings) return;
+    setIsSyncingLoc(true);
+    setLocFeedback('جارٍ تحديد موقعك بدقة...');
+    try {
+      const loc = await getCurrentPositionWithCity();
+      setSettings((prev) => ({
+        ...prev,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        cityName: loc.cityName,
+      }));
+      setLocFeedback(`تم التحديث: ${loc.cityName}`);
+    } catch {
+      setLocFeedback('تعذر تحديد الموقع تلقائياً');
+    } finally {
+      setIsSyncingLoc(false);
+      setTimeout(() => setLocFeedback(''), 4000);
     }
-  }, [currentHeading, qiblaAngle, isLockedOn, absDiff]);
+  };
 
-  // Handle explicit calibration trigger & iOS Permission request
-  const handleActivateSensor = async () => {
-    setErrorMessage('');
-    setSensorStatus('requesting');
-    
-    const DeviceOrientation = window.DeviceOrientationEvent;
-    
-    if (!DeviceOrientation) {
-      setSensorStatus('error');
-      setErrorMessage('جهازك أو متصفحك لا يدعم حساسات الاتجاه والبوصلة.');
-      return;
-    }
-
-    // iOS 13+ permission flow request
-    if (typeof DeviceOrientation.requestPermission === 'function') {
+  const handleRequestSensor = async () => {
+    if (
+      typeof (DeviceOrientationEvent as any)?.requestPermission === 'function'
+    ) {
       try {
-        const permissionState = await DeviceOrientation.requestPermission();
+        const permissionState = await (DeviceOrientationEvent as any).requestPermission();
         if (permissionState === 'granted') {
-          setSensorStatus('active');
-        } else {
-          setSensorStatus('error');
-          setErrorMessage('تم رفض الصلاحية للوصول لحساسات الهاتف. يمكنك تدوير البوصلة يدوياً.');
+          // Permitted
         }
-      } catch (err) {
-        console.error('Permission error:', err);
-        setSensorStatus('error');
-        setErrorMessage('فشل تفعيل الحساس. يتطلب تفعيل البوصلة موافقة صريحة على أجهزة iOS.');
+      } catch (e) {
+        console.warn('Orientation permission error:', e);
       }
     } else {
-      // Android / Other browsers
-      setSensorStatus('active');
+      setShowCalibrateModal(true);
     }
   };
-
-  // --- Manual Drag-to-Rotate Fallback Mechanics ---
-  const getAngleOfTouch = (clientX: number, clientY: number) => {
-    if (!compassRef.current) return 0;
-    const rect = compassRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
-  };
-
-  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (deviceHeading !== null) return; // Disable dragging if live sensor is active
-    
-    setIsDragging(true);
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    
-    const angle = getAngleOfTouch(clientX, clientY);
-    dragStartAngle.current = angle;
-    dragStartHeading.current = manualHeading;
-  };
-
-  const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging || deviceHeading !== null) return;
-    
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    
-    const currentAngle = getAngleOfTouch(clientX, clientY);
-    const angleDifference = currentAngle - dragStartAngle.current;
-    
-    let newHeading = (dragStartHeading.current - angleDifference + 360) % 360;
-    setManualHeading(Math.round(newHeading));
-  };
-
-  const handleDragEnd = () => {
-    setIsDragging(false);
-  };
-
-  // Dial transition class
-  const dialTransitionClass = deviceHeading !== null
-    ? 'transition-none' 
-    : isDragging 
-    ? 'transition-none' 
-    : 'transition-transform duration-300 ease-out';
 
   return (
-    <motion.div 
-      id="qibla-immersive-screen"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-gradient-to-b from-[#0c3147] via-[#091d2c] to-[#040d16] flex flex-col justify-between py-8 px-6 select-none text-white overflow-hidden text-center"
-      dir="rtl"
-    >
-      {/* Background Mosque Atmosphere Layer */}
-      <div className="absolute inset-0 pointer-events-none opacity-15 overflow-hidden select-none">
-        <img 
-          src={darkMosqueBackdrop} 
-          alt="Mosque Atmosphere" 
-          className="w-full h-full object-cover object-center scale-110 filter blur-[0.5px]" 
+    <div className="pb-12 space-y-5 animate-fade-in" dir="rtl">
+      {/* Top Hero Card with Compass & Direction */}
+      <div className="bg-gradient-to-b from-[#0b1722] via-[#09121a] to-[#04090e] border border-white/10 rounded-3xl p-6 sm:p-8 text-white flex flex-col items-center justify-center text-center relative overflow-hidden shadow-2xl space-y-6">
+        {/* Glow backdrop */}
+        <div
+          className={`absolute w-72 h-72 rounded-full blur-3xl pointer-events-none transition-all duration-700 opacity-20 ${
+            isAligned ? 'bg-emerald-500' : 'bg-amber-500'
+          }`}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#040d16] via-[#091d2c]/60 to-[#0c3147]/80" />
-      </div>
 
-      {/* 1. Top Bar: Title & Close Button */}
-      <div className="flex items-center justify-between w-full relative z-10 px-2">
-        <div className="flex items-center gap-2">
-          <Compass className="w-5 h-5 text-amber-300 animate-spin-slow" aria-hidden="true" />
-          <span className="text-xs font-black tracking-wide text-white/85">بوصلة اتجاه القبلة</span>
+        {/* Header Stats */}
+        <div className="w-full flex items-center justify-between border-b border-white/10 pb-4 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-2xl bg-white/10 border border-white/15">
+              <Compass className="w-5 h-5 text-amber-300" />
+            </div>
+            <div className="text-right">
+              <h2 className="text-base font-black text-white">اتجاه القبلة الشريفة</h2>
+              <span className="text-xs text-slate-400 font-bold">
+                {settings.cityName || 'موقعك الحالي'} • {bearingToCompassLabel(qiblaAngle)}
+              </span>
+            </div>
+          </div>
+
+          <div className="text-left font-mono">
+            <span className="text-[10px] text-slate-400 block font-bold">زاوية القبلة</span>
+            <span className="text-lg font-black text-amber-400">
+              {toArabicNumbers(qiblaAngle)}°
+            </span>
+          </div>
         </div>
-        {setActiveTab && (
-          <button 
-            onClick={() => setActiveTab('home')}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white cursor-pointer"
-            title="إغلاق والعودة"
-            aria-label="إغلاق شاشة القبلة والعودة للرئيسية"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        )}
-      </div>
 
-      {/* 2. Top Center Kaaba minimalist 3D isometric representation */}
-      <div className="flex flex-col items-center justify-center my-2 relative z-10">
-        <KaabaIsometricIcon />
-      </div>
-
-      {/* 3. Central Interactive Compass Area */}
-      <div className="relative flex flex-col items-center justify-center my-auto">
-        
-        {/* Glow backdrop behind the compass */}
-        <div className={`absolute w-80 h-80 rounded-full transition-all duration-700 blur-3xl pointer-events-none ${
-          isAligned 
-            ? 'bg-emerald-500/15 scale-110' 
-            : 'bg-cyan-500/10 scale-100'
-        }`} />
-
-        {/* Outer Circular Compass Rim */}
-        <div 
-          ref={compassRef}
-          onMouseDown={handleDragStart}
-          onMouseMove={handleDragMove}
-          onMouseUp={handleDragEnd}
-          onMouseLeave={handleDragEnd}
-          onTouchStart={handleDragStart}
-          onTouchMove={handleDragMove}
-          onTouchEnd={handleDragEnd}
-          className={`relative w-64 h-64 sm:w-72 sm:h-72 rounded-full flex items-center justify-center bg-black/15 border-2 transition-colors duration-500 select-none touch-none ${
-            isAligned 
-              ? 'border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.15)]' 
-              : 'border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.02)]'
-          } ${deviceHeading === null ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
+        {/* Alignment Indicator Banner */}
+        <div
+          role="status"
+          aria-live="polite"
+          className={`px-4 py-1.5 rounded-full text-xs font-black transition-all duration-500 flex items-center gap-2 border z-10 ${
+            isAligned
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.3)] animate-pulse'
+              : 'bg-white/10 text-slate-300 border-white/15'
+          }`}
         >
-          {/* Compass Rotating Disk */}
-          <QiblaCompassDial
-            dialRotation={dialRotation}
-            dialTransitionClass={dialTransitionClass}
-            qiblaAngle={qiblaAngle}
-          />
+          {isAligned ? (
+            <>
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>أنت في اتجاه القبلة تماماً الآن! تقبل الله 🕋</span>
+            </>
+          ) : (
+            <span>
+              {angleDiff > 0
+                ? `ادر هاتفك يميناً ${toArabicNumbers(Math.abs(angleDiff))}°`
+                : `ادر هاتفك يساراً ${toArabicNumbers(Math.abs(angleDiff))}°`}
+            </span>
+          )}
+        </div>
 
-          {/* Stationary White / Green Triangle Pointer at the Bottom center, pointing inwards */}
-          <div className="absolute bottom-1.5 flex flex-col items-center pointer-events-none transition-colors duration-500">
-            <span className={`text-sm ${isAligned ? 'text-emerald-400 scale-125' : 'text-white'}`}>
-              ▲
+        {/* CIRCULAR COMPASS DIAL */}
+        <div className="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full border-2 border-white/10 bg-[#060e15] shadow-2xl flex items-center justify-center select-none my-2">
+          {/* Compass Dial Rotating opposite to heading */}
+          <div
+            className="absolute inset-0 rounded-full transition-transform duration-200 ease-out"
+            style={{ transform: `rotate(${-currentHeading}deg)` }}
+          >
+            {/* Cardinal Direction Marks */}
+            {CARDINALS.map((c) => (
+              <span
+                key={c.text}
+                className={`absolute font-black tracking-wider ${
+                  c.text === 'N'
+                    ? 'text-red-400 text-sm top-3 start-1/2 -translate-x-1/2'
+                    : c.text === 'S'
+                    ? 'text-white/80 text-xs bottom-3 start-1/2 -translate-x-1/2'
+                    : c.text === 'E'
+                    ? 'text-white/80 text-xs end-3 top-1/2 -translate-y-1/2'
+                    : c.text === 'W'
+                    ? 'text-white/80 text-xs start-3 top-1/2 -translate-y-1/2'
+                    : 'text-white/40 text-[9px] hidden'
+                }`}
+              >
+                {c.text}
+              </span>
+            ))}
+
+            {/* Kaaba Direction Marker on Dial */}
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-start pointer-events-none"
+              style={{ transform: `rotate(${qiblaAngle}deg)` }}
+            >
+              <div className="mt-1 flex flex-col items-center">
+                <div className="w-7 h-7 rounded-full bg-amber-400/20 border border-amber-400 flex items-center justify-center shadow-[0_0_12px_#f59e0b]">
+                  <span className="text-xs">🕋</span>
+                </div>
+                <div className="w-0.5 h-6 bg-amber-400 shadow-[0_0_8px_#f59e0b]" />
+              </div>
+            </div>
+          </div>
+
+          {/* Fixed Center Hub */}
+          <div className="w-20 h-20 rounded-full bg-slate-900 border-2 border-white/20 shadow-xl flex flex-col items-center justify-center z-10 text-center">
+            <span className="text-lg">🕋</span>
+            <span className="text-[10px] font-black text-amber-300 font-mono mt-0.5">
+              {toArabicNumbers(currentHeading)}°
             </span>
           </div>
 
-          {/* Stationary top guide line */}
-          <div className="absolute top-1.5 w-0.5 h-3 bg-white/20 pointer-events-none" />
+          {/* Top Indicator Triangle */}
+          <div className="absolute -top-3 start-1/2 -translate-x-1/2 z-20">
+            <div className={`w-0 h-0 border-x-8 border-x-transparent border-t-[14px] ${isAligned ? 'border-t-emerald-400' : 'border-t-red-500'} drop-shadow-md`} />
+          </div>
         </div>
 
-        {/* Pitch tilt warning */}
-        {isTilted && (
-          <div className="mt-3 text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-full animate-pulse font-black">
-            ⚠️ ضع الهاتف مسطحاً تماماً لضمان دقة القراءة
+        {/* Distance & Info Strip */}
+        <div className="grid grid-cols-2 gap-3 w-full border-t border-white/10 pt-4 z-10">
+          <div className="p-3 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center text-center">
+            <span className="text-[10px] text-slate-400 font-bold">المسافة إلى الكعبة المشرفة</span>
+            <span className="text-xs sm:text-sm font-black text-amber-300 font-mono mt-0.5">
+              {toArabicNumbers(distanceToMakkah)} كم
+            </span>
+          </div>
+          <div className="p-3 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center text-center">
+            <span className="text-[10px] text-slate-400 font-bold">اتجاه الانحراف</span>
+            <span className="text-xs sm:text-sm font-black text-white font-mono mt-0.5">
+              {bearingToCompassLabel(qiblaAngle)} ({toArabicNumbers(qiblaAngle)}°)
+            </span>
+          </div>
+        </div>
+
+        {/* Action Controls Bar */}
+        <div className="flex items-center justify-between w-full border-t border-white/10 pt-4 z-10 flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleRequestSensor}
+            className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-amber-300 transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>معايرة البوصلة</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSyncLocation}
+            disabled={isSyncingLoc}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-black text-white transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+          >
+            <MapPin className="w-3.5 h-3.5" />
+            <span>{isSyncingLoc ? 'جارٍ التحديث...' : 'تحديث الموقع'}</span>
+          </button>
+        </div>
+
+        {locFeedback && (
+          <div className="text-xs font-bold text-amber-300 animate-fadeIn z-10">
+            {locFeedback}
           </div>
         )}
       </div>
 
-      {/* 4. Display Info & Readings */}
-      <QiblaReadingsPanel
-        currentHeading={currentHeading}
-        qiblaAngle={qiblaAngle}
-        angleDiff={normalizedDiff}
-        settings={settings}
-        setSettings={setSettings}
-        isSyncingLoc={isSyncingLoc}
-        locFeedback={locFeedback}
-        isAligned={isAligned}
-        deviceHeading={deviceHeading}
-        onSyncLocation={async () => {
-          if (!setSettings) return;
-          setIsSyncingLoc(true);
-          setLocFeedback('');
-          try {
-            const res = await detectUserLocation();
-            setSettings(prev => ({
-              ...prev,
-              latitude: res.latitude,
-              longitude: res.longitude,
-              cityName: res.cityName
-            }));
-            setLocFeedback(`تم التحديث: ${res.cityName}`);
-          } catch (e) {
-            setLocFeedback('فشل المزامنة الحية');
-          } finally {
-            setIsSyncingLoc(false);
-          }
-        }}
-        onShowBraveHelp={() => setShowBraveHelp(true)}
-      />
-
-      {/* 5. Bottom Status and calibration trigger */}
-      <div className="flex items-center justify-between w-full border-t border-white/10 pt-4 px-2 mt-4 relative z-10">
-        
-        {/* Bottom Left: Calibrate action button */}
-        <button 
-          onClick={() => {
-            if (deviceHeading === null) {
-              handleActivateSensor();
-            } else {
-              setShowCalibrateModal(true);
-            }
-          }}
-          aria-label={deviceHeading === null ? 'تشغيل مستشعر بوصلة الهاتف' : 'بدء معايرة بوصلة الهاتف'}
-          className="text-xs font-bold text-amber-300 hover:text-amber-200 cursor-pointer active:scale-95 transition-all bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-xl border border-white/5"
-        >
-          {deviceHeading === null ? 'تشغيل المستشعر' : 'معايرة'}
-        </button>
-
-        {/* Bottom Right: High-Fidelity Sensor Accuracy Indicator with glowing dot */}
-        <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
-          <span className={`w-2 h-2 rounded-full ${
-            deviceHeading !== null 
-              ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]' 
-              : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'
-          }`} />
-          <span className="text-[10px] font-black text-white/80">
-            {deviceHeading !== null ? 'دقة مستشعر الهاتف جيدة' : 'البوصلة في وضع المحاكاة'}
-          </span>
-        </div>
-
-      </div>
-
-      {/* 6 & 7. Calibration Guidance & Browser Sensor Help Modals */}
+      {/* Calibration & Browser Help Modals */}
       <QiblaModals
         showCalibrateModal={showCalibrateModal}
         setShowCalibrateModal={setShowCalibrateModal}
         showBraveHelp={showBraveHelp}
         setShowBraveHelp={setShowBraveHelp}
       />
-
-    </motion.div>
+    </div>
   );
 }

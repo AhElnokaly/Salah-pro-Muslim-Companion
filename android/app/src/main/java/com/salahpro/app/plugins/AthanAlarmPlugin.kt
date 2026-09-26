@@ -196,7 +196,7 @@ class AthanAlarmPlugin : Plugin() {
                 val alarmType = item.optString("alarmType", if (prayerKey.startsWith("custom_")) "custom" else if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("khushu")) "khushu" else "athan")
                 val durationMinutes = item.optInt("durationMinutes", 15)
                 val khushuMode = item.optString("khushuMode", "silent")
-                val soundType = item.optString("soundType", "takbeer")
+                val soundType = item.optString("soundType", "hayya")
                 val notifyMode = item.optString("notifyMode", "both")
                 val autoKhushu = item.optBoolean("autoKhushu", false)
 

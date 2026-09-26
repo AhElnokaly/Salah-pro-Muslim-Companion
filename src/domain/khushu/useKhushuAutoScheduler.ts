@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { KhushuSettings } from './khushuTypes';
 import { PrayerTimes } from '../../types';
 import { getIqamaWindowInfo, IqamaWindowInfo } from './khushuFlowUtils';
@@ -27,18 +27,47 @@ export function useKhushuAutoScheduler({
     getIqamaWindowInfo(times, settings, new Date())
   );
 
+  const activateRef = useRef(activate);
+  activateRef.current = activate;
+
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  const timesKey = times
+    ? `${times.Fajr}_${times.Sunrise}_${times.Dhuhr}_${times.Asr}_${times.Maghrib}_${times.Isha}`
+    : '';
+
   useEffect(() => {
     if (!times) {
-      setIqamaInfo(null);
+      setIqamaInfo((prev) => (prev === null ? prev : null));
       return;
     }
 
     const checkCycle = () => {
       const now = new Date();
-      const currentInfo = getIqamaWindowInfo(times, settings, now);
-      setIqamaInfo(currentInfo);
+      const currentInfo = getIqamaWindowInfo(times, settingsRef.current, now);
 
-      if (!currentInfo || isActive || !settings.autoWithIqama) {
+      setIqamaInfo((prev) => {
+        if (!prev && !currentInfo) return prev;
+        if (!prev || !currentInfo) return currentInfo;
+        if (
+          prev.prayerId === currentInfo.prayerId &&
+          prev.minutesToIqama === currentInfo.minutesToIqama &&
+          prev.isInAdhanIqamaWindow === currentInfo.isInAdhanIqamaWindow &&
+          prev.isExactIqamaMoment === currentInfo.isExactIqamaMoment &&
+          prev.suggestedDuration === currentInfo.suggestedDuration &&
+          prev.athanDate.getTime() === currentInfo.athanDate.getTime() &&
+          prev.iqamaDate.getTime() === currentInfo.iqamaDate.getTime()
+        ) {
+          return prev;
+        }
+        return currentInfo;
+      });
+
+      if (!currentInfo || isActiveRef.current || !settingsRef.current.autoWithIqama) {
         return;
       }
 
@@ -65,7 +94,7 @@ export function useKhushuAutoScheduler({
           console.log(
             `[useKhushuAutoScheduler] Auto-activating Khushu for ${currentInfo.prayerId} at Iqama time (${currentInfo.suggestedDuration} mins)`
           );
-          activate(currentInfo.suggestedDuration);
+          activateRef.current(currentInfo.suggestedDuration);
         }
       }
     };
@@ -74,7 +103,7 @@ export function useKhushuAutoScheduler({
     const interval = setInterval(checkCycle, 15000);
 
     return () => clearInterval(interval);
-  }, [settings, times, isActive, activate]);
+  }, [timesKey]);
 
   return { iqamaInfo };
 }

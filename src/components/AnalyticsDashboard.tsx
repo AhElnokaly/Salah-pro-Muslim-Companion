@@ -3,107 +3,67 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { AnimatePresence } from 'motion/react';
-import {
-  getWomenExcuseMode,
-  setWomenExcuseMode
-} from '../utils/analyticsStorage';
-import {
-  getCardSummaries,
-  getTopFeaturePraise,
-  getSmartFeatureNudges,
-  type CardFeatureSummaryItem,
-  type FeaturePraiseInfo,
-  type FeatureNudgeInfo
-} from '../utils/analyticsEngine';
-import AnalyticsHero from './analytics/AnalyticsHero';
+import React, { useState, useMemo } from 'react';
+import { BarChart3, Sparkles } from 'lucide-react';
 import AnalyticsToolbar from './analytics/AnalyticsToolbar';
 import FeatureCardsView from './analytics/FeatureCardsView';
-import BadgesGalleryView from './analytics/BadgesGalleryView';
 import AnalyticsTableView from './analytics/AnalyticsTableView';
 import SmartNudgesView from './analytics/SmartNudgesView';
+import {
+  getCardSummaries,
+  getTopPraise,
+  getSmartNudges,
+  CardFeatureSummaryItem,
+} from '../utils/analyticsEngine';
 
-interface AnalyticsDashboardProps {
+export interface AnalyticsDashboardProps {
   onSelectTab: (tab: string, subTab?: string) => void;
 }
 
 export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardProps) {
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('weekly');
   const [viewMode, setViewMode] = useState<'cards' | 'badges' | 'table' | 'nudges'>('cards');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedTierFilter, setSelectedTierFilter] = useState<number | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [cardSummaries, setCardSummaries] = useState<CardFeatureSummaryItem[]>([]);
-  const [topPraise, setTopPraise] = useState<FeaturePraiseInfo | null>(null);
-  const [smartNudges, setSmartNudges] = useState<FeatureNudgeInfo[]>([]);
-  const [womenExcuse, setWomenExcuse] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const refreshData = () => {
-    const cards = getCardSummaries(period);
-    setCardSummaries(cards);
-    setTopPraise(getTopFeaturePraise(period));
-    setSmartNudges(getSmartFeatureNudges(period));
-    setWomenExcuse(getWomenExcuseMode());
-  };
+  const allCards = useMemo(() => getCardSummaries('weekly'), []);
+  const topPraise = useMemo(() => getTopPraise(), []);
+  const smartNudges = useMemo(() => getSmartNudges(), []);
 
-  useEffect(() => {
-    refreshData();
-
-    const handleUpdate = () => {
-      refreshData();
-    };
-
-    window.addEventListener('analytics-updated', handleUpdate);
-    return () => {
-      window.removeEventListener('analytics-updated', handleUpdate);
-    };
-  }, [period]);
-
-  const handleToggleExcuse = (active: boolean) => {
-    setWomenExcuse(active);
-    setWomenExcuseMode(active);
-  };
-
-  // Filter cards
-  const filteredCards = cardSummaries.filter(item => {
-    const matchesCategory = selectedCategory === 'all' || item.feature.category === selectedCategory;
-    const matchesSearch = !searchQuery ||
-      item.feature.name.includes(searchQuery) ||
-      item.feature.description.includes(searchQuery) ||
-      item.feature.completionCriteria.includes(searchQuery);
-    const matchesTier = selectedTierFilter === 'all' || item.badgeTier.tierLevel === selectedTierFilter;
-    return matchesCategory && matchesSearch && matchesTier;
-  });
-
-  // Calculate high level totals
-  const totalLifetimeUsage = cardSummaries.reduce((acc, curr) => acc + curr.lifetimeCount, 0);
-  const totalLifetime100 = cardSummaries.reduce((acc, curr) => acc + curr.lifetime100Completion, 0);
-  const totalTodayUsage = cardSummaries.reduce((acc, curr) => acc + curr.todayCount, 0);
-  const totalTodayCompletion = cardSummaries.reduce((acc, curr) => acc + curr.todayCompletion, 0);
-
-  // Badge tier counters
-  const crystalCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 4).length;
-  const goldCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 3).length;
-  const silverCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 2).length;
-  const bronzeCount = cardSummaries.filter(c => c.badgeTier.tierLevel === 1).length;
+  const filteredCards = useMemo(() => {
+    return allCards.filter((item) => {
+      // Category filter
+      if (selectedCategory !== 'all' && item.feature.category !== selectedCategory) {
+        return false;
+      }
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.trim().toLowerCase();
+        const matchesTitle = item.feature.title.toLowerCase().includes(query);
+        const matchesDesc = item.feature.description.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [allCards, selectedCategory, searchQuery]);
 
   return (
-    <div className="space-y-6 text-right animate-fade-in pb-12" id="analytics-dashboard-root">
-      {/* 1. HERO BANNER & OVERVIEW STATS */}
-      <AnalyticsHero
-        period={period}
-        setPeriod={setPeriod}
-        womenExcuse={womenExcuse}
-        onToggleExcuse={handleToggleExcuse}
-        totalLifetimeUsage={totalLifetimeUsage}
-        totalLifetime100={totalLifetime100}
-        totalTodayUsage={totalTodayUsage}
-        totalTodayCompletion={totalTodayCompletion}
-        crystalCount={crystalCount}
-      />
+    <div className="pb-16 space-y-5 animate-fade-in" dir="rtl">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-900 to-indigo-950 rounded-3xl p-6 text-white border border-emerald-500/20 shadow-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/15">
+            <BarChart3 className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-lg sm:text-xl font-black text-white">لوحة الإحصائيات والإنجاز الإيماني</h1>
+            <p className="text-xs text-emerald-200/80 font-medium mt-0.5">
+              تتبع عباداتك، طاعاتك، واستمرارية عاداتك الإيمانية المباركة
+            </p>
+          </div>
+        </div>
+      </div>
 
-      {/* 2. VIEW MODE & FILTER TOOLBAR */}
+      {/* Toolbar & Filters */}
       <AnalyticsToolbar
         viewMode={viewMode}
         setViewMode={setViewMode}
@@ -113,52 +73,28 @@ export default function AnalyticsDashboard({ onSelectTab }: AnalyticsDashboardPr
         setSearchQuery={setSearchQuery}
       />
 
-      {/* 3. VIEW CONTENT AREA */}
-      <AnimatePresence mode="wait">
-        {/* VIEW 1: INTERACTIVE FEATURE CARDS GRID */}
-        {viewMode === 'cards' && (
-          <FeatureCardsView
-            key="cards-view"
-            filteredCards={filteredCards}
-            onSelectTab={onSelectTab}
-          />
-        )}
+      {/* View Mode Outlets */}
+      {(viewMode === 'cards' || viewMode === 'badges') && (
+        <FeatureCardsView
+          filteredCards={filteredCards}
+          onSelectTab={onSelectTab}
+        />
+      )}
 
-        {/* VIEW 2: GAMIFIED BADGES SHOWCASE GALLERY */}
-        {viewMode === 'badges' && (
-          <BadgesGalleryView
-            key="badges-view"
-            filteredCards={filteredCards}
-            cardSummaries={cardSummaries}
-            selectedTierFilter={selectedTierFilter}
-            setSelectedTierFilter={setSelectedTierFilter}
-            crystalCount={crystalCount}
-            goldCount={goldCount}
-            silverCount={silverCount}
-            bronzeCount={bronzeCount}
-            onSelectTab={onSelectTab}
-          />
-        )}
+      {viewMode === 'table' && (
+        <AnalyticsTableView
+          filteredCards={filteredCards}
+          onSelectTab={onSelectTab}
+        />
+      )}
 
-        {/* VIEW 3: MODERN TABLE VIEW */}
-        {viewMode === 'table' && (
-          <AnalyticsTableView
-            key="table-view"
-            filteredCards={filteredCards}
-            onSelectTab={onSelectTab}
-          />
-        )}
-
-        {/* VIEW 4: SMART NUDGES & RECOMMENDATIONS */}
-        {viewMode === 'nudges' && (
-          <SmartNudgesView
-            key="nudges-view"
-            topPraise={topPraise}
-            smartNudges={smartNudges}
-            onSelectTab={onSelectTab}
-          />
-        )}
-      </AnimatePresence>
+      {viewMode === 'nudges' && (
+        <SmartNudgesView
+          topPraise={topPraise}
+          smartNudges={smartNudges}
+          onSelectTab={onSelectTab}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,9 @@ const SECTION_ICONS: Record<DashboardSectionId, React.ElementType> = {
   sacredHours: Sparkles,
   featureDiscovery: Lightbulb,
   pinnedFavorite: Heart,
+  dailyShortcuts: Sparkles,
+  smartStrip: Sliders,
+  banners: Sparkles,
 };
 
 export default function DashboardSectionsTab() {

@@ -74,7 +74,7 @@ export default function AlarmEditModal({
       setOffsetMinutes(alarm.offsetMinutes ?? 10);
       setTimeStr(alarm.time || '05:00');
       setDays(alarm.days || [0, 1, 2, 3, 4, 5, 6]);
-      setSoundType(alarm.soundType || 'takbeer');
+      setSoundType(alarm.soundType || 'hayya');
       setNotifyMode(alarm.notifyMode || 'both');
       setAutoKhushu(Boolean(alarm.autoKhushu));
       setKhushuDurationMinutes(alarm.khushuDurationMinutes || 15);
@@ -86,7 +86,7 @@ export default function AlarmEditModal({
       setOffsetMinutes(10);
       setTimeStr('05:00');
       setDays([0, 1, 2, 3, 4, 5, 6]);
-      setSoundType('takbeer');
+      setSoundType('hayya');
       setNotifyMode('both');
       setAutoKhushu(false);
       setKhushuDurationMinutes(15);

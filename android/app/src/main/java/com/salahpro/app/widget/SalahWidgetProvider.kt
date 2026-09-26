@@ -120,15 +120,15 @@ class SalahWidgetProvider : AppWidgetProvider() {
             var dhikrText = "«سُبْحَانَ اللَّهِ وَبِحَمْدِهِ ، سُبْحَانَ اللَّهِ الْعَظِيمِ»"
             var timePeriod = ""
 
-            // Customization options from in-app Widget Simulator
+            // Customization options from in-app Widget Simulator (Pure Hero Card defaults)
             var widgetTheme = "auto"
-            var clockStyle = "digital"
+            var clockStyle = "none"
             var showMoonPhase = true
             var prayerDisplay = "all_prayers"
             var showDate = true
-            var showDhikr = true
-            var showSubhaBtn = true
-            var showKhushuBtn = true
+            var showDhikr = false
+            var showSubhaBtn = false
+            var showKhushuBtn = false
             var showProgressBar = true
             var cardSize = "medium"
 
@@ -171,10 +171,17 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            // Dynamic Spiritual or Explicit Background matching in-app widget appearance
+            // Dynamic Spiritual Real Mosque Backdrop (Hero Card Parity, Real Images, No SVG)
             val cal = Calendar.getInstance()
             val hour = cal.get(Calendar.HOUR_OF_DAY)
             val isDaytime = hour in 6..17
+
+            val backdropResId = when {
+                timePeriod.equals("friday", ignoreCase = true) || (isJumuah && isDaytime) -> R.drawable.widget_backdrop_friday
+                timePeriod.equals("day", ignoreCase = true) || (isDaytime && (activePrayer == "dhuhr" || activePrayer == "asr")) -> R.drawable.widget_backdrop_light
+                else -> R.drawable.widget_backdrop_hero
+            }
+            views.setImageViewResource(R.id.widget_mosque_bg, backdropResId)
 
             val bgResId = when (widgetTheme.lowercase()) {
                 "green", "emerald", "emerald_royal" -> R.drawable.widget_card_bg_green

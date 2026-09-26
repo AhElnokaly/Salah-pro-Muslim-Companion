@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuthoritativeClock } from '../../hooks/useAuthoritativeClock';
 import { AppSettings, PrayerTimes } from '../../types';
 import { 
@@ -37,15 +37,26 @@ export function useDashboardTimeAndPrayers({ settings }: UseDashboardTimeAndPray
   const gregorianClean = gregorianStr.includes('،') ? gregorianStr.split('،')[1].trim() : gregorianStr;
 
   const tzOffset = getTimezoneOffsetForLocation(now, settings.timezoneId);
-  const times: PrayerTimes = calculatePrayerTimes(
-    now,
+  const prayerOffsetsKey = JSON.stringify(settings.prayerOffsets || {});
+  const times: PrayerTimes = useMemo(() => {
+    return calculatePrayerTimes(
+      now,
+      settings.latitude,
+      settings.longitude,
+      tzOffset,
+      settings.calcMethod,
+      settings.madhab,
+      settings.prayerOffsets || {}
+    );
+  }, [
+    todayStr,
     settings.latitude,
     settings.longitude,
     tzOffset,
     settings.calcMethod,
     settings.madhab,
-    settings.prayerOffsets || {}
-  );
+    prayerOffsetsKey,
+  ]);
 
   const { current, next, timeRemainingStr, progressPercent } = getCurrentAndNextPrayer(times, now);
   const isFridayWindow = checkIsFridayWindow(now, times);

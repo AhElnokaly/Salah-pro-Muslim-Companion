@@ -47,7 +47,7 @@ export const DEFAULT_WORSHIP_ALARMS: AlarmConfig[] = [
     offsetMinutes: 10,
     offsetUnit: 'minutes',
     days: [0, 1, 2, 3, 4, 5, 6],
-    soundType: 'takbeer',
+    soundType: 'hayya',
     notifyMode: 'both'
   },
   {

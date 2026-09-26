@@ -79,7 +79,7 @@ export default function MoreSettings({
 }: MoreSettingsProps) {
   const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
 
-  const [fajrMuezzin, setFajrMuezzin] = useState(() => safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf');
+  const [fajrMuezzin, setFajrMuezzin] = useState(() => safeGetItem('salah_fajr_muezzin') || 'fajr_makkah');
   const [generalMuezzin, setGeneralMuezzin] = useState(() => safeGetItem('salah_general_muezzin') || 'makkah');
   const [audioVolume, setAudioVolume] = useState(() => {
     const saved = safeGetItem('salah_audio_volume');

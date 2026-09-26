@@ -36,14 +36,14 @@ export function ProgressRowItem({ item, isDark, onNavigateTab }: ProgressRowItem
       type="button"
       onClick={handleClick}
       aria-label={`عرض تفاصيل ${item.categoryName} - نسبة الإنجاز ${toArabicNumbers(item.percentage)}% (${item.detailText})`}
-      className={`p-1.5 xs:p-2 sm:p-3 rounded-2xl sm:rounded-3xl border transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer group flex flex-col items-center justify-between text-center relative shadow-xs focus:outline-none w-full min-h-[140px] xs:min-h-[150px] sm:min-h-[165px] ${
+      className={`p-1.5 xs:p-2 sm:p-2.5 rounded-2xl border transition-all duration-300 hover:scale-[1.02] active:scale-95 cursor-pointer group flex flex-col items-center justify-between text-center relative shadow-xs focus:outline-none w-full min-h-[96px] xs:min-h-[102px] sm:min-h-[114px] ${
         isDark ? 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]' : 'bg-slate-50/90 border-slate-200/80 hover:bg-white hover:shadow-md'
       }`}
     >
       {/* Top Badge Pill */}
-      <div className={`px-1.5 py-0.5 rounded-full text-[7.5px] xs:text-[8.5px] sm:text-[9.5px] font-black flex items-center justify-center gap-0.5 shadow-2xs ${tier.colorClasses.badgeBg} ${tier.colorClasses.glow}`}>
-        <span className="text-[8.5px] xs:text-[9.5px]">{tier.badgeSymbol}</span>
-        <span className="text-[7.5px] xs:text-[8.5px] font-black">{tier.shortLabel.split(' ')[0]}</span>
+      <div className={`px-1.5 py-0.2 rounded-full text-[7px] xs:text-[7.5px] sm:text-[8.5px] font-black flex items-center justify-center gap-0.5 shadow-2xs ${tier.colorClasses.badgeBg} ${tier.colorClasses.glow}`}>
+        <span className="text-[7.5px] xs:text-[8.5px]">{tier.badgeSymbol}</span>
+        <span className="text-[7px] xs:text-[7.5px] font-black">{tier.shortLabel.split(' ')[0]}</span>
       </div>
 
       {/* Responsive SVG Circular Ring */}

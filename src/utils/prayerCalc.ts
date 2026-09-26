@@ -195,9 +195,11 @@ export function parseTimeToMinutes(timeStr: string): number {
   const minutesPart = parts[1].trim();
   const mins = parseInt(minutesPart.substring(0, 2), 10);
   
-  const isPM = timeStr.includes('م');
+  const upper = timeStr.toUpperCase();
+  const isPM = timeStr.includes('م') || upper.includes('PM');
+  const isAM = timeStr.includes('ص') || upper.includes('AM');
   if (isPM && hours !== 12) hours += 12;
-  if (!isPM && hours === 12) hours = 0;
+  if (isAM && hours === 12) hours = 0;
   
   return hours * 60 + mins;
 }

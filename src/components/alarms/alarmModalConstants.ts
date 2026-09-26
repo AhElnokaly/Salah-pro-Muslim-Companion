@@ -7,6 +7,7 @@ import type { AlarmSoundType } from '../../types';
 
 export const SOUND_OPTIONS: { type: AlarmSoundType; label: string; desc: string }[] = [
   { type: 'takbeer', label: '🔊 تكبيرات الحرمين', desc: 'تكبيرات العيد والحرم المكي' },
+  { type: 'ayat_kursi', label: '📖 آية الكرسي كاملة', desc: 'تلاوة خاشعة لآية الكرسي المباركة' },
   { type: 'alsalatu_khayr', label: '🌅 الصلاة خير من النوم', desc: 'نداء الفجر الخاشع' },
   { type: 'hayya', label: '🕌 حي على الصلاة', desc: 'نداء الأذان المبارك' },
   { type: 'adhan', label: '📢 الأذان كاملاً', desc: 'أذان نقي كامل' },

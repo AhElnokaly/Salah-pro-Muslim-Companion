@@ -85,7 +85,7 @@ export class UnifiedNotificationOrchestrator {
           }
         }
 
-        scheduledCount = await scheduleNativeAthanAlarms(days60List, undefined, {
+        const reconcileRes = await scheduleNativeAthanAlarms(days60List as any, undefined, {
           lat: settings.latitude,
           lng: settings.longitude,
           calcMethod: settings.calcMethod,
@@ -104,9 +104,13 @@ export class UnifiedNotificationOrchestrator {
           khushuSettings,
           customAlarms: resolvedCustomAlarms,
         });
+        scheduledCount = reconcileRes?.scheduledCount ?? 0;
+        addedCount = reconcileRes?.addedCount ?? 0;
+        removedCount = reconcileRes?.removedCount ?? 0;
+        retainedCount = reconcileRes?.retainedCount ?? 0;
 
         // 3. Update Native Android Widget
-        const currentTimes = days60List[0]?.timesMap;
+        const currentTimes = days60List[0]?.timesMap || (days60List[0] as any)?.prayers;
         if (currentTimes) {
           const pinned = settings.pinnedWidget;
           await updateNativeWidgetData(currentTimes, settings.cityName || 'مواقيت الصلاة', {

@@ -130,6 +130,10 @@ export function useKhushuMode() {
         });
 
         if (res.active) {
+          setIsActive(true);
+          setCurrentMode(res.mode || mode);
+          setCurrentDuration(res.durationMinutes || duration);
+          setRemainingSeconds(duration * 60);
           sessionIdRef.current = `session_${Date.now()}`;
           KhushuStorage.clearShieldDismissed();
           if (settings.enableDistractionShield) {
@@ -154,7 +158,9 @@ export function useKhushuMode() {
     try {
       const res = await KhushuMode.deactivate();
       if (!res.active) {
+        setIsActive(false);
         setShieldVisible(false);
+        setRemainingSeconds(0);
         await syncStatus();
       }
       return !res.active;

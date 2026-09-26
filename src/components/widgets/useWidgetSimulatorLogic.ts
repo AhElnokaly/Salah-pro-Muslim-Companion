@@ -66,21 +66,21 @@ export function useWidgetSimulatorLogic({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Modular Custom Widget Toggles
+  // Modular Custom Widget Toggles (Pure Hero Card Defaults)
   const [clockStyle, setClockStyle] = useState<'none' | 'digital' | 'analog'>(
-    settings?.pinnedWidget?.clockStyle || 'digital'
+    settings?.pinnedWidget?.clockStyle || 'none'
   );
   const [showMoonPhase, setShowMoonPhase] = useState<boolean>(
     settings?.pinnedWidget?.showMoonPhase ?? true
   );
   const [prayerDisplay, setPrayerDisplay] = useState<'none' | 'next_only' | 'all_prayers'>(
-    settings?.pinnedWidget?.prayerDisplay || 'next_only'
+    settings?.pinnedWidget?.prayerDisplay || 'all_prayers'
   );
   const [showDate, setShowDate] = useState<boolean>(
     settings?.pinnedWidget?.showDate ?? true
   );
   const [showDhikr, setShowDhikr] = useState<boolean>(
-    settings?.pinnedWidget?.showDhikr ?? true
+    settings?.pinnedWidget?.showDhikr ?? false
   );
   const [showAyah, setShowAyah] = useState<boolean>(
     settings?.pinnedWidget?.showAyah ?? false
@@ -89,7 +89,7 @@ export function useWidgetSimulatorLogic({
     settings?.pinnedWidget?.showQibla ?? false
   );
   const [showSubhaBtn, setShowSubhaBtn] = useState<boolean>(
-    settings?.pinnedWidget?.showSubhaBtn ?? true
+    settings?.pinnedWidget?.showSubhaBtn ?? false
   );
   const [showProgressBar, setShowProgressBar] = useState<boolean>(
     settings?.pinnedWidget?.showProgressBar ?? true
@@ -98,7 +98,7 @@ export function useWidgetSimulatorLogic({
     settings?.pinnedWidget?.cardSize || 'medium'
   );
   const [showKhushuBtn, setShowKhushuBtn] = useState<boolean>(
-    settings?.pinnedWidget?.showKhushuBtn ?? true
+    settings?.pinnedWidget?.showKhushuBtn ?? false
   );
 
   const currentWallpaper = WALLPAPERS.find((w) => w.id === activeWallpaper) || WALLPAPERS[0];
@@ -339,9 +339,75 @@ export function useWidgetSimulatorLogic({
     setTimeout(() => setShowToast(false), 5000);
   };
 
+  const applyPreset = (presetKey: 'hero' | 'digital' | 'spiritual' | 'minimal') => {
+    if (presetKey === 'hero') {
+      setClockStyle('none');
+      setPrayerDisplay('all_prayers');
+      setCardSize('medium');
+      setShowProgressBar(true);
+      setShowMoonPhase(true);
+      setShowDate(true);
+      setShowDhikr(false);
+      setShowAyah(false);
+      setShowQibla(false);
+      setShowSubhaBtn(false);
+      setShowKhushuBtn(false);
+      setWidgetTheme('glass');
+      setToastMessage('✨ تم تفعيل قالب: الهيرو كارد الأصلي بنجاح!');
+      setShowToast(true);
+    } else if (presetKey === 'digital') {
+      setClockStyle('digital');
+      setPrayerDisplay('all_prayers');
+      setCardSize('medium');
+      setShowProgressBar(true);
+      setShowMoonPhase(true);
+      setShowDate(true);
+      setShowDhikr(false);
+      setShowAyah(false);
+      setShowQibla(false);
+      setShowSubhaBtn(false);
+      setShowKhushuBtn(false);
+      setWidgetTheme('onyx');
+      setToastMessage('⏱️ تم تفعيل قالب: الساعة الكلاسيكية!');
+      setShowToast(true);
+    } else if (presetKey === 'spiritual') {
+      setClockStyle('none');
+      setPrayerDisplay('all_prayers');
+      setCardSize('large');
+      setShowProgressBar(true);
+      setShowMoonPhase(true);
+      setShowDate(true);
+      setShowDhikr(true);
+      setShowAyah(true);
+      setShowQibla(false);
+      setShowSubhaBtn(true);
+      setShowKhushuBtn(true);
+      setWidgetTheme('green');
+      setToastMessage('📿 تم تفعيل قالب: الأذكار والسبحة الروحانية!');
+      setShowToast(true);
+    } else if (presetKey === 'minimal') {
+      setClockStyle('none');
+      setPrayerDisplay('next_only');
+      setCardSize('compact');
+      setShowProgressBar(true);
+      setShowMoonPhase(false);
+      setShowDate(true);
+      setShowDhikr(false);
+      setShowAyah(false);
+      setShowQibla(false);
+      setShowSubhaBtn(false);
+      setShowKhushuBtn(false);
+      setWidgetTheme('glass');
+      setToastMessage('💎 تم تفعيل قالب: الزجاجي المصغر!');
+      setShowToast(true);
+    }
+    setTimeout(() => setShowToast(false), 3500);
+  };
+
   const isFaithBright = settings.appStyle === 'faith-bright';
 
   return {
+    applyPreset,
     widgetType,
     setWidgetType,
     widgetTheme,

@@ -113,11 +113,11 @@ export function usePrayerManagerLogic({
     return safeGetItem('salah_general_muezzin') || 'makkah';
   });
   const [fajrMuezzin] = useState<string>(() => {
-    return safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+    return safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
   });
   const [prayerMuezzins] = useState<Record<string, string>>(() => {
     const general = safeGetItem('salah_general_muezzin') || 'makkah';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
     return {
       Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
       Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,

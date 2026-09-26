@@ -178,6 +178,27 @@ export function usePrayerScheduler({
       }
     }
 
+    // Helper: Determine priority score for alarms when multiple trigger simultaneously
+    // Priority order: Adhan (handled first) > Prayer pre-alert > Custom alarm
+    // Among custom alarms: Prayer-relative > Fixed time.
+    const getAlarmPriorityScore = (alarm: AlarmConfig): number => {
+      let score = 50;
+      if (alarm.type === 'prayer_relative') score += 20;
+      if (alarm.soundType !== 'silent' && alarm.soundType !== 'vibrate') score += 10;
+      if (alarm.autoKhushu) score += 5;
+      return score;
+    };
+
+    // Collect all candidate custom alarms matching the current minute
+    interface PendingTriggerItem {
+      alarm: AlarmConfig;
+      targetPrayer?: RelativePrayerTarget;
+      triggeredKey: string;
+      priority: number;
+    }
+
+    const pendingAlarmsToTrigger: PendingTriggerItem[] = [];
+
     // 2. Check Custom Alarms (Both Prayer-Relative & Fixed Times)
     customAlarms.forEach(alarm => {
       if (!alarm.enabled) return;
@@ -203,15 +224,12 @@ export function usePrayerScheduler({
             // Expired, mark handled so opening app late doesn't ring
             safeSetItem(triggeredKey, 'expired');
           } else if (isMatch && !safeGetItem(triggeredKey)) {
-            safeSetItem(triggeredKey, 'true');
-            // Audio Mutex: If Adhan or other audio is already actively playing, don't overlap audio
-            const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
-            if (!isAudioBusy) {
-              triggerCustomAlarm(alarm, pTarget);
-            } else {
-              console.warn('[usePrayerScheduler] Audio is currently playing Adhan, triggering visual alarm notification only to prevent overlap');
-              triggerCustomAlarm({ ...alarm, soundType: 'silent' }, pTarget);
-            }
+            pendingAlarmsToTrigger.push({
+              alarm,
+              targetPrayer: pTarget,
+              triggeredKey,
+              priority: getAlarmPriorityScore(alarm)
+            });
           }
         });
       } else {
@@ -226,17 +244,44 @@ export function usePrayerScheduler({
         if (diff > 2 && !safeGetItem(triggeredKey)) {
           safeSetItem(triggeredKey, 'expired');
         } else if (isMatch && !safeGetItem(triggeredKey)) {
-          safeSetItem(triggeredKey, 'true');
-          const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
-          if (!isAudioBusy) {
-            triggerCustomAlarm(alarm);
-          } else {
-            console.warn('[usePrayerScheduler] Audio is busy, triggering silent alarm notification');
-            triggerCustomAlarm({ ...alarm, soundType: 'silent' });
-          }
+          pendingAlarmsToTrigger.push({
+            alarm,
+            triggeredKey,
+            priority: getAlarmPriorityScore(alarm)
+          });
         }
       }
     });
+
+    if (pendingAlarmsToTrigger.length > 0) {
+      // Sort candidates by highest priority first
+      pendingAlarmsToTrigger.sort((a, b) => b.priority - a.priority);
+
+      // Mutex status: is audio actively playing or is overlay active?
+      const isAudioBusy = Boolean(
+        (globalAudioRef?.current && !globalAudioRef.current.paused && globalAudioRef.current.currentTime > 0) ||
+        safeSessionGetItem(`salah_attempted_${todayStr}_Fajr`) === 'true' && !safeGetItem(`salah_played_${todayStr}_Fajr`)
+      );
+
+      // The highest priority alarm gets full audio playback (if audio mutex is free)
+      const primaryItem = pendingAlarmsToTrigger[0];
+      safeSetItem(primaryItem.triggeredKey, 'true');
+
+      if (!isAudioBusy) {
+        triggerCustomAlarm(primaryItem.alarm, primaryItem.targetPrayer);
+      } else {
+        console.warn('[usePrayerScheduler] Audio is currently busy playing Adhan. Playing visual/notification alarm only to avoid sound collision.');
+        triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
+      }
+
+      // Any concurrent lower-priority alarms trigger as silent visual notifications only
+      for (let i = 1; i < pendingAlarmsToTrigger.length; i++) {
+        const secondaryItem = pendingAlarmsToTrigger[i];
+        safeSetItem(secondaryItem.triggeredKey, 'true');
+        console.warn(`[usePrayerScheduler] Concurrent alarm "${secondaryItem.alarm.title}" deferred sound to prioritize "${primaryItem.alarm.title}".`);
+        triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer);
+      }
+    }
   }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);
 
   // Run catchup, cleanup, and native Android AlarmManager scheduling on initial state load or settings update
@@ -246,7 +291,7 @@ export function usePrayerScheduler({
       cleanupOldTrackingKeys();
 
       const now = new Date();
-      let days60List: Array<{ date: Date; timesMap: Record<string, string> | PrayerTimes }> = [];
+      let days60List: Array<{ date: Date; timesMap: Record<string, string>; prayers: Record<string, string> }> = [];
 
       const hasValidCoords = Boolean(settings.latitude && settings.longitude);
 
@@ -265,6 +310,7 @@ export function usePrayerScheduler({
           days60List = cached.schedule.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
+            prayers: s.timesMap,
           }));
         } else {
           // Cache miss or needs 60-day extension -> compute fresh 60 days
@@ -280,8 +326,8 @@ export function usePrayerScheduler({
               settings.calcMethod,
               settings.madhab,
               settings.prayerOffsets || {}
-            );
-            days60List.push({ date: d, timesMap });
+            ) as unknown as Record<string, string>;
+            days60List.push({ date: d, timesMap, prayers: timesMap });
           }
 
           // Save to location cache
@@ -302,6 +348,7 @@ export function usePrayerScheduler({
           days60List = lastCached.schedule.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
+            prayers: s.timesMap,
           }));
         }
       }

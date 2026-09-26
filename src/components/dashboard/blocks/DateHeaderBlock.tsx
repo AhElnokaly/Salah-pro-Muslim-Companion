@@ -1,88 +1,65 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React from 'react';
-import { Calendar } from 'lucide-react';
 import { CardBlockSize, CardBlockAccent } from '../../../types';
 
 interface DateHeaderBlockProps {
   size?: CardBlockSize;
   accent?: CardBlockAccent;
-  hijri: { day: number; month: number; year: number; fullString: string };
-  gregorianClean: string;
-  dayNameArabic: string;
-  setActiveTab?: (tab: string) => void;
+  hijri?: { day: number; month: number; year: number; monthName?: string; fullString: string };
+  gregorianClean?: string;
+  dayNameArabic?: string;
   onOpenHijriAdjust?: () => void;
-  getMoonPhaseInfo: (day: number) => { name: string; icon: string; illumination: number };
-  toArabicNumbers: (str: string | number) => string;
+  getMoonPhaseInfo?: (day: number) => { name: string; icon: string; illumination: number };
+  toArabicNumbers?: (str: string | number) => string;
 }
 
-const DateHeaderBlock: React.FC<DateHeaderBlockProps> = React.memo(({
+const DateHeaderBlock: React.FC<DateHeaderBlockProps> = ({
   size = 'normal',
   hijri,
   gregorianClean,
   dayNameArabic,
-  setActiveTab,
   onOpenHijriAdjust,
   getMoonPhaseInfo,
-  toArabicNumbers
+  toArabicNumbers = (n) => String(n),
 }) => {
-  const moonInfo = getMoonPhaseInfo(hijri.day);
-
-  const sizeClasses = {
-    compact: 'text-[10px] sm:text-[11px] px-2.5 py-1',
-    normal: 'text-[11px] sm:text-xs px-3 sm:px-4 py-1.5',
-    large: 'text-xs sm:text-sm px-4 sm:px-5 py-2'
-  }[size];
+  const moonInfo = hijri && getMoonPhaseInfo ? getMoonPhaseInfo(hijri.day) : null;
 
   return (
-    <div className="flex flex-col items-center justify-center text-center gap-2 z-10 w-full border-b border-white/10 pb-2.5">
-      <div className={`flex items-center justify-center gap-2 sm:gap-3 bg-black/20 rounded-full border border-white/10 text-white shadow-xs max-w-full overflow-x-auto whitespace-nowrap scrollbar-none ${sizeClasses}`}>
-        {/* Clickable Hijri Date */}
-        <button
-          id="date-header-hijri-quick-adjust-btn"
-          type="button"
-          onClick={() => {
-            if (onOpenHijriAdjust) {
-              onOpenHijriAdjust();
-            } else {
-              window.dispatchEvent(new CustomEvent('open-hijri-adjust'));
-            }
-          }}
-          className="flex items-center gap-1.5 font-extrabold text-white hover:text-amber-300 transition-colors cursor-pointer shrink-0 group"
-          title="اضغط لضبط وتعديل التاريخ الهجري فوراً"
-          aria-label={`التاريخ الهجري: ${hijri.fullString} - اضغط لضبط التاريخ الهجري`}
-        >
-          <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
-          <span className="leading-none drop-shadow-xs">{hijri.fullString}</span>
-          <span className="text-[9px] px-1 py-0.5 rounded-md bg-white/10 text-amber-300/80 group-hover:text-amber-200 group-hover:bg-white/20 transition-all font-medium">
-            ضبط ✏️
+    <div className="w-full flex items-center justify-between text-white/90 text-xs font-bold px-1 my-0.5 select-none">
+      {/* Day Name and Gregorian */}
+      <div className="flex items-center gap-1.5">
+        {dayNameArabic && (
+          <span className="font-black text-amber-300 drop-shadow-xs">
+            {dayNameArabic}
           </span>
-        </button>
-
-        {/* Clickable Sleek Moon Phase Circle */}
-        <button
-          type="button"
-          onClick={() => setActiveTab && setActiveTab('moon')}
-          className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-amber-400/25 hover:bg-amber-400/45 border border-amber-300/40 hover:border-amber-300 flex items-center justify-center text-xs sm:text-sm hover:scale-110 active:scale-95 transition-all cursor-pointer shadow-xs shrink-0 group"
-          title={`طور القمر اليوم: ${moonInfo.name} (${toArabicNumbers(moonInfo.illumination)}% إضاءة) - اضغط لعرض صفحة أطوار القمر`}
-          aria-label={`طور القمر اليوم: ${moonInfo.name} - فتح صفحة أطوار القمر`}
-        >
-          <span className="leading-none group-hover:rotate-12 transition-transform filter drop-shadow-xs">{moonInfo.icon}</span>
-        </button>
-
-        {/* Clickable Gregorian Date & Day Name */}
-        <button
-          type="button"
-          onClick={() => setActiveTab && setActiveTab('calendar')}
-          className="flex items-center gap-1.5 font-bold text-white/90 hover:text-amber-200 transition-colors cursor-pointer shrink-0"
-          title="اضغط لعرض التقويم الكامل"
-          aria-label={`اليوم والتاريخ الميلادي: ${dayNameArabic} ${gregorianClean} - فتح التقويم`}
-        >
-          <span className="font-black text-amber-200 leading-none">{dayNameArabic}</span>
-          <span className="text-white/25 font-light">•</span>
-          <span className="leading-none">{gregorianClean}</span>
-        </button>
+        )}
+        {gregorianClean && (
+          <span className="text-white/60 text-[10px] font-medium hidden xs:inline">
+            ({toArabicNumbers(gregorianClean)})
+          </span>
+        )}
       </div>
+
+      {/* Hijri Date with Moon Phase & Click to Adjust */}
+      {hijri && (
+        <button
+          type="button"
+          onClick={onOpenHijriAdjust}
+          className="flex items-center gap-1 bg-white/10 hover:bg-white/20 active:scale-95 px-2 py-0.5 rounded-full border border-white/15 transition-all cursor-pointer text-[10px] font-extrabold text-amber-200"
+          title="انقر لتعديل التاريخ الهجري 📅"
+          aria-label={`التاريخ الهجري: ${hijri.fullString}. انقر لتصحيح التاريخ`}
+        >
+          {moonInfo && <span className="text-xs">{moonInfo.icon}</span>}
+          <span>{toArabicNumbers(hijri.fullString)}</span>
+          <span className="text-[8px] text-amber-400/80">✎</span>
+        </button>
+      )}
     </div>
   );
-});
+};
 
 export default DateHeaderBlock;

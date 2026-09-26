@@ -41,7 +41,8 @@ import FridayMode from './FridayMode';
 import FeatureDiscoveryWidget from './FeatureDiscoveryWidget';
 import { PinnedFavoriteWidget } from './PinnedFavoriteWidget';
 import UnifiedProgressCard from './UnifiedProgressCard';
-import { KhushuModeDashboardCard } from './dashboard/KhushuModeDashboardCard';
+import { SmartActionStrip } from './dashboard/SmartActionStrip';
+import { subtractDays, formatDateKey } from '../utils/prayerDayBoundary';
 import { useKhushuMode } from '../hooks/useKhushuMode';
 import { useKhushuAutoScheduler } from '../domain/khushu/useKhushuAutoScheduler';
 import { DashboardKhushuModals } from './khushu/DashboardKhushuModals';
@@ -311,8 +312,17 @@ export default function Dashboard({
     timeRemainingStr,
   });
 
+  const yesterdayDate = subtractDays(now, 1);
+  const yesterdayStr = formatDateKey(yesterdayDate);
+  const yesterdayLogs = prayerLogs[yesterdayStr] || {};
+  const fiveDailyPrayers: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+  const missingYesterdayPrayers = fiveDailyPrayers.filter(p => {
+    const status = yesterdayLogs[p]?.status;
+    return !status || status === 'not_yet' || status === 'future';
+  });
+
   return (
-    <div id="dashboard-root" className="space-y-6" dir="rtl">
+    <div id="dashboard-root" className="space-y-3 sm:space-y-4" dir="rtl">
       {/* 1. High-Fidelity Main Prayer Card with Custom Gradient & Elegant Image Backdrop */}
       <MainPrayerCardContainer
         activeCardGradient={activeCardGradient}
@@ -331,22 +341,38 @@ export default function Dashboard({
         setSelectedPrayerToLog={setSelectedPrayerToLog}
       />
 
-      {/* Khushu Mode (Silence Phone Distractions During Prayer) */}
-      <KhushuModeDashboardCard
-        isActive={isKhushuActive}
-        mode={khushuMode}
-        durationMinutes={khushuDuration}
-        formatRemainingTime={formatKhushuRemainingTime}
-        onOpenSheet={() => setIsKhushuSheetOpen(true)}
-        onQuickActivate={(duration?: number) => activateKhushu(duration)}
-        onDeactivate={deactivateKhushu}
-        isLoading={isKhushuLoading}
-        appStyle={currentStyle}
+      {/* Smart Compact Action Strip (Consolidating Khushu, Missing Prayers, Widget, Travel, Backup into 1 sleek row) */}
+      <SmartActionStrip
+        isKhushuActive={isKhushuActive}
+        khushuMode={khushuMode}
+        khushuDuration={khushuDuration}
+        formatKhushuRemainingTime={formatKhushuRemainingTime}
+        onOpenKhushuSheet={() => setIsKhushuSheetOpen(true)}
+        onQuickActivateKhushu={(duration?: number) => activateKhushu(duration)}
+        onDeactivateKhushu={deactivateKhushu}
+        isKhushuLoading={isKhushuLoading}
         iqamaInfo={iqamaInfo}
-        autoWithIqama={khushuSettings.autoWithIqama}
+        onOpenWidgetSimulator={() => setActiveTab?.('widgets')}
+        missingPrayersCount={missingYesterdayPrayers.length}
+        missingPrayerTitle={missingYesterdayPrayers.length === 1 ? `تسجيل صلاة ${getArabicPrayerName(missingYesterdayPrayers[0], yesterdayDate)}` : 'تسجيل صلوات الأمس'}
+        onLogMissingPrayers={() => {
+          if (setActiveTab) {
+            setActiveTab('salah');
+            window.dispatchEvent(new CustomEvent('open-prayer-worship-yesterday'));
+          }
+        }}
+        showTravelPill={!dismissedTravelBanner}
+        onDismissTravel={() => {
+          safeSetItem('salah_dismissed_travel_banner', todayStr);
+          setDismissedTravelBanner(true);
+        }}
+        showBackupPill={needsBackup && !dismissedBackupBanner}
+        onExportBackup={handleExportBackup}
+        onDismissBackup={() => setDismissedBackupBanner(true)}
+        isFaithBright={currentStyle === 'faith-bright'}
       />
 
-      {/* Dashboard Banners & Notifications */}
+      {/* Dashboard Banners & Notifications (Seasonal, Sacred Hours, GPS alerts) */}
       <DashboardBanners
         now={now}
         todayStr={todayStr}
@@ -369,6 +395,7 @@ export default function Dashboard({
         dashboardSections={dashboardSections}
         settings={settings}
         onOpenHijriAdjust={() => setShowHijriAdjustModal(true)}
+        hideStandaloneActionBanners={true}
       />
 
       {/* Unified Progress & Worship Portal Card (5 Daily/Weekly/Monthly Buttons - Always Visible) */}

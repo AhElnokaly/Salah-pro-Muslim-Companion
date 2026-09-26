@@ -81,13 +81,26 @@ export const SimulatorCustomWidget: React.FC<SimulatorCustomWidgetProps> = ({
 
   return (
     <div
-      className={`w-full rounded-[22px] p-3 flex flex-col justify-between transition-all duration-300 border text-start select-none relative overflow-hidden backdrop-blur-md shadow-xl ${
-        isCompact ? 'min-h-[140px] space-y-1.5' : isLarge ? 'min-h-[260px] space-y-2.5' : 'min-h-[175px] space-y-2'
+      className={`w-full rounded-[22px] p-3 flex flex-col justify-between transition-all duration-300 border text-start select-none relative overflow-hidden shadow-xl ${
+        isCompact ? 'min-h-[140px] space-y-1.5' : isLarge ? 'min-h-[260px] space-y-2.5' : 'min-h-[185px] space-y-2'
       } ${themeClass}`}
       dir="rtl"
     >
+      {/* Real Mosque Backdrop (Matching Hero Card & Android Widget, No SVG) */}
+      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden shrink-0 z-0">
+        <img
+          src="/images/mosque_dark.jpg"
+          alt="خلفية المسجد"
+          className="w-full h-full object-cover object-center"
+        />
+        <div className="absolute inset-0 bg-[#070E20]/75" />
+      </div>
+
       {/* Subtle decorative background glow */}
-      <div className="absolute -top-10 -end-10 w-24 h-24 bg-amber-400/10 rounded-full blur-xl pointer-events-none" />
+      <div className="absolute -top-10 -end-10 w-24 h-24 bg-amber-400/10 rounded-full blur-xl pointer-events-none z-0" />
+
+      {/* Content wrapper with relative z-10 */}
+      <div className="relative z-10 flex flex-col justify-between h-full w-full space-y-2">
 
       {/* HEADER: Date, Hijri, Moon Phase */}
       {showDate && (
@@ -226,11 +239,12 @@ export const SimulatorCustomWidget: React.FC<SimulatorCustomWidgetProps> = ({
 
       {/* ALL PRAYERS ROW (Shown when prayerDisplay === 'all_prayers' or on medium/large cards) */}
       {(prayerDisplay === 'all_prayers' || (!isCompact && prayerDisplay !== 'none')) && (
-        <div className="grid grid-cols-5 gap-1 text-center bg-black/20 rounded-xl p-1 border border-white/10">
-          {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
+        <div className="grid grid-cols-6 gap-1 text-center bg-black/30 rounded-xl p-1 border border-white/10">
+          {(['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((pName) => {
             const isCurrent = currentPrayer === pName;
             const isNext = nextPrayer === pName;
-            const prayerTime = prayerTimes[pName] || '٠٠:٠٠';
+            const prayerTime = (prayerTimes as Record<string, string>)[pName] || '٠٠:٠٠';
+            const label = pName === 'Sunrise' ? 'الشروق' : getArabicName(pName);
             return (
               <div
                 key={pName}
@@ -242,8 +256,8 @@ export const SimulatorCustomWidget: React.FC<SimulatorCustomWidgetProps> = ({
                     : 'text-white/80'
                 }`}
               >
-                <span className="text-[6.5px] block font-bold leading-none truncate">
-                  {getArabicName(pName)}
+                <span className={`text-[6.5px] block truncate ${pName === 'Sunrise' ? 'text-amber-300/90 font-bold' : 'font-bold'}`}>
+                  {label}
                 </span>
                 <span className="text-[7.5px] block font-black font-mono mt-0.5 leading-none">
                   {toArabicNumbers(prayerTime)}
@@ -311,6 +325,7 @@ export const SimulatorCustomWidget: React.FC<SimulatorCustomWidgetProps> = ({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };

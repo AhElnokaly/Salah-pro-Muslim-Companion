@@ -1,15 +1,14 @@
 {
   "name": "hemmaty-app",
+  "version": "1.1.1",
   "private": true,
-  "version": "1.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
@@ -37,7 +36,6 @@
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "typescript": "~5.8.2"
   }
 }

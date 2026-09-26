@@ -1,41 +1,32 @@
-import React, { lazy } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-// Helper for safe lazy loading with retry mechanism and graceful fallback
-export function safeLazy<T extends React.ComponentType<any>>(
-  importFn: () => Promise<{ default: T } | Record<string, unknown>>
-) {
+import React, { ComponentType, lazy, LazyExoticComponent } from 'react';
+
+/**
+ * Robust wrapper around React.lazy with retry and resilient fallback
+ * to prevent white screen crashes during chunk load failures.
+ */
+export function safeLazy<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+): LazyExoticComponent<T> {
   return lazy(async () => {
     try {
-      const module = await importFn();
-      if ('default' in module && module.default) {
-        return { default: module.default as T };
-      }
-      const values = Object.values(module);
-      for (const val of values) {
-        if (typeof val === 'function') {
-          return { default: val as unknown as T };
-        }
-      }
-      throw new Error('No valid component export found');
-    } catch (err) {
-      console.warn('[safeLazy] Dynamic import failed, retrying once...', err);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      return await factory();
+    } catch (firstError) {
+      console.warn('[SafeLazy] Initial chunk load failed, retrying once...', firstError);
       try {
-        const retryModule = await importFn();
-        if ('default' in retryModule && retryModule.default) {
-          return { default: retryModule.default as T };
-        }
-        const values = Object.values(retryModule);
-        for (const val of values) {
-          if (typeof val === 'function') {
-            return { default: val as unknown as T };
-          }
-        }
-      } catch (retryErr) {
-        console.error('[safeLazy] Secondary retry failed:', retryErr);
+        return await factory();
+      } catch (secondError) {
+        console.error('[SafeLazy] Fatal chunk load error:', secondError);
+        // Return a resilient blank component fallback instead of crashing
+        const FallbackComponent: React.FC = () => null;
+        return { default: FallbackComponent as unknown as T };
       }
-      // Return a safe dummy component to prevent root ErrorBoundary crashes on stale/failed chunks
-      return { default: (() => null) as unknown as T };
     }
   });
 }
+
+export default safeLazy;

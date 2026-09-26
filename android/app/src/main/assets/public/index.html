@@ -9,17 +9,33 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="هِمَّتِي" />
     
-    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
     
     <link rel="manifest" href="./manifest.json" />
-    <script type="module" crossorigin src="./assets/index-DNIRHr6A.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/vendor-libs-BTFXSzXW.js">
-    <link rel="modulepreload" crossorigin href="./assets/vendor-core-CD04mQAH.js">
-    <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-CAzbkKaE.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-C6NJ6VtU.css">
+
+    <script>
+      // Immediate cleanup of service workers in dev/cloud preview environments to avoid caching Vite source code
+      (function() {
+        if ('serviceWorker' in navigator) {
+          var h = window.location.hostname;
+          if (h.indexOf('run.app') !== -1 || h.indexOf('aistudio') !== -1 || h === 'localhost' || h === '127.0.0.1') {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) {
+                regs[i].unregister();
+              }
+            }).catch(function() {});
+          }
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-O4s2CRIn.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vendor-libs-Bb8JjhAW.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-core-CkA3gQVy.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-capacitor-BRmJg-ml.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-BbmadOx3.css">
   </head>
   <body class="bg-[#faf7f0] dark:bg-[#0c1017] text-slate-800 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root">
@@ -37,10 +53,37 @@
       </div>
     </div>
     <script>
-      // Global resource error detection (catches 404/503 on JS/CSS modules)
+      // Global resource error detection (catches network hiccups or cold container boots)
       window.addEventListener('error', function(e) {
         if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-          console.error('[BootGuard] Failed loading essential asset:', e.target.src || e.target.href);
+          var src = e.target.src || e.target.href || '';
+          console.warn('[BootGuard] Network hiccup loading module asset:', src);
+
+          // If main entry point failed to load (e.g. cold start / container waking up), attempt clean self-healing reload
+          if (src.indexOf('/src/main.tsx') !== -1) {
+            try {
+              var retryCount = parseInt(sessionStorage.getItem('boot_retry_count') || '0', 10);
+              if (retryCount < 2) {
+                sessionStorage.setItem('boot_retry_count', String(retryCount + 1));
+                console.log('[BootGuard] Container waking up, scheduling self-healing reload (attempt ' + (retryCount + 1) + ')...');
+
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    for (var i = 0; i < regs.length; i++) regs[i].unregister();
+                  }).catch(function() {});
+                }
+
+                setTimeout(function() {
+                  window.location.reload();
+                }, 1200);
+                return;
+              }
+              sessionStorage.removeItem('boot_retry_count');
+            } catch (err) {
+              // Ignore storage errors
+            }
+          }
+
           var box = document.getElementById('recovery-box');
           if (box) {
             box.style.display = 'block';
@@ -53,7 +96,7 @@
         if (box && document.getElementById('boot-loader')) {
           box.style.display = 'block';
         }
-      }, 2500);
+      }, 7000);
 
       function clearAndReload() {
         var btn = document.querySelector('#recovery-box button');

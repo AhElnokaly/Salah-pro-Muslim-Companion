@@ -25,7 +25,7 @@ export function useMuezzinSettings(
   });
 
   const [fajrMuezzin, setFajrMuezzinState] = useState<string>(() => {
-    return safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+    return safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
   });
 
   const [customMuezzins, setCustomMuezzins] = useState<AudioTrack[]>([]);

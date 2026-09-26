@@ -43,6 +43,8 @@ export interface WidgetControlsProps {
 
 export default function WidgetControls({
   isFaithBright,
+  widgetType = 'custom',
+  setWidgetType,
   widgetTheme,
   setWidgetTheme,
   cardSize = 'medium',
@@ -144,14 +146,62 @@ export default function WidgetControls({
     },
   ];
 
+  const shapeOptions: Array<{ id: WidgetType; name: string; icon: string }> = [
+    { id: 'custom', name: 'الافتراضي المتكامل', icon: '🕌' },
+    { id: 'timeline', name: 'خط زمني أفقي', icon: '⏱️' },
+    { id: 'grid', name: 'شبكي لجميع الصلوات', icon: '📊' },
+    { id: 'teal', name: 'فخامة خضراء', icon: '🌿' },
+    { id: 'analog', name: 'ساعة عقارب روحانية', icon: '🧭' },
+    { id: 'compact', name: 'أفقي فائق الإيجاز', icon: '⚡' },
+    { id: 'dhikr', name: 'بطاقة أذكار وتسبيح', icon: '📿' },
+    { id: 'calendar', name: 'تقويم هجري شامل', icon: '📅' },
+  ];
+
   return (
     <div className="md:col-span-7 space-y-4 flex flex-col justify-between" dir="rtl">
-      {/* SECTION 1: WIDGET SIZE (Replacing repetitive 9 types) */}
+      {/* SECTION 1: WIDGET SHAPE / DESIGN STYLE */}
+      {setWidgetType && (
+        <div className="space-y-2 text-start">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-black text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>١. اختر شكل ونموذج الـ Widget:</span>
+            </label>
+            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
+              ٨ نماذج وأشكال
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {shapeOptions.map((s) => {
+              const isSelected = widgetType === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setWidgetType(s.id)}
+                  className={`p-2 rounded-xl border text-[9.5px] font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-300 ring-2 ring-amber-400/30 font-black'
+                      : isFaithBright
+                      ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      : 'bg-slate-900/60 border-white/5 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>{s.icon}</span>
+                  <span className="truncate">{s.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 2: WIDGET SIZE */}
       <div className="space-y-2 text-start">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] font-black text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>١. اختر مقاس الـ Widget على شاشتك:</span>
+          <label className="text-[11px] font-black text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+            <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
+            <span>٢. اختر مقاس الـ Widget على شاشتك:</span>
           </label>
           <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
             ودجت مخصص مرن
@@ -194,11 +244,11 @@ export default function WidgetControls({
         </div>
       </div>
 
-      {/* SECTION 2: VISUAL THEME & PALETTES */}
+      {/* SECTION 3: VISUAL THEME & PALETTES */}
       <div className="space-y-2 text-start">
         <label className="text-[11px] font-black text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
           <Palette className="w-3.5 h-3.5 text-indigo-400" />
-          <span>٢. النمط اللوني والخلفية:</span>
+          <span>٣. النمط اللوني والخلفية:</span>
         </label>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
           {themeOptions.map((t) => {
@@ -223,7 +273,7 @@ export default function WidgetControls({
         </div>
       </div>
 
-      {/* SECTION 3: SPIRITUAL COMPONENT CONTROLS */}
+      {/* SECTION 4: SPIRITUAL COMPONENT CONTROLS */}
       <div
         className={`p-3.5 rounded-2xl border space-y-3 ${
           isFaithBright ? 'bg-amber-50/50 border-amber-200/70' : 'bg-slate-900/70 border-white/10'
@@ -232,7 +282,7 @@ export default function WidgetControls({
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <span className="text-[11px] font-black text-amber-500 dark:text-amber-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>٣. تخصيص محتويات الودجت الذكي:</span>
+            <span>٤. تخصيص محتويات الودجت الذكي:</span>
           </span>
           <span className="text-[8.5px] font-bold text-slate-400">تحكم فوري مباشر</span>
         </div>
