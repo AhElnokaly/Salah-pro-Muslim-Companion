@@ -96,7 +96,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
 
   const [localPrayerMuezzins, setLocalPrayerMuezzins] = useState<Record<string, string>>(() => {
     const general = safeGetItem('salah_general_muezzin') || 'makkah';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
+    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
     return {
       Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
       Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,
@@ -108,7 +108,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   });
 
   const activePrayerMuezzins = propPrayerMuezzins || localPrayerMuezzins;
-  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_makkah';
+  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_yusuf';
   const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || 'makkah';
 
   // Dedicated Audio Preview Controller for Responsive Playback

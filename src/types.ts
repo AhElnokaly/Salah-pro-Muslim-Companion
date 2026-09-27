@@ -247,7 +247,7 @@ export const DEFAULT_CARD_LAYOUT: MainCardLayout = {
   ],
 };
 
-export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' | 'alsalatu_khayr' | 'salawat' | 'istighfar' | 'ayat_kursi' | 'beep' | 'vibrate' | 'silent';
+export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' | 'alsalatu_khayr' | 'salawat' | 'istighfar' | 'beep' | 'vibrate' | 'silent';
 
 export type AlarmNotifyMode = 'sound' | 'vibrate' | 'both' | 'silent';
 

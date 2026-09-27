@@ -22,12 +22,6 @@ export function useDashboardEvents({
   setSelectedPrayerToLog,
   handleGPSLocationSync,
 }: UseDashboardEventsProps) {
-  const nowRef = React.useRef(now);
-  nowRef.current = now;
-
-  const timesRef = React.useRef(times);
-  timesRef.current = times;
-
   useEffect(() => {
     const handleUpdate = () => {
       setDashboardSections(getDashboardSectionsConfig());
@@ -57,7 +51,7 @@ export function useDashboardEvents({
         return;
       }
 
-      if (isPrayerInFuture(pKey, nowRef.current, timesRef.current)) {
+      if (isPrayerInFuture(pKey, now, times)) {
         setFuturePrayerWarning(pKey);
       } else {
         setSelectedPrayerToLog(pKey);
@@ -77,5 +71,5 @@ export function useDashboardEvents({
       window.removeEventListener('salah_quick_log_prayer', handleQuickLogPrayerEvent);
       window.removeEventListener('trigger-gps-sync', handleGPSTrigger);
     };
-  }, [setDashboardSections, setShowDuhaQuickLog, setFuturePrayerWarning, setSelectedPrayerToLog, handleGPSLocationSync]);
+  }, [now, times, setDashboardSections, setShowDuhaQuickLog, setFuturePrayerWarning, setSelectedPrayerToLog, handleGPSLocationSync]);
 }

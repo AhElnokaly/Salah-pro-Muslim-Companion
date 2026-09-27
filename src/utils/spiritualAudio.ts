@@ -95,7 +95,6 @@ export const SPIRITUAL_AUDIO_FILES: Record<string, string> = {
   salawat: '/audio/salawat.mp3',
   istighfar: '/audio/istighfar.mp3',
   duaa: '/audio/duaa.mp3',
-  ayat_kursi: 'https://everyayah.com/data/Alafasy_128kbps/002255.mp3',
   beep: '/audio/beep.mp3',
   reminder: '/audio/reminder.mp3',
 };

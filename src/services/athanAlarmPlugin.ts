@@ -385,8 +385,6 @@ export async function scheduleNativeAthanAlarms(
         Object.entries(entry.timesMap).forEach(([key, timeStr]) => {
           const lowerKey = key.toLowerCase();
           if (!prayerArabicNames[lowerKey]) return;
-          // Sunrise is not a prayer: do not play full Athan or trigger adhan alarms for Sunrise
-          if (lowerKey === 'sunrise') return;
 
           const totalMins = parseTimeToMinutes(timeStr);
           const hours = Math.floor(totalMins / 60);
@@ -464,8 +462,6 @@ export async function scheduleNativeAthanAlarms(
       Object.entries(daysListOrTodayMap).forEach(([key, timeStr]) => {
         const lowerKey = key.toLowerCase();
         if (!prayerArabicNames[lowerKey]) return;
-        // Sunrise is not a prayer: do not play full Athan or trigger adhan alarms for Sunrise
-        if (lowerKey === 'sunrise') return;
 
         const totalMins = parseTimeToMinutes(timeStr);
         const hours = Math.floor(totalMins / 60);
@@ -543,8 +539,6 @@ export async function scheduleNativeAthanAlarms(
         Object.entries(tomorrowPrayerTimesMap).forEach(([key, timeStr]) => {
           const lowerKey = key.toLowerCase();
           if (!prayerArabicNames[lowerKey]) return;
-          // Sunrise is not a prayer: do not play full Athan or trigger adhan alarms for Sunrise
-          if (lowerKey === 'sunrise') return;
 
           const totalMins = parseTimeToMinutes(timeStr);
           const hours = Math.floor(totalMins / 60);

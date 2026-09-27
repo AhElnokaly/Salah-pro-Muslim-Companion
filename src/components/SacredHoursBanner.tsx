@@ -100,40 +100,10 @@ export default function SacredHoursBanner({
       (currentMs >= maghribDate.getTime() && currentMs < maghribDate.getTime() + 20 * 60 * 1000) ||
       (ishaDate && currentMs >= ishaDate.getTime() && currentMs < ishaDate.getTime() + 20 * 60 * 1000);
 
-    const applyDetails = (
-      type: 'qiyam' | 'friday_response' | 'forbidden' | 'athan_iqama' | 'normal',
-      details: {
-        title: string;
-        subtitle: string;
-        badgeText: string;
-        actionText: string;
-        actionTab: string;
-        theme: 'indigo' | 'amber' | 'emerald' | 'rose';
-        icon: string;
-      } | null
-    ) => {
-      setActiveHourType((prev) => (prev === type ? prev : type));
-      setHourDetails((prev) => {
-        if (!prev && !details) return prev;
-        if (!prev || !details) return details;
-        if (
-          prev.title === details.title &&
-          prev.subtitle === details.subtitle &&
-          prev.badgeText === details.badgeText &&
-          prev.actionText === details.actionText &&
-          prev.actionTab === details.actionTab &&
-          prev.theme === details.theme &&
-          prev.icon === details.icon
-        ) {
-          return prev;
-        }
-        return details;
-      });
-    };
-
     // Set Priority Banner
     if (isInThirdNight) {
-      applyDetails('qiyam', {
+      setActiveHourType('qiyam');
+      setHourDetails({
         title: 'الثلث الأخير من الليل قائم الآن 🌙',
         subtitle: 'يتنزل ربنا تبارك وتعالى إلى السماء الدنيا ويقول: هل من داعٍ فأستجيب له؟',
         badgeText: 'ساعة استجابة واستغفار',
@@ -143,7 +113,8 @@ export default function SacredHoursBanner({
         icon: '✨'
       });
     } else if (isFridayAsrWindow) {
-      applyDetails('friday_response', {
+      setActiveHourType('friday_response');
+      setHourDetails({
         title: 'ساعة الاستجابة يوم الجمعة 🤲',
         subtitle: 'فيه ساعة لا يوافقها عبد مسلم يدعو الله إلا أعطاه إياه، أكثِر من الدعاء والصلاة على النبي ﷺ',
         badgeText: 'ساعة استجابة الجمعة',
@@ -153,7 +124,8 @@ export default function SacredHoursBanner({
         icon: '🕌'
       });
     } else if (isSunriseForbidden) {
-      applyDetails('forbidden', {
+      setActiveHourType('forbidden');
+      setHourDetails({
         title: 'وقت النهي عن النافلة (عند الشروق) ☀️',
         subtitle: 'يُكره ابتداء صلاة النافلة عند شروق الشمس حتى ترتفع قيد رمح (حوالي ١٥ دقيقة بعد الشروق).',
         badgeText: 'وقت نهي شرعي',
@@ -163,7 +135,8 @@ export default function SacredHoursBanner({
         icon: '⛔'
       });
     } else if (isZenithForbidden) {
-      applyDetails('forbidden', {
+      setActiveHourType('forbidden');
+      setHourDetails({
         title: 'وقت النهي عند استواء الشمس ☀️',
         subtitle: 'قبل أذان الظهر بـ ١٠ دقائق تقريباً حتى تزول الشمس، يُكره فيها صلاة النافلة.',
         badgeText: 'وقت نهي شرعي',
@@ -173,7 +146,8 @@ export default function SacredHoursBanner({
         icon: '⛔'
       });
     } else if (isPostAsrForbidden) {
-      applyDetails('forbidden', {
+      setActiveHourType('forbidden');
+      setHourDetails({
         title: 'وقت الكراهة والنهي بعد العصر 🌤️',
         subtitle: 'لا صلاة نافلة مطلقة بعد صلاة العصر حتى تغرب الشمس، ويُستحب شغل الوقت بالأذكار والدعاء.',
         badgeText: 'وقت نهي عن النافلة',
@@ -183,7 +157,8 @@ export default function SacredHoursBanner({
         icon: '📜'
       });
     } else if (isAthanIqamaWindow) {
-      applyDetails('athan_iqama', {
+      setActiveHourType('athan_iqama');
+      setHourDetails({
         title: 'بين الأذان والإقامة 🤲',
         subtitle: 'قال رسول الله ﷺ: «الدُّعَاءُ لا يُرَدُّ بَيْنَ الأَذَانِ وَالإِقَامَةِ»، اغتنم هذه الدقائق بالدعاء.',
         badgeText: 'نافذة استجابة الدعاء',
@@ -193,7 +168,8 @@ export default function SacredHoursBanner({
         icon: '💫'
       });
     } else {
-      applyDetails('normal', null);
+      setActiveHourType('normal');
+      setHourDetails(null);
     }
   }, [prayerTimes, now]);
 
