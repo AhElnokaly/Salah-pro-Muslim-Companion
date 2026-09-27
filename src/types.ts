@@ -41,14 +41,12 @@ export interface VoluntaryPrayerLog {
 
 export interface FastingLog {
   date: string;
-  hijriDate?: string;
-  fastType?: 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar';
-  fasted?: boolean;
-  isQada?: boolean;
+  hijriDate: string;
+  fastType: 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar';
+  fasted: boolean;
+  isQada: boolean;
   qadaForDate?: string;
   reason?: string;
-  isFasting?: boolean;
-  type?: string;
 }
 
 export interface RamadanQadaTracker {

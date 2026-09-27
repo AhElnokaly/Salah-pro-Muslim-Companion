@@ -43,7 +43,6 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 clean == "istighfar" -> "istighfar"
                 clean == "duaa" -> "duaa"
                 clean == "beep" -> "beep"
-                clean == "ayat_kursi" || clean == "ayat-kursi" || clean.contains("kursi") -> "ayat_kursi"
                 clean == "athan" || clean == "adhan" -> "athan_default"
                 clean == "fajr" -> "athan_fajr"
                 else -> "reminder"

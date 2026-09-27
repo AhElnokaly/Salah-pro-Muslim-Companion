@@ -1,50 +1,79 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { KhushuSettings, DEFAULT_KHUSHU_SETTINGS } from './khushuTypes';
-import { safeGetJSON, safeSetJSON, safeGetItem, safeSetItem } from '../../utils/storage';
 
-export const KHUSHU_SETTINGS_STORAGE_KEY = 'hemmaty_khushu_settings_v2';
-const SHIELD_DISMISSED_KEY = 'hemmaty_khushu_shield_dismissed_session';
+export const KHUSHU_SETTINGS_STORAGE_KEY = 'hemmaty_khushu_extended_settings';
+export const KHUSHU_SHIELD_DISMISSED_KEY = 'hemmaty_khushu_shield_dismissed';
+
+function getStorage(): Storage | null {
+  if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+  if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) return (globalThis as any).localStorage;
+  return null;
+}
 
 export class KhushuStorage {
   static getSettings(): KhushuSettings {
-    const stored = safeGetJSON<KhushuSettings | null>(KHUSHU_SETTINGS_STORAGE_KEY, null);
-    if (!stored) {
-      return { ...DEFAULT_KHUSHU_SETTINGS };
+    const storage = getStorage();
+    if (!storage) {
+      return DEFAULT_KHUSHU_SETTINGS;
     }
-    return {
-      ...DEFAULT_KHUSHU_SETTINGS,
-      ...stored,
-      prayerDurations: {
-        ...DEFAULT_KHUSHU_SETTINGS.prayerDurations,
-        ...(stored.prayerDurations || {}),
-      },
-      iqamaOffsets: {
-        ...DEFAULT_KHUSHU_SETTINGS.iqamaOffsets,
-        ...(stored.iqamaOffsets || {}),
-      },
-    };
+    try {
+      const raw = storage.getItem(KHUSHU_SETTINGS_STORAGE_KEY);
+      if (!raw) return DEFAULT_KHUSHU_SETTINGS;
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_KHUSHU_SETTINGS,
+        ...parsed,
+        prayerDurations: {
+          ...DEFAULT_KHUSHU_SETTINGS.prayerDurations,
+          ...(parsed.prayerDurations || {}),
+        },
+        iqamaOffsets: {
+          ...DEFAULT_KHUSHU_SETTINGS.iqamaOffsets,
+          ...(parsed.iqamaOffsets || {}),
+        },
+      };
+    } catch {
+      return DEFAULT_KHUSHU_SETTINGS;
+    }
   }
 
   static saveSettings(settings: KhushuSettings): void {
-    safeSetJSON(KHUSHU_SETTINGS_STORAGE_KEY, settings);
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(KHUSHU_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn('[KhushuStorage] Failed to save settings:', e);
+    }
   }
 
-  static isShieldDismissed(sessionId: string): boolean {
-    const current = safeGetItem(SHIELD_DISMISSED_KEY) || '';
-    return Boolean(current && current === sessionId);
+  static isShieldDismissed(activeSessionId: string): boolean {
+    const storage = getStorage();
+    if (!storage) return false;
+    try {
+      const stored = storage.getItem(KHUSHU_SHIELD_DISMISSED_KEY);
+      return stored === activeSessionId;
+    } catch {
+      return false;
+    }
   }
 
-  static setShieldDismissed(sessionId: string): void {
-    safeSetItem(SHIELD_DISMISSED_KEY, sessionId);
+  static setShieldDismissed(activeSessionId: string): void {
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(KHUSHU_SHIELD_DISMISSED_KEY, activeSessionId);
+    } catch {
+      // safe ignore
+    }
   }
 
   static clearShieldDismissed(): void {
-    safeSetItem(SHIELD_DISMISSED_KEY, '');
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.removeItem(KHUSHU_SHIELD_DISMISSED_KEY);
+    } catch {
+      // safe ignore
+    }
   }
 }
-
-export default KhushuStorage;

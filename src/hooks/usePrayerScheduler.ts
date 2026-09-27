@@ -291,7 +291,7 @@ export function usePrayerScheduler({
       cleanupOldTrackingKeys();
 
       const now = new Date();
-      let days60List: Array<{ date: Date; timesMap: Record<string, string>; prayers: Record<string, string> }> = [];
+      let days60List: Array<{ date: Date; timesMap: Record<string, string> | PrayerTimes }> = [];
 
       const hasValidCoords = Boolean(settings.latitude && settings.longitude);
 
@@ -310,7 +310,6 @@ export function usePrayerScheduler({
           days60List = cached.schedule.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
-            prayers: s.timesMap,
           }));
         } else {
           // Cache miss or needs 60-day extension -> compute fresh 60 days
@@ -326,8 +325,8 @@ export function usePrayerScheduler({
               settings.calcMethod,
               settings.madhab,
               settings.prayerOffsets || {}
-            ) as unknown as Record<string, string>;
-            days60List.push({ date: d, timesMap, prayers: timesMap });
+            );
+            days60List.push({ date: d, timesMap });
           }
 
           // Save to location cache
@@ -348,7 +347,6 @@ export function usePrayerScheduler({
           days60List = lastCached.schedule.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
-            prayers: s.timesMap,
           }));
         }
       }

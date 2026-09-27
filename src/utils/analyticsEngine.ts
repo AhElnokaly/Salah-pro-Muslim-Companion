@@ -156,9 +156,8 @@ export function getCardSummaries(
 
     // Last used formatted text
     let lastUsedText = 'لم يُستخدم';
-    const lastUsedVal = record.lastUsedAt || record.lastUsed;
-    if (lastUsedVal) {
-      const d = new Date(lastUsedVal);
+    if (record.lastUsedAt) {
+      const d = new Date(record.lastUsedAt);
       const isToday = getTodayDateString(d) === todayStr;
       lastUsedText = isToday ? 'اليوم' : `${d.getDate()}/${d.getMonth() + 1}`;
     }
@@ -261,9 +260,8 @@ export function getAnalyticsForPeriod(period: 'daily' | 'weekly' | 'monthly' | '
 
     // Last used formatted text
     let lastUsedText = 'لم يُستخدم';
-    const lastUsedVal = record.lastUsedAt || record.lastUsed;
-    if (lastUsedVal) {
-      const d = new Date(lastUsedVal);
+    if (record.lastUsedAt) {
+      const d = new Date(record.lastUsedAt);
       const isToday = getTodayDateString(d) === getTodayDateString();
       lastUsedText = isToday ? 'اليوم' : `${d.getDate()}/${d.getMonth() + 1}`;
     }
@@ -358,8 +356,6 @@ export function getTopFeaturePraise(
   };
 }
 
-export const getTopPraise = getTopFeaturePraise;
-
 // Helper to compute dynamic formatted duration code like "01d", "02w", "01m" from lastUsedAt timestamp
 export function getTimeAgoCode(lastUsedAt?: string): { code: string; label: string } {
   if (!lastUsedAt) {
@@ -403,7 +399,7 @@ export function getSmartFeatureNudges(
   neglected.slice(0, 3).forEach((item) => {
     const feat = item.feature;
     const record = data[feat.id];
-    const timeAgo = getTimeAgoCode(record?.lastUsedAt || record?.lastUsed);
+    const timeAgo = getTimeAgoCode(record?.lastUsedAt);
 
     let nudgeTitle = `تنشيط ميزة (${feat.name})`;
     let nudgeMessage = `لاحظنا أنك لم تستخدم ميزة (${feat.name}) منذ (${timeAgo.code}). إيه رأيك لو تجربها الآن وتستفيد من خدماتها الإيمانية؟`;
@@ -542,5 +538,3 @@ export function getSpiritualRecommendations(): {
 
   return tips.slice(0, 3);
 }
-
-export const getSmartNudges = getSmartFeatureNudges;

@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { safeGetJSON, safeSetJSON } from '../../utils/storage';
-
 export type DashboardSectionId =
   | 'heroCard'
   | 'progressCard'
@@ -13,12 +11,9 @@ export type DashboardSectionId =
   | 'companionInsights'
   | 'sacredHours'
   | 'featureDiscovery'
-  | 'pinnedFavorite'
-  | 'dailyShortcuts'
-  | 'smartStrip'
-  | 'banners';
+  | 'pinnedFavorite';
 
-export interface DashboardSectionMeta {
+export interface DashboardSectionConfig {
   id: DashboardSectionId;
   label: string;
   description: string;
@@ -26,99 +21,87 @@ export interface DashboardSectionMeta {
   alwaysVisible?: boolean;
 }
 
-export const DASHBOARD_SECTION_REGISTRY: Record<DashboardSectionId, DashboardSectionMeta> = {
+export const DASHBOARD_SECTION_REGISTRY: Record<DashboardSectionId, DashboardSectionConfig> = {
   heroCard: {
     id: 'heroCard',
-    label: 'بطاقة الصلاة الرئيسية ومواقيت اليوم',
-    description: 'عرض الصلاة الحالية والقادمة والعد التنازلي مع الخلفية التفاعلية',
+    label: 'بطاقة الصلاة الرئيسية (Hero)',
+    description: 'بطاقة الصلاة القادمة والعداد التنازلي التفاعلي',
     defaultEnabled: true,
-    alwaysVisible: true,
+    alwaysVisible: true
   },
   progressCard: {
     id: 'progressCard',
-    label: 'مؤشر الإتقان الإيماني الموحد',
-    description: 'متابعة إنجاز الصلوات الخمس والقرآن والأذكار والصيام اليومي والأسبوعي والشهري',
+    label: 'شريط/دائرة التقدم الشامل',
+    description: 'مؤشرات إنجاز الصلوات والأذكار والقرآن',
     defaultEnabled: true,
-    alwaysVisible: true,
+    alwaysVisible: true
   },
   quranSummary: {
     id: 'quranSummary',
-    label: 'شريط متابعة الختمة والورد القرآني',
-    description: 'متابعة نسبة إنجاز الختمة الحالية ومحطات الحفظ اليومية',
-    defaultEnabled: true,
+    label: 'ملخص قراءة القرآن (شريط سريع)',
+    description: 'ملخص من سطر واحد لصفحات الختمة المتبقية',
+    defaultEnabled: true
   },
   khushuSummary: {
     id: 'khushuSummary',
-    label: 'شريط نمط الخشوع وحماية الصلاة',
-    description: 'إحصائيات تفعيل وضع الخشوع الصامت وإنجاز الخشوع في الصلوات',
-    defaultEnabled: true,
+    label: 'ملخص السنن والقيام (شريط سريع)',
+    description: 'ملخص من سطر واحد لصلوات السنن والضحى والقيام',
+    defaultEnabled: true
   },
   companionInsights: {
     id: 'companionInsights',
-    label: 'إضاءات ووصايا الرفيق الإيماني',
-    description: 'خواطر وأحاديث وتوجيهات تناسب وقتك وحالتك الإيمانية',
-    defaultEnabled: true,
+    label: 'بطاقة الرؤى والتحليلات الروحية',
+    description: 'بطاقة قابلة للطي تحتوي على توجيهات تطبيق هِمَّتِي',
+    defaultEnabled: true
   },
   sacredHours: {
     id: 'sacredHours',
-    label: 'تنبيهات الساعات الفاضلة والمواسم',
-    description: 'تنبيهات الثلث الأخير، ساعة الجمعة، والسنن الرواتب',
-    defaultEnabled: true,
+    label: 'تنبيه الأوقات المباركة',
+    description: 'يظهر فقط عند حلول وقت مبارك (كالضحى والثلث الأخير)',
+    defaultEnabled: true
   },
   featureDiscovery: {
     id: 'featureDiscovery',
-    label: 'بطاقة استكشاف الميزات والخدمات',
-    description: 'اقتراحات ذكية لتجربة ميزات التطبيق المتقدمة',
-    defaultEnabled: false,
+    label: 'دليل اكتشاف الميزات',
+    description: 'بطاقة تعليمية للتعرف على مزايا التطبيق (اختياري)',
+    defaultEnabled: false
   },
   pinnedFavorite: {
     id: 'pinnedFavorite',
-    label: 'الودجت المصغر المثبت في الواجهة',
-    description: 'عرض مصغر لشكل الودجت المفضل لديك مباشرة في الشاشة الرئيسية',
-    defaultEnabled: false,
-  },
-  dailyShortcuts: {
-    id: 'dailyShortcuts',
-    label: 'إجراءات واختصارات اليوم السريعة',
-    description: 'أزرار تسجيل قيام الليل والضحى وصيام اليوم بضغطة واحدة',
-    defaultEnabled: true,
-  },
-  smartStrip: {
-    id: 'smartStrip',
-    label: 'شريط الإجراءات الذكي المدمج',
-    description: 'شريط مختصر لحالة الخشوع والنسخ الاحتياطي والصلاة الفائتة',
-    defaultEnabled: true,
-  },
-  banners: {
-    id: 'banners',
-    label: 'بانرات التنبيهات الإيمانية',
-    description: 'تنبيهات المناسبات الإسلامية وتذكيرات الموقع والأذان',
-    defaultEnabled: true,
-  },
+    label: 'المفضلة المثبتة',
+    description: 'ودجة مخصص للأدعية أو الأذكار المفضلة (اختياري)',
+    defaultEnabled: false
+  }
 };
 
-export const DEFAULT_DASHBOARD_SECTIONS: Record<DashboardSectionId, boolean> = {
-  heroCard: true,
-  progressCard: true,
-  quranSummary: true,
-  khushuSummary: true,
-  companionInsights: true,
-  sacredHours: true,
-  featureDiscovery: false,
-  pinnedFavorite: false,
-  dailyShortcuts: true,
-  smartStrip: true,
-  banners: true,
-};
+const STORAGE_KEY = 'salah_dashboard_sections_v1';
 
-const STORAGE_KEY = 'hemmaty_dashboard_sections_visibility';
+import { safeGetJSON, safeSetJSON } from '../../utils/storage';
 
 export function getDashboardSectionsConfig(): Record<DashboardSectionId, boolean> {
-  const stored = safeGetJSON<Partial<Record<DashboardSectionId, boolean>>>(STORAGE_KEY, {});
-  return {
-    ...DEFAULT_DASHBOARD_SECTIONS,
-    ...stored,
-  };
+  const defaults = Object.fromEntries(
+    Object.entries(DASHBOARD_SECTION_REGISTRY).map(([id, cfg]) => [id, cfg.defaultEnabled])
+  ) as Record<DashboardSectionId, boolean>;
+
+  if (typeof window === 'undefined') {
+    return defaults;
+  }
+
+  const parsed = safeGetJSON<Record<string, boolean> | null>(STORAGE_KEY, null);
+  if (parsed) {
+    return {
+      heroCard: true,
+      progressCard: true,
+      quranSummary: parsed.quranSummary ?? DASHBOARD_SECTION_REGISTRY.quranSummary.defaultEnabled,
+      khushuSummary: parsed.khushuSummary ?? DASHBOARD_SECTION_REGISTRY.khushuSummary.defaultEnabled,
+      companionInsights: parsed.companionInsights ?? DASHBOARD_SECTION_REGISTRY.companionInsights.defaultEnabled,
+      sacredHours: parsed.sacredHours ?? DASHBOARD_SECTION_REGISTRY.sacredHours.defaultEnabled,
+      featureDiscovery: parsed.featureDiscovery ?? DASHBOARD_SECTION_REGISTRY.featureDiscovery.defaultEnabled,
+      pinnedFavorite: parsed.pinnedFavorite ?? DASHBOARD_SECTION_REGISTRY.pinnedFavorite.defaultEnabled
+    };
+  }
+
+  return defaults;
 }
 
 export function saveDashboardSectionsConfig(config: Record<DashboardSectionId, boolean>): void {

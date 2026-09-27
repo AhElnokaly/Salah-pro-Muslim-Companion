@@ -8,7 +8,6 @@ export interface SurahMeta {
   name: string;
   englishName: string;
   numberOfAyahs: number;
-  versesCount?: number;
   revelationType: 'Meccan' | 'Medinan';
 }
 
