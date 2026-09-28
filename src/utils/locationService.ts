@@ -193,3 +193,7 @@ export async function detectUserLocation(): Promise<LocationResult> {
     message: 'تعذر التحديد التلقائي. تم تعيين الموقع الافتراضي (القاهرة).'
   };
 }
+
+export async function getCurrentPositionWithCity(): Promise<LocationResult> {
+  return await detectUserLocation();
+}

@@ -19,7 +19,7 @@ interface PrayerQuickLogModalProps {
   pendingQadaPrayers: PendingQadaPrayer[];
   setPrayerLogs: React.Dispatch<React.SetStateAction<Record<string, Record<string, PrayerLog>>>>;
   setPendingQadaPrayers: React.Dispatch<React.SetStateAction<PendingQadaPrayer[]>>;
-  handleUpdateSunnah: (prayerName: PrayerName, type: 'before' | 'after', delta: number) => void;
+  handleUpdateSunnah: (prayerName: PrayerName, type: 'before' | 'after', delta: number, max?: number) => void;
   handleUpdateNafilah: (nafilahName: PrayerName, rakahs: number) => void;
   setShowNightPrayersQuickLog: (val: boolean) => void;
   onNavigateToAdhkarForPrayer?: (prayerName: string) => void;
@@ -163,7 +163,7 @@ export const PrayerQuickLogModal: React.FC<PrayerQuickLogModalProps> = ({
                   type="before"
                   currentRakahs={log.sunnahBefore || 0}
                   maxRakahs={sunnahBeforeMax}
-                  onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta)}
+                  onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta, sunnahBeforeMax)}
                   onToggleComplete={handleToggleCompleteSunnah}
                 />
               )}
@@ -175,7 +175,7 @@ export const PrayerQuickLogModal: React.FC<PrayerQuickLogModalProps> = ({
                   type="after"
                   currentRakahs={log.sunnahAfter || 0}
                   maxRakahs={sunnahAfterMax}
-                  onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta)}
+                  onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta, sunnahAfterMax)}
                   onToggleComplete={handleToggleCompleteSunnah}
                 />
               )}

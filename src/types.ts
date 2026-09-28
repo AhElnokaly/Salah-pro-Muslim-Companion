@@ -41,12 +41,14 @@ export interface VoluntaryPrayerLog {
 
 export interface FastingLog {
   date: string;
-  hijriDate: string;
-  fastType: 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar';
-  fasted: boolean;
-  isQada: boolean;
+  hijriDate?: string;
+  fastType?: 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar';
+  fasted?: boolean;
+  isQada?: boolean;
   qadaForDate?: string;
   reason?: string;
+  isFasting?: boolean;
+  type?: string;
 }
 
 export interface RamadanQadaTracker {
@@ -247,7 +249,7 @@ export const DEFAULT_CARD_LAYOUT: MainCardLayout = {
   ],
 };
 
-export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' | 'alsalatu_khayr' | 'salawat' | 'istighfar' | 'beep' | 'vibrate' | 'silent';
+export type AlarmSoundType = 'adhan' | 'speech' | 'duaa' | 'hayya' | 'takbeer' | 'alsalatu_khayr' | 'salawat' | 'istighfar' | 'ayat_kursi' | 'beep' | 'vibrate' | 'silent';
 
 export type AlarmNotifyMode = 'sound' | 'vibrate' | 'both' | 'silent';
 

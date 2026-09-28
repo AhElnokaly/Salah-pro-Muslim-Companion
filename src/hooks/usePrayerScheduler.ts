@@ -178,6 +178,23 @@ export function usePrayerScheduler({
       }
     }
 
+    const getAlarmPriorityScore = (alarm: AlarmConfig): number => {
+      let score = 50;
+      if (alarm.type === 'prayer_relative') score += 20;
+      if (alarm.soundType !== 'silent' && alarm.soundType !== 'vibrate') score += 10;
+      if (alarm.autoKhushu) score += 5;
+      return score;
+    };
+
+    interface PendingTriggerItem {
+      alarm: AlarmConfig;
+      targetPrayer?: RelativePrayerTarget;
+      triggeredKey: string;
+      priority: number;
+    }
+
+    const pendingAlarmsToTrigger: PendingTriggerItem[] = [];
+
     // 2. Check Custom Alarms (Both Prayer-Relative & Fixed Times)
     customAlarms.forEach(alarm => {
       if (!alarm.enabled) return;
@@ -203,15 +220,7 @@ export function usePrayerScheduler({
             // Expired, mark handled so opening app late doesn't ring
             safeSetItem(triggeredKey, 'expired');
           } else if (isMatch && !safeGetItem(triggeredKey)) {
-            safeSetItem(triggeredKey, 'true');
-            // Audio Mutex: If Adhan or other audio is already actively playing, don't overlap audio
-            const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
-            if (!isAudioBusy) {
-              triggerCustomAlarm(alarm, pTarget);
-            } else {
-              console.warn('[usePrayerScheduler] Audio is currently playing Adhan, triggering visual alarm notification only to prevent overlap');
-              triggerCustomAlarm({ ...alarm, soundType: 'silent' }, pTarget);
-            }
+            pendingAlarmsToTrigger.push({ alarm, targetPrayer: pTarget, triggeredKey, priority: getAlarmPriorityScore(alarm) });
           }
         });
       } else {
@@ -226,17 +235,33 @@ export function usePrayerScheduler({
         if (diff > 2 && !safeGetItem(triggeredKey)) {
           safeSetItem(triggeredKey, 'expired');
         } else if (isMatch && !safeGetItem(triggeredKey)) {
-          safeSetItem(triggeredKey, 'true');
-          const isAudioBusy = globalAudioRef?.current && !globalAudioRef.current.paused;
-          if (!isAudioBusy) {
-            triggerCustomAlarm(alarm);
-          } else {
-            console.warn('[usePrayerScheduler] Audio is busy, triggering silent alarm notification');
-            triggerCustomAlarm({ ...alarm, soundType: 'silent' });
-          }
+          pendingAlarmsToTrigger.push({ alarm, triggeredKey, priority: getAlarmPriorityScore(alarm) });
         }
       }
     });
+
+    if (pendingAlarmsToTrigger.length > 0) {
+      pendingAlarmsToTrigger.sort((a, b) => b.priority - a.priority);
+
+      const isAudioBusy = Boolean(
+        (globalAudioRef?.current && !globalAudioRef.current.paused && globalAudioRef.current.currentTime > 0) ||
+        (safeSessionGetItem(`salah_attempted_${todayStr}_Fajr`) === 'true' && !safeGetItem(`salah_played_${todayStr}_Fajr`))
+      );
+
+      const primaryItem = pendingAlarmsToTrigger[0];
+      safeSetItem(primaryItem.triggeredKey, 'true');
+      if (!isAudioBusy) {
+        triggerCustomAlarm(primaryItem.alarm, primaryItem.targetPrayer);
+      } else {
+        triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
+      }
+
+      for (let i = 1; i < pendingAlarmsToTrigger.length; i++) {
+        const secondaryItem = pendingAlarmsToTrigger[i];
+        safeSetItem(secondaryItem.triggeredKey, 'true');
+        triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer);
+      }
+    }
   }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);
 
   // Run catchup, cleanup, and native Android AlarmManager scheduling on initial state load or settings update

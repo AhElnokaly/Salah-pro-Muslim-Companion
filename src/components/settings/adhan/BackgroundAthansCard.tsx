@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { checkNotificationPermission, requestNotificationPermission } from '../../../services/athanAlarmPlugin';
 import { AppModalVariant } from '../../shared/AppModal';
 
 export interface BackgroundAthansCardProps {
@@ -11,6 +13,15 @@ export interface BackgroundAthansCardProps {
 }
 
 export const BackgroundAthansCard: React.FC<BackgroundAthansCardProps> = ({ setAppModal }) => {
+  const isNative = Capacitor.isNativePlatform();
+  const [nativeGranted, setNativeGranted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isNative) {
+      checkNotificationPermission().then(setNativeGranted).catch(() => setNativeGranted(false));
+    }
+  }, [isNative]);
+
   return (
     <div className="p-4 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-emerald-500/10 dark:from-indigo-950/30 dark:to-slate-900 rounded-2xl border border-indigo-500/20 space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -40,7 +51,13 @@ export const BackgroundAthansCard: React.FC<BackgroundAthansCardProps> = ({ setA
       <div className="flex items-center justify-between pt-1">
         <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
           حالة إذن الإشعارات:{' '}
-          {typeof window !== 'undefined' && 'Notification' in window
+          {isNative
+            ? nativeGranted === null
+              ? 'جارٍ التحقق'
+              : nativeGranted
+              ? 'مُفعلة'
+              : 'غير مُفعلة'
+            : typeof window !== 'undefined' && 'Notification' in window
             ? Notification.permission === 'granted'
               ? '✅ مُفعلة ومُصرح بها'
               : Notification.permission === 'denied'
@@ -51,6 +68,31 @@ export const BackgroundAthansCard: React.FC<BackgroundAthansCardProps> = ({ setA
         <button
           type="button"
           onClick={async () => {
+            if (isNative) {
+              try {
+                const granted = await requestNotificationPermission();
+                setNativeGranted(granted);
+                if (granted) {
+                  setAppModal({
+                    message: 'تم تفعيل إذن الإشعارات بنجاح! سيصلك تنبيه دخول وقت الصلاة في موعده.',
+                    variant: 'success',
+                  });
+                } else {
+                  setAppModal({
+                    message: 'تم رفض الإذن. يرجى السماح بالإشعارات من إعدادات المتصفح/الموقع.',
+                    variant: 'error',
+                  });
+                }
+              } catch {
+                setNativeGranted(false);
+                setAppModal({
+                  message: 'تم رفض الإذن. يرجى السماح بالإشعارات من إعدادات المتصفح/الموقع.',
+                  variant: 'error',
+                });
+              }
+              return;
+            }
+
             if (typeof window !== 'undefined' && 'Notification' in window) {
               const res = await Notification.requestPermission();
               if (res === 'granted') {

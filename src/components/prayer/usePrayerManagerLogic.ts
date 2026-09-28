@@ -229,11 +229,12 @@ export function usePrayerManagerLogic({
   };
 
   // Record/Log Sunnah Rak'ahs
-  const handleUpdateSunnah = (prayer: PrayerName, type: 'before' | 'after', delta: number) => {
+  const handleUpdateSunnah = (prayer: PrayerName, type: 'before' | 'after', delta: number, max?: number) => {
     const existingLog = dayLogs[prayer] || { status: 'not_yet', sunnahBefore: 0, sunnahAfter: 0 };
     const key = type === 'before' ? 'sunnahBefore' : 'sunnahAfter';
     const currentVal = existingLog[key] ?? 0;
-    const newVal = Math.max(0, currentVal + delta);
+    const uncapped = Math.max(0, currentVal + delta);
+    const newVal = max !== undefined ? Math.min(max, uncapped) : uncapped;
 
     setPrayerLogs(prev => ({
       ...prev,

@@ -1,67 +1,49 @@
 /**
- * GitHub In-App Update Checker Service
- * Safely queries GitHub Releases API to detect newer APK versions,
- * parses semver tags, extracts direct APK download links, and caches checks.
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import { APP_VERSION } from '../version';
-import { Capacitor } from '@capacitor/core';
-import { App as CapacitorApp } from '@capacitor/app';
+import { CURRENT_RELEASE } from '../data/changelog';
+import { safeGetItem, safeSetItem } from '../utils/storage';
+
+export const DEFAULT_GITHUB_REPO = 'AhElnokaly/Salah-pro-Muslim-Companion';
+const LAST_CHECK_KEY = 'hemmaty_last_update_check_time';
+const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface AppReleaseInfo {
-  tagName: string;
   version: string;
-  name: string;
-  body: string;
+  title: string;
+  releaseNotes: string;
+  name?: string;
+  body?: string;
   publishedAt: string;
   htmlUrl: string;
-  apkDownloadUrl: string | null;
+  apkDownloadUrl?: string;
   apkFileName?: string;
   apkSizeFormatted?: string;
 }
 
-export interface UpdateCheckResult {
+export interface CheckUpdateResult {
   hasUpdate: boolean;
-  currentVersion: string;
-  latestRelease?: AppReleaseInfo;
+  latestRelease?: AppReleaseInfo | null;
   error?: string;
-  lastCheckedAt: number;
 }
 
-export const DEFAULT_GITHUB_REPO = 'AhElnokaly/Salah-pro-Muslim-Companion';
-const STORAGE_LAST_CHECK_KEY = 'hemmaty_last_update_check_v1';
-const THROTTLE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-export async function getCurrentAppVersion(): Promise<string> {
-  try {
-    if (Capacitor.isNativePlatform()) {
-      const info = await CapacitorApp.getInfo();
-      if (info?.version) {
-        return info.version;
-      }
-    }
-  } catch {
-    // Fallback to JS config
-  }
-  return APP_VERSION.version;
-}
+export type UpdateCheckResult = CheckUpdateResult;
 
 /**
- * Strips 'v' prefix and compares two semantic version strings.
- * Returns:
- *   1 if v1 > v2
- *  -1 if v1 < v2
- *   0 if v1 === v2
+ * Compare two semver strings (e.g. "1.1.0" vs "1.0.9", "v1.2.0" vs "1.1.0").
+ * Returns 1 if v1 > v2, -1 if v1 < v2, and 0 if equal.
  */
 export function compareSemver(v1: string, v2: string): number {
-  const clean1 = v1.trim().replace(/^v/i, '');
-  const clean2 = v2.trim().replace(/^v/i, '');
+  const clean1 = (v1 || '').trim().replace(/^v/i, '');
+  const clean2 = (v2 || '').trim().replace(/^v/i, '');
 
-  const parts1 = clean1.split(/[.-]/).map(p => {
+  const parts1 = clean1.split(/[.-]/).map((p) => {
     const num = parseInt(p, 10);
     return isNaN(num) ? 0 : num;
   });
-  const parts2 = clean2.split(/[.-]/).map(p => {
+  const parts2 = clean2.split(/[.-]/).map((p) => {
     const num = parseInt(p, 10);
     return isNaN(num) ? 0 : num;
   });
@@ -76,6 +58,9 @@ export function compareSemver(v1: string, v2: string): number {
   return 0;
 }
 
+/**
+ * Format bytes into Arabic megabyte format e.g. "25.0 ميجابايت".
+ */
 export function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '';
   const mb = bytes / (1024 * 1024);
@@ -83,98 +68,80 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Checks GitHub repository releases for a newer version than currently running.
+ * Checks GitHub Releases API for new releases.
  */
 export async function checkForAppUpdates(options?: {
   force?: boolean;
   repo?: string;
-}): Promise<UpdateCheckResult> {
+}): Promise<CheckUpdateResult> {
   const repo = options?.repo || DEFAULT_GITHUB_REPO;
-  const currentVersion = await getCurrentAppVersion();
-  const now = Date.now();
+  const force = options?.force || false;
 
-  // Check throttle unless forced
-  if (!options?.force && typeof window !== 'undefined') {
-    try {
-      const rawCached = localStorage.getItem(STORAGE_LAST_CHECK_KEY);
-      if (rawCached) {
-        const cached = JSON.parse(rawCached) as UpdateCheckResult;
-        if (cached && now - (cached.lastCheckedAt || 0) < THROTTLE_DURATION_MS) {
-          // Re-evaluate whether the cached release is strictly newer than currently running app
-          const stillHasUpdate = Boolean(
-            cached.latestRelease?.version &&
-            compareSemver(cached.latestRelease.version, currentVersion) > 0
-          );
-          return {
-            ...cached,
-            hasUpdate: stillHasUpdate,
-            currentVersion,
-          };
-        }
+  if (!force) {
+    const lastCheckStr = safeGetItem(LAST_CHECK_KEY);
+    if (lastCheckStr) {
+      const lastCheckTime = parseInt(lastCheckStr, 10);
+      if (!isNaN(lastCheckTime) && Date.now() - lastCheckTime < CHECK_INTERVAL_MS) {
+        return { hasUpdate: false, latestRelease: null };
       }
-    } catch {
-      // Ignore cache read errors
     }
   }
 
   try {
-    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+    const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
+    const response = await fetch(apiUrl, {
       headers: {
         Accept: 'application/vnd.github.v3+json',
       },
     });
 
-    if (response.status === 404) {
-      const result: UpdateCheckResult = {
-        hasUpdate: false,
-        currentVersion,
-        error: 'لم يُنشر أي إصدار رسمي بعد على مستودع GitHub.',
-        lastCheckedAt: now,
-      };
-      saveToCache(result);
-      return result;
-    }
+    safeSetItem(LAST_CHECK_KEY, String(Date.now()));
 
     if (!response.ok) {
-      throw new Error(`تعذر الاتصال بـ GitHub API (رمز: ${response.status})`);
+      if (response.status === 404) {
+        return {
+          hasUpdate: false,
+          latestRelease: null,
+          error: 'لم يُنشر أي إصدار حتى الآن على المستودع',
+        };
+      }
+      return {
+        hasUpdate: false,
+        latestRelease: null,
+        error: `خطأ في الاتصال بالخادم (${response.status})`,
+      };
     }
 
     const data = await response.json();
-    const tagName: string = data.tag_name || '';
-    const remoteVersion = tagName.replace(/^v/i, '');
+    if (!data || !data.tag_name) {
+      return { hasUpdate: false, latestRelease: null };
+    }
 
-    // Look for APK artifact in assets
-    let apkDownloadUrl: string | null = null;
+    const remoteVersion = (data.tag_name || '').trim().replace(/^v/i, '');
+    const currentVersion = CURRENT_RELEASE.version;
+
+    // Check APK asset
+    let apkDownloadUrl: string | undefined;
     let apkFileName: string | undefined;
     let apkSizeFormatted: string | undefined;
 
-    if (Array.isArray(data.assets) && data.assets.length > 0) {
-      // Prioritize official release APK (app-release.apk or similar) over debug
-      const releaseApk = data.assets.find((asset: { name?: string }) => {
-        const name = asset.name?.toLowerCase() || '';
-        return name.endsWith('.apk') && (name.includes('release') || !name.includes('debug'));
-      });
-      const anyApk = data.assets.find((asset: { name?: string }) =>
-        asset.name?.toLowerCase().endsWith('.apk')
+    if (Array.isArray(data.assets)) {
+      const apkAsset = data.assets.find(
+        (a: any) => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk')
       );
-      const apkAsset = releaseApk || anyApk;
       if (apkAsset) {
-        apkDownloadUrl = apkAsset.browser_download_url || null;
+        apkDownloadUrl = apkAsset.browser_download_url;
         apkFileName = apkAsset.name;
-        if (apkAsset.size) {
+        if (typeof apkAsset.size === 'number') {
           apkSizeFormatted = formatFileSize(apkAsset.size);
         }
       }
     }
 
-    // Determine if remote version is strictly newer
-    const isNewer = compareSemver(remoteVersion, currentVersion) > 0;
-
-    const releaseInfo: AppReleaseInfo = {
-      tagName,
+    const latestRelease: AppReleaseInfo = {
       version: remoteVersion,
-      name: data.name || `إصدار ${remoteVersion}`,
-      body: data.body || '',
+      title: data.name || `تحديث ${remoteVersion}`,
+      releaseNotes: data.body || '',
       publishedAt: data.published_at || new Date().toISOString(),
       htmlUrl: data.html_url || `https://github.com/${repo}/releases`,
       apkDownloadUrl,
@@ -182,32 +149,18 @@ export async function checkForAppUpdates(options?: {
       apkSizeFormatted,
     };
 
-    const result: UpdateCheckResult = {
-      hasUpdate: isNewer,
-      currentVersion,
-      latestRelease: releaseInfo,
-      lastCheckedAt: now,
-    };
+    const isNewer = compareSemver(remoteVersion, currentVersion) > 0;
 
-    saveToCache(result);
-    return result;
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'حدث خطأ أثناء فحص التحديثات';
+    return {
+      hasUpdate: isNewer,
+      latestRelease,
+    };
+  } catch (err: any) {
+    console.warn('[UpdateChecker] Network or parse failure:', err);
     return {
       hasUpdate: false,
-      currentVersion,
-      error: errorMsg,
-      lastCheckedAt: now,
+      latestRelease: null,
+      error: 'تعذر الاتصال بخدمة التحقق من التحديثات',
     };
-  }
-}
-
-function saveToCache(result: UpdateCheckResult): void {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(STORAGE_LAST_CHECK_KEY, JSON.stringify(result));
-    } catch {
-      // Storage unavailable or quota exceeded
-    }
   }
 }

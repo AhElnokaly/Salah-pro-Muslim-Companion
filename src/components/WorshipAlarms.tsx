@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import type { AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
 import { DEFAULT_WORSHIP_ALARMS } from '../utils/alarmUtils';
 import { safeSetItem } from '../utils/storage';
@@ -39,6 +40,7 @@ export default function WorshipAlarms({
   audioVolume,
   setAudioVolume
 }: WorshipAlarmsProps) {
+  const isNative = Capacitor.isNativePlatform();
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmConfig | null>(null);
@@ -52,16 +54,21 @@ export default function WorshipAlarms({
 
   // Sync notification permission state
   useEffect(() => {
+    if (isNative) return;
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
     }
-  }, []);
+  }, [isNative]);
 
   const handleRequestPermission = async () => {
-    try {
-      await requestNativeNotificationPermission();
-    } catch (e) {
-      console.warn('Native notification request error:', e);
+    if (isNative) {
+      try {
+        const granted = await requestNativeNotificationPermission();
+        setNotificationPermission(granted ? 'granted' : 'denied');
+      } catch (e) {
+        console.warn('Native notification request error:', e);
+      }
+      return;
     }
 
     if (!('Notification' in window)) {

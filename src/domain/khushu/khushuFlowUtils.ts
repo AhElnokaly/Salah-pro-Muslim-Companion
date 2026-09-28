@@ -5,6 +5,7 @@
 
 import { PrayerTimes } from '../../types';
 import { KhushuSettings } from './khushuTypes';
+import { parseTimeToMinutes } from '../../utils/prayerCalc';
 
 export interface IqamaWindowInfo {
   prayerId: 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
@@ -26,17 +27,12 @@ const PRAYER_ARABIC_NAMES: Record<string, string> = {
 };
 
 export function parsePrayerTimeToDate(timeStr: string, baseDate: Date): Date | null {
-  if (!timeStr) return null;
-  const [pTime, modifier] = timeStr.trim().split(/\s+/);
-  if (!pTime) return null;
-  const [hStr, mStr] = pTime.split(':');
-  let hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-  if (isNaN(hours) || isNaN(minutes)) return null;
+  if (!timeStr || timeStr === '--:--') return null;
+  const totalMins = parseTimeToMinutes(timeStr);
+  if (isNaN(totalMins) || totalMins < 0) return null;
 
-  if (modifier === 'PM' && hours < 12) hours += 12;
-  if (modifier === 'AM' && hours === 12) hours = 0;
-
+  const hours = Math.floor(totalMins / 60);
+  const minutes = totalMins % 60;
   return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes, 0, 0);
 }
 
