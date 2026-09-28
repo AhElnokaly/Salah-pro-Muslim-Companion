@@ -4,10 +4,11 @@
  */
 
 import { safeGetJSON, safeSetJSON } from './storage';
+import type { PrayerTimes } from '../types';
 
 export interface CachedScheduleDay {
   dateStr: string;
-  timesMap: Record<string, string>;
+  timesMap: Record<string, string> | PrayerTimes;
 }
 
 export interface LocationScheduleCache {
@@ -72,7 +73,7 @@ export function saveLocationSchedule(
   calcMethod: string,
   madhab: string,
   prayerOffsets: Record<string, number>,
-  scheduleList: Array<{ date: Date; timesMap: Record<string, string> }>,
+  scheduleList: Array<{ date: Date; timesMap: Record<string, string> | PrayerTimes }>,
   cityName?: string
 ): void {
   const schedule: CachedScheduleDay[] = scheduleList.map((item) => ({

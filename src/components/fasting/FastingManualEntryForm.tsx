@@ -50,7 +50,7 @@ export default function FastingManualEntryForm({
             <label className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block mb-1.5">نوع الصيام:</label>
             <select
               value={fastType}
-              onChange={(e) => setFastType(e.target.value as FastingLog['fastType'])}
+              onChange={(e) => setFastType(e.target.value as 'Ramadan' | 'Sunnah' | 'Qada' | 'Kaffarah' | 'Nazar')}
               className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none"
             >
               <option value="Sunnah">سنة / تطوع</option>

@@ -104,10 +104,10 @@ export class UnifiedNotificationOrchestrator {
           khushuSettings,
           customAlarms: resolvedCustomAlarms,
         });
-        scheduledCount = reconcileRes?.scheduledCount ?? 0;
-        addedCount = reconcileRes?.addedCount ?? 0;
-        removedCount = reconcileRes?.removedCount ?? 0;
-        retainedCount = reconcileRes?.retainedCount ?? 0;
+        scheduledCount = typeof reconcileRes === 'number' ? reconcileRes : ((reconcileRes as any)?.scheduledCount ?? 0);
+        addedCount = (reconcileRes as any)?.addedCount ?? 0;
+        removedCount = (reconcileRes as any)?.removedCount ?? 0;
+        retainedCount = (reconcileRes as any)?.retainedCount ?? 0;
 
         // 3. Update Native Android Widget
         const currentTimes = days60List[0]?.timesMap || (days60List[0] as any)?.prayers;
