@@ -21,6 +21,7 @@ export const PrayerSunnahRow: React.FC<PrayerSunnahRowProps> = ({
   onToggleComplete,
 }) => {
   const isComplete = currentRakahs >= maxRakahs;
+  const isZero = currentRakahs <= 0;
 
   return (
     <div className="flex items-center justify-between p-3 bg-amber-500/5 dark:bg-amber-400/5 border border-amber-500/10 dark:border-amber-400/10 rounded-2xl transition-all">
@@ -40,8 +41,13 @@ export const PrayerSunnahRow: React.FC<PrayerSunnahRowProps> = ({
       <div className="flex items-center gap-1.5">
         <button
           type="button"
+          disabled={isZero}
           onClick={() => onUpdateRakahs(type, -2)}
-          className="w-7 h-7 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center font-black text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all"
+          className={`w-7 h-7 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center font-black text-sm transition-all ${
+            isZero
+              ? 'opacity-30 cursor-not-allowed'
+              : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95'
+          }`}
           aria-label={`إنقاص ركعتين من ${label} لصلاة ${prayerDisplayName}`}
         >
           -
@@ -56,8 +62,18 @@ export const PrayerSunnahRow: React.FC<PrayerSunnahRowProps> = ({
 
         <button
           type="button"
-          onClick={() => onUpdateRakahs(type, 2)}
-          className="w-7 h-7 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center font-black text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition-all"
+          disabled={isComplete}
+          onClick={() => {
+            if (!isComplete) {
+              const delta = Math.min(2, maxRakahs - currentRakahs);
+              if (delta > 0) onUpdateRakahs(type, delta);
+            }
+          }}
+          className={`w-7 h-7 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg flex items-center justify-center font-black text-sm transition-all ${
+            isComplete
+              ? 'opacity-30 cursor-not-allowed'
+              : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95'
+          }`}
           aria-label={`زيادة ركعتين في ${label} لصلاة ${prayerDisplayName}`}
         >
           +

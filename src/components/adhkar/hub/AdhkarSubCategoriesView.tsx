@@ -39,6 +39,7 @@ export const AdhkarSubCategoriesView: React.FC<AdhkarSubCategoriesViewProps> = (
         return [
           'morning',
           'evening',
+          'ayat_kursi',
           'after_prayer',
           'sleep',
           'wake',
@@ -69,9 +70,9 @@ export const AdhkarSubCategoriesView: React.FC<AdhkarSubCategoriesViewProps> = (
         ].includes(cat.id);
       }
       if (hubSection === 'ruqyah') {
-        return ['sick'].includes(cat.id);
+        return ['ayat_kursi', 'sick'].includes(cat.id);
       }
-      return true; // hisn = all 26
+      return true; // hisn = all 26+
     });
   };
 
@@ -133,15 +134,7 @@ export const AdhkarSubCategoriesView: React.FC<AdhkarSubCategoriesViewProps> = (
             <ListFilter className="w-4 h-4" />
             <span>
               إجمالي الفئات:{' '}
-              {toArabicNumbers(
-                hubSection === 'adhkar'
-                  ? 11
-                  : hubSection === 'duas'
-                  ? 14
-                  : hubSection === 'ruqyah'
-                  ? 1
-                  : 26
-              )}{' '}
+              {toArabicNumbers(subCategories.length)}{' '}
               فئة فرعية
             </span>
           </span>
@@ -176,6 +169,8 @@ export const AdhkarSubCategoriesView: React.FC<AdhkarSubCategoriesViewProps> = (
                       ? '🌅'
                       : cat.id === 'evening'
                       ? '🌆'
+                      : cat.id === 'ayat_kursi'
+                      ? '👑'
                       : cat.id === 'after_prayer'
                       ? '📿'
                       : cat.id === 'sleep'

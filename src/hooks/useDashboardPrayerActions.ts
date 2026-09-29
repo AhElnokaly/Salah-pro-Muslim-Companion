@@ -112,11 +112,12 @@ export function useDashboardPrayerActions({
   };
 
   // Sunnah counter
-  const handleUpdateSunnah = (prayer: PrayerName, type: 'before' | 'after', amount: number) => {
+  const handleUpdateSunnah = (prayer: PrayerName, type: 'before' | 'after', amount: number, max?: number) => {
     const existingLog = todayLogs[prayer] || { status: 'not_yet', sunnahBefore: 0, sunnahAfter: 0 };
     const key = type === 'before' ? 'sunnahBefore' : 'sunnahAfter';
     const currentVal = existingLog[key] ?? 0;
-    const newVal = Math.max(0, currentVal + amount);
+    const uncapped = Math.max(0, currentVal + amount);
+    const newVal = max !== undefined ? Math.min(max, uncapped) : uncapped;
 
     setPrayerLogs(prev => ({
       ...prev,

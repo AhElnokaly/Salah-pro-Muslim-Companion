@@ -76,6 +76,8 @@ export interface AthanAlarmPlugin {
   canRequestPackageInstalls?(): Promise<{ canInstall: boolean }>;
   openInstallPermissionSettings?(): Promise<{ opened: boolean }>;
   downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
+  stopAthan?(): Promise<{ stopped: boolean }>;
+  isNativeAthanRunning?(): Promise<{ isRunning: boolean }>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
 }
 
@@ -100,6 +102,12 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     cancelAlarm: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback simulation for cancelling single alarm:', options);
       return { cancelled: true, requestCode: options.requestCode };
+    },
+    stopAthan: async () => {
+      return { stopped: true };
+    },
+    isNativeAthanRunning: async () => {
+      return { isRunning: false };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -321,7 +329,7 @@ export async function scheduleNativeAthanAlarms(
               timeMs,
               isFajr: false,
               alarmType: 'custom',
-              soundType: alarm.soundType || 'takbeer',
+              soundType: alarm.soundType || 'reminder',
               notifyMode: alarm.notifyMode || 'both',
               autoKhushu: Boolean(alarm.autoKhushu),
               durationMinutes: alarm.khushuDurationMinutes || 15,
@@ -360,7 +368,7 @@ export async function scheduleNativeAthanAlarms(
                 timeMs,
                 isFajr: lowerTarget === 'fajr',
                 alarmType: 'custom',
-                soundType: alarm.soundType || 'takbeer',
+                soundType: alarm.soundType || 'reminder',
                 notifyMode: alarm.notifyMode || 'both',
                 autoKhushu: Boolean(alarm.autoKhushu),
                 durationMinutes: alarm.khushuDurationMinutes || 15,
@@ -617,6 +625,13 @@ export async function scheduleNativeAthanAlarms(
     // Sort by timeMs ascending
     times.sort((a, b) => a.timeMs - b.timeMs);
 
+    // Anti-collision pass: Ensure no two custom alarms share the exact same minute timestamp
+    for (let i = 1; i < times.length; i++) {
+      if (times[i].alarmType === 'custom' && Math.abs(times[i].timeMs - times[i - 1].timeMs) < 60000) {
+        times[i].timeMs = times[i - 1].timeMs + 60000;
+      }
+    }
+
     const res = await AthanAlarm.scheduleAthanAlarms({
       times,
       lat: calcParams?.lat,
@@ -748,6 +763,34 @@ export async function downloadAndInstallAppUpdate(
       window.open(apkUrl, '_blank', 'noopener,noreferrer');
     }
     return { success: false, message: error?.message || 'Error occurred during in-app update' };
+  }
+}
+
+export async function stopNativeAthan(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    if (AthanAlarm.stopAthan) {
+      const res = await AthanAlarm.stopAthan();
+      return res?.stopped ?? true;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] stopNativeAthan error:', err);
+    return false;
+  }
+}
+
+export async function isNativeAthanRunning(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    if (AthanAlarm.isNativeAthanRunning) {
+      const res = await AthanAlarm.isNativeAthanRunning();
+      return res?.isRunning ?? false;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] isNativeAthanRunning error:', err);
+    return false;
   }
 }
 

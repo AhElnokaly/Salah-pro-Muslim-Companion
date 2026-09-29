@@ -31,6 +31,7 @@ export interface DhikrCategoryHeaderProps {
   getItemCurrentCount: (catId: string, itemId: string, prayerKey?: PrayerKey) => number;
   getItemTargetCount: (catId: string, item: DhikrItem, prayerKey?: PrayerKey) => number;
   getCategoryVisibleItems: (cat: DhikrCategory, prayerKey: PrayerKey) => DhikrItem[];
+  onOpenTimingModal?: (tab?: 'morning' | 'evening') => void;
 }
 
 export const DhikrCategoryHeader: React.FC<DhikrCategoryHeaderProps> = ({
@@ -50,6 +51,7 @@ export const DhikrCategoryHeader: React.FC<DhikrCategoryHeaderProps> = ({
   getItemCurrentCount,
   getItemTargetCount,
   getCategoryVisibleItems,
+  onOpenTimingModal,
 }) => {
   return (
     <div className="space-y-4">
@@ -71,6 +73,40 @@ export const DhikrCategoryHeader: React.FC<DhikrCategoryHeaderProps> = ({
             </h3>
           </div>
         </div>
+
+        {/* Morning / Evening Timing Controller Banner */}
+        {(category.id === 'morning' || category.id === 'evening') && onOpenTimingModal && (
+          <div className="flex items-center justify-between p-2.5 px-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold">
+              <span>⏰</span>
+              <span>
+                {category.id === 'morning' ? 'تنبيه أذكار الصباح اليومي' : 'تنبيه أذكار المساء اليومي'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenTimingModal(category.id as 'morning' | 'evening')}
+              className="py-1 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[11px] transition-all cursor-pointer shadow-xs flex items-center gap-1"
+            >
+              <span>التحكم بالموعد ⚙️</span>
+            </button>
+          </div>
+        )}
+
+        {/* Ayat Al-Kursi Banner */}
+        {category.id === 'ayat_kursi' && (
+          <div className="p-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-teal-500/10 border border-amber-500/30 text-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">👑</span>
+              <span className="font-black text-amber-600 dark:text-amber-300">
+                سيدة آي القرآن الكريم • سورة البقرة الآية ٢٥٥ • حصن وحرز للمسلم
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-white/40 dark:bg-black/30 px-2 py-0.5 rounded-lg">
+              أعظم آية
+            </span>
+          </div>
+        )}
 
         {/* Controls Toolbar Bar */}
         <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 scrollbar-none">

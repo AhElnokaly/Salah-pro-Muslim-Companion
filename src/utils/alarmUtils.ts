@@ -77,6 +77,32 @@ export const DEFAULT_WORSHIP_ALARMS: AlarmConfig[] = [
     notifyMode: 'both'
   },
   {
+    id: 'alarm_morning_adhkar',
+    title: 'أذكار الصباح',
+    enabled: true,
+    type: 'prayer_relative',
+    prayers: ['Sunrise'],
+    relation: 'after',
+    offsetMinutes: 15,
+    offsetUnit: 'minutes',
+    days: [0, 1, 2, 3, 4, 5, 6],
+    soundType: 'speech',
+    notifyMode: 'both'
+  },
+  {
+    id: 'alarm_evening_adhkar',
+    title: 'أذكار المساء',
+    enabled: true,
+    type: 'prayer_relative',
+    prayers: ['Asr'],
+    relation: 'after',
+    offsetMinutes: 20,
+    offsetUnit: 'minutes',
+    days: [0, 1, 2, 3, 4, 5, 6],
+    soundType: 'speech',
+    notifyMode: 'both'
+  },
+  {
     id: 'alarm_qiyam',
     title: 'قيام الليل والتهجد',
     enabled: false,

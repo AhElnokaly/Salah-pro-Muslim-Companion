@@ -39,6 +39,7 @@ export interface DhikrCategoryDetailViewProps {
   particles: Array<{ id: number; text: string; x: number; y: number }>;
   onIncrementItem: (item: DhikrItem) => void;
   onMarkItemDone: (category: DhikrCategory, item: DhikrItem) => void;
+  onOpenTimingModal?: (tab?: 'morning' | 'evening') => void;
 }
 
 export const DhikrCategoryDetailView: React.FC<DhikrCategoryDetailViewProps> = ({
@@ -69,6 +70,7 @@ export const DhikrCategoryDetailView: React.FC<DhikrCategoryDetailViewProps> = (
   particles,
   onIncrementItem,
   onMarkItemDone,
+  onOpenTimingModal,
 }) => {
   const visibleCategoryItems = getCategoryVisibleItems(category, selectedPrayerForPostAdhkar);
 
@@ -91,6 +93,7 @@ export const DhikrCategoryDetailView: React.FC<DhikrCategoryDetailViewProps> = (
         getItemCurrentCount={getItemCurrentCount}
         getItemTargetCount={getItemTargetCount}
         getCategoryVisibleItems={getCategoryVisibleItems}
+        onOpenTimingModal={onOpenTimingModal}
       />
 
       {!showCelebration ? (

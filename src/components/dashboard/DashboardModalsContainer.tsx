@@ -29,7 +29,7 @@ interface DashboardModalsContainerProps {
   setPendingQadaPrayers: React.Dispatch<React.SetStateAction<PendingQadaPrayer[]>>;
   voluntaryPrayerLogs?: Record<string, VoluntaryPrayerLog[]>;
   setVoluntaryPrayerLogs?: React.Dispatch<React.SetStateAction<Record<string, VoluntaryPrayerLog[]>>>;
-  handleUpdateSunnah: (prayer: PrayerName, completed: boolean) => void;
+  handleUpdateSunnah: (prayer: PrayerName, type: 'before' | 'after', amount: number, max?: number) => void;
   handleUpdateNafilah: (nafilahKey: string, completed: boolean) => void;
   showNightPrayersQuickLog: boolean;
   setShowNightPrayersQuickLog: (show: boolean) => void;

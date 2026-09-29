@@ -64,7 +64,7 @@ class AthanAlarmPlugin : Plugin() {
             alarmType: String = "",
             durationMinutes: Int = 15,
             khushuMode: String = "silent",
-            soundType: String = "takbeer",
+            soundType: String = "reminder",
             notifyMode: String = "both",
             autoKhushu: Boolean = false
         ): Intent {
@@ -196,7 +196,7 @@ class AthanAlarmPlugin : Plugin() {
                 val alarmType = item.optString("alarmType", if (prayerKey.startsWith("custom_")) "custom" else if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("khushu")) "khushu" else "athan")
                 val durationMinutes = item.optInt("durationMinutes", 15)
                 val khushuMode = item.optString("khushuMode", "silent")
-                val soundType = item.optString("soundType", "takbeer")
+                val soundType = item.optString("soundType", "reminder")
                 val notifyMode = item.optString("notifyMode", "both")
                 val autoKhushu = item.optBoolean("autoKhushu", false)
 
@@ -824,6 +824,25 @@ class AthanAlarmPlugin : Plugin() {
         val ret = JSObject()
         ret.put("cancelled", success)
         ret.put("requestCode", reqCode)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun stopAthan(call: PluginCall) {
+        try {
+            AthanForegroundService.stopService(context)
+            val ret = JSObject()
+            ret.put("stopped", true)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            call.reject("Failed to stop athan service", e)
+        }
+    }
+
+    @PluginMethod
+    fun isNativeAthanRunning(call: PluginCall) {
+        val ret = JSObject()
+        ret.put("isRunning", AthanForegroundService.isServiceRunning)
         call.resolve(ret)
     }
 

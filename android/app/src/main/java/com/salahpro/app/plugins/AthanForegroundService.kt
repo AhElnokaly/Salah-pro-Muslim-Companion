@@ -28,6 +28,22 @@ class AthanForegroundService : Service() {
         const val NOTIFICATION_ID = 78601
         const val ACTION_STOP_ATHAN = "com.salahpro.app.ACTION_STOP_ATHAN"
         const val TIMEOUT_MS = 180000L // 3 minutes timeout
+
+        @Volatile
+        var isServiceRunning: Boolean = false
+            private set
+
+        @JvmStatic
+        fun stopService(context: Context) {
+            try {
+                val intent = Intent(context, AthanForegroundService::class.java).apply {
+                    action = ACTION_STOP_ATHAN
+                }
+                context.startService(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AthanForegroundService", e)
+            }
+        }
     }
 
     private var mediaPlayer: MediaPlayer? = null
@@ -46,6 +62,8 @@ class AthanForegroundService : Service() {
             stopAthanAndSelf()
             return START_NOT_STICKY
         }
+
+        isServiceRunning = true
 
         val prayerName = intent?.getStringExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME) ?: "الصلاة"
         val isFajr = intent?.getBooleanExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, false) ?: false
@@ -183,6 +201,7 @@ class AthanForegroundService : Service() {
     }
 
     private fun stopAthanAndSelf() {
+        isServiceRunning = false
         handler.removeCallbacks(stopRunnable)
         try {
             if (mediaPlayer?.isPlaying == true) {

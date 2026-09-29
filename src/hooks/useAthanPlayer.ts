@@ -8,6 +8,7 @@ import { formatDateKey } from '../utils/prayerDayBoundary';
 import { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 import { useMuezzinSettings } from './useMuezzinSettings';
 import { useAudioUnlocker } from './useAudioUnlocker';
+import { stopNativeAthan } from '../services/athanAlarmPlugin';
 
 export { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 
@@ -65,6 +66,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
   const markAthanDismissed = useCallback(() => {
     userDismissedRef.current = true;
+    stopNativeAthan().catch(() => {});
   }, []);
 
   // Auto-play pending Adhan on first user interaction if browser blocked autoplay (valid only during the Adhan duration ~3.5 minutes)
@@ -240,18 +242,16 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('timeupdate', handleTimeUpdate);
 
-    const onlineFallback = isFajr
-      ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-      : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+    const localFallback = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
 
     audio.onerror = () => {
       if (userDismissedRef.current) return;
-      if (srcUrl !== onlineFallback) {
-        console.warn(`[Audio Fallback]: Attempting fallback to online stream: ${onlineFallback}`);
-        playAudioTrack(onlineFallback, isFajr, prayer, vol);
+      if (srcUrl !== localFallback) {
+        console.warn(`[Audio Fallback]: Attempting fallback to local audio: ${localFallback}`);
+        playAudioTrack(localFallback, isFajr, prayer, vol);
       } else {
         setIsAthanPlaying(false);
-        setAudioError('تعذر تحميل صوت الأذان. يرجى التحقق من اتصال الإنترنت.');
+        setAudioError('تعذر تحميل صوت الأذان.');
       }
     };
 
@@ -278,7 +278,6 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
         if (audio && audio.currentTime === 0 && !audio.paused) {
           console.warn('[Audio Stall] لا تقدم فعلي بعد 3 ثواني — تحويل للملف المحلي');
           audio.pause();
-          const localFallback = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
           if (srcUrl !== localFallback) {
             playAudioTrack(localFallback, isFajr, prayer, vol);
           }
@@ -286,9 +285,9 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       }, 3000);
     }).catch((e: Error) => {
       if (userDismissedRef.current) return;
-      if (srcUrl !== onlineFallback && e.name !== 'NotAllowedError') {
-        console.warn(`[Audio Play Catch Fallback]: Attempting online fallback:`, e);
-        playAudioTrack(onlineFallback, isFajr, prayer, vol);
+      if (srcUrl !== localFallback && e.name !== 'NotAllowedError') {
+        console.warn(`[Audio Play Catch Fallback]: Attempting local fallback:`, e);
+        playAudioTrack(localFallback, isFajr, prayer, vol);
       } else {
         pendingAthanTimestampRef.current = Date.now();
         setPendingAthanPrayer(prayer);
@@ -303,6 +302,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   }, []);
 
   const stopAthanGlobal = useCallback(() => {
+    stopNativeAthan().catch(() => {});
     if (globalAudioRef.current) {
       try {
         globalAudioRef.current.pause();
@@ -336,9 +336,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
         playAudioTrack(resolvedUrl, isFajr, prayerToUse, audioVolume);
       }).catch(err => {
         console.error("Error resolving audio URL:", err);
-        const fallbackUrl = isFajr 
-          ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-          : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+        const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
         playAudioTrack(fallbackUrl, isFajr, prayerToUse, audioVolume);
       });
     }
@@ -351,9 +349,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     const activeMuezzinId = safeGetItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
-    const fallbackUrl = isFajr 
-      ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-      : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+    const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
 
     getAudioUrl(muezzinObj.url, muezzinObj.id).then((srcUrl) => {
       const audioUrlToPlay = srcUrl || fallbackUrl;
@@ -371,6 +367,8 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   ) => {
     userDismissedRef.current = false;
     setAudioError(null);
+    // Crucial: Stop native background athan if running so there is never two adhans playing at the same time!
+    stopNativeAthan().catch(() => {});
     // Open full screen Athan overlay immediately
     setAthanOverlayPrayer(prayer);
     setShowAthanOverlay(true);

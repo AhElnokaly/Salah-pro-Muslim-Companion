@@ -179,10 +179,24 @@ export function usePrayerScheduler({
     }
 
     const getAlarmPriorityScore = (alarm: AlarmConfig): number => {
-      let score = 50;
-      if (alarm.type === 'prayer_relative') score += 20;
-      if (alarm.soundType !== 'silent' && alarm.soundType !== 'vibrate') score += 10;
-      if (alarm.autoKhushu) score += 5;
+      let score = 200;
+      const lowerTitle = (alarm.title || '').toLowerCase();
+      // 1. Prayer alerts & Pre-alerts (Highest priority custom alarms)
+      if (lowerTitle.includes('صلاة') || lowerTitle.includes('أذان') || lowerTitle.includes('اقتربت') || alarm.id === 'alarm_before_salah' || alarm.id === 'alarm_after_salah') {
+        score = 800;
+      }
+      // 2. Morning & Evening Adhkar
+      else if (lowerTitle.includes('صباح') || lowerTitle.includes('مساء') || lowerTitle.includes('أذكار') || lowerTitle.includes('اذكار') || alarm.id.includes('adhkar')) {
+        score = 600;
+      }
+      // 3. Sunnah & Nawafil & Qiyam & Duha
+      else if (lowerTitle.includes('ضحى') || lowerTitle.includes('قيام') || lowerTitle.includes('وتر') || lowerTitle.includes('تهجد') || lowerTitle.includes('سنة')) {
+        score = 400;
+      }
+
+      // Audio & Khushu boosts
+      if (alarm.soundType !== 'silent' && alarm.soundType !== 'vibrate') score += 50;
+      if (alarm.autoKhushu) score += 20;
       return score;
     };
 
@@ -256,10 +270,22 @@ export function usePrayerScheduler({
         triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
       }
 
+      if (primaryItem.alarm.id.startsWith('snooze_')) {
+        setTimeout(() => {
+          const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
+          if (Array.isArray(currentList)) {
+            const updated = currentList.filter(a => a.id !== primaryItem.alarm.id);
+            safeSetJSON('salah_custom_alarms', updated);
+            window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updated }));
+          }
+        }, 1500);
+      }
+
       for (let i = 1; i < pendingAlarmsToTrigger.length; i++) {
         const secondaryItem = pendingAlarmsToTrigger[i];
         safeSetItem(secondaryItem.triggeredKey, 'true');
-        triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer);
+        // Secondary items trigger silently and skip overwriting the primary ringing modal
+        triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer, true);
       }
     }
   }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);

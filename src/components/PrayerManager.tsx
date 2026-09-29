@@ -67,6 +67,11 @@ export default function PrayerManager({
     setClockFace,
     isPlaying,
     prayerMuezzins,
+    setPrayerMuezzins,
+    currentMuezzin,
+    setCurrentMuezzin,
+    fajrMuezzin,
+    setFajrMuezzin,
     muezzins,
     togglePlayAthan,
     dateStr,
@@ -115,6 +120,11 @@ export default function PrayerManager({
           setClockFace={setClockFace}
           dayLogs={dayLogs}
           prayerMuezzins={prayerMuezzins}
+          setPrayerMuezzins={setPrayerMuezzins}
+          currentMuezzin={currentMuezzin}
+          setCurrentMuezzin={setCurrentMuezzin}
+          fajrMuezzin={fajrMuezzin}
+          setFajrMuezzin={setFajrMuezzin}
           muezzins={muezzins}
           isPlaying={isPlaying}
           currentPlayingPrayer={null}

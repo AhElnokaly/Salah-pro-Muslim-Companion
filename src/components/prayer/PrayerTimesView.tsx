@@ -95,8 +95,8 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   const activeSoundModes = soundModes || localSoundModes;
 
   const [localPrayerMuezzins, setLocalPrayerMuezzins] = useState<Record<string, string>>(() => {
-    const general = safeGetItem('salah_general_muezzin') || 'makkah';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+    const general = safeGetItem('salah_general_muezzin') || 'prayer_default';
+    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_default';
     return {
       Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
       Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,
@@ -108,8 +108,8 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   });
 
   const activePrayerMuezzins = propPrayerMuezzins || localPrayerMuezzins;
-  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_yusuf';
-  const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || 'makkah';
+  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_default';
+  const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || 'prayer_default';
 
   // Dedicated Audio Preview Controller for Responsive Playback
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -133,6 +133,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     if (playingPrayer === pName) {
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
+        previewAudioRef.current.src = '';
         previewAudioRef.current = null;
       }
       setPlayingPrayer(null);
@@ -142,34 +143,81 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
 
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
+      previewAudioRef.current.src = '';
       previewAudioRef.current = null;
     }
 
+    // Stop global athan player if active so preview never clashes
+    if (isPlaying && togglePlayAthan) {
+      togglePlayAthan();
+    }
+
+    const isFajr = pName === 'Fajr';
+    const track = muezzins.find(m => m.id === activeMuezzinId) || muezzins[0];
+    const initialUrl = track?.url || (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general);
+
+    // Create Audio synchronously within user gesture to prevent browser autoplay block
+    let finalSrc = initialUrl.startsWith('db://') ? (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general) : initialUrl;
+    const audio = new Audio(finalSrc);
+    audio.volume = Math.max(0, Math.min(1, prayerVol));
+
+    audio.onended = () => {
+      setPlayingPrayer(null);
+    };
+
+    audio.onerror = () => {
+      if (!finalSrc.startsWith('/audio/')) {
+        const fallbackSrc = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+        finalSrc = fallbackSrc;
+        audio.src = fallbackSrc;
+        audio.play().then(() => {
+          setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
+        }).catch(() => {
+          setPlayingPrayer(null);
+          setLogSuccessMessage('تعذر تشغيل الصوت تلقائياً.');
+        });
+      } else {
+        setPlayingPrayer(null);
+        setLogSuccessMessage('تعذر تشغيل الصوت تلقائياً.');
+      }
+    };
+
+    previewAudioRef.current = audio;
+
+    // Resolve db:// asynchronously if needed
+    if (initialUrl.startsWith('db://')) {
+      try {
+        const resolved = await getAudioUrl(initialUrl, track?.id);
+        if (resolved) {
+          finalSrc = resolved;
+          audio.src = resolved;
+        }
+      } catch {
+        // Keep initial fallback
+      }
+    }
+
     try {
-      const isFajr = pName === 'Fajr';
-      const track = muezzins.find(m => m.id === activeMuezzinId) || muezzins[0];
-      const audioSrc = await getAudioUrl(track?.url || '', track?.id);
-      const finalSrc = audioSrc || (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general);
-      
-      const audio = new Audio(finalSrc);
-      audio.volume = Math.max(0, Math.min(1, prayerVol));
-
-      audio.onended = () => {
-        setPlayingPrayer(null);
-      };
-
-      audio.onerror = () => {
-        setPlayingPrayer(null);
-        setLogSuccessMessage('تعذر تشغيل الصوت تلقائياً. يرجى التحقق من اتصال الإنترنت.');
-      };
-
-      previewAudioRef.current = audio;
       await audio.play();
       setPlayingPrayer(pName);
       setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة...`);
     } catch (err) {
-      console.warn('Direct preview play error, falling back to global simulation:', err);
-      togglePlayAthan(pName as PrayerName, activeMuezzinId);
+      console.warn('Direct preview play error:', err);
+      // Attempt local fallback directly without ever triggering global AthanOverlay
+      if (!finalSrc.startsWith('/audio/')) {
+        const fallbackSrc = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+        audio.src = fallbackSrc;
+        audio.play().then(() => {
+          setPlayingPrayer(pName);
+          setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
+        }).catch(() => {
+          setPlayingPrayer(null);
+          setLogSuccessMessage('انقر مرة أخرى للسماح بتشغيل الصوت.');
+        });
+      } else {
+        setPlayingPrayer(null);
+        setLogSuccessMessage('انقر مرة أخرى للسماح بتشغيل الصوت.');
+      }
     }
   };
 

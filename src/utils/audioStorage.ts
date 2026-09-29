@@ -29,14 +29,26 @@ export interface DbTrackRecord {
 import { archiveMuezzins } from './archiveMuezzins';
 export { archiveMuezzins };
 
-// Default muezzin tracks using high-reliability online HTTPS URLs
+// Default muezzin tracks using local bundled audio (instant offline) & high-reliability online URLs
 export const defaultMuezzins: AudioTrack[] = [
+  // Local Bundled Fajr Tracks (100% offline & instant)
+  { id: 'fajr_default', name: 'أذان الفجر الرسمي (مُدمج محلياً ⚡)', url: '/audio/fajr-default.mp3', isFajr: true },
+  { id: 'fajr_alsalatu_khayr', name: 'الصلاة خير من النوم (مُدمج محلياً ⚡)', url: '/audio/alsalatu-khayr.mp3', isFajr: true },
   { id: 'fajr_makkah', name: 'أذان الفجر - الحرم المكي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/033--.mp3', isFajr: true },
   { id: 'fajr_medina', name: 'أذان الفجر - المسجد النبوي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/034--.mp3', isFajr: true },
   { id: 'fajr_aqsa', name: 'أذان الفجر - المسجد الأقصى المبارك', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/069--.mp3', isFajr: true },
-  { id: 'makkah', name: 'أذان الحرم المكي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/016---2.mp3', isFajr: false },
-  { id: 'medina', name: 'أذان المسجد النبوي الشريف', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3', isFajr: false },
-  { id: 'aqsa', name: 'المسجد الأقصى المبارك', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/007--.mp3', isFajr: false },
+
+  // Local Bundled General Tracks (100% offline & instant)
+  { id: 'prayer_default', name: 'أذان الحرم المكي (مُدمج محلياً ⚡)', url: '/audio/prayer-default.mp3', isFajr: false },
+  { id: 'takbeer', name: 'تكبيرات الأذان (مُدمج محلياً ⚡)', url: '/audio/takbeer.mp3', isFajr: false },
+  { id: 'hayya', name: 'حي على الصلاة (مُدمج محلياً ⚡)', url: '/audio/hayya.mp3', isFajr: false },
+  { id: 'duaa', name: 'دعاء ما بعد الأذان (مُدمج محلياً ⚡)', url: '/audio/duaa.mp3', isFajr: false },
+  { id: 'salawat', name: 'الصلاة على النبي ﷺ (مُدمج محلياً ⚡)', url: '/audio/salawat.mp3', isFajr: false },
+  { id: 'reminder', name: 'نغمة التذكير الهادئة (مُدمج محلياً ⚡)', url: '/audio/reminder.mp3', isFajr: false },
+  { id: 'beep', name: 'رنين التنبيه المتقطع (مُدمج محلياً ⚡)', url: '/audio/beep.mp3', isFajr: false },
+  { id: 'makkah', name: 'أذان الحرم المكي الشريف (سحابي)', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/016---2.mp3', isFajr: false },
+  { id: 'medina', name: 'أذان المسجد النبوي الشريف (سحابي)', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3', isFajr: false },
+  { id: 'aqsa', name: 'المسجد الأقصى المبارك (سحابي)', url: 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/007--.mp3', isFajr: false },
 ];
 
 /**

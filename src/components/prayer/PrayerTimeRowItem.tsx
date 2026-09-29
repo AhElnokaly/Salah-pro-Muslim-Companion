@@ -68,6 +68,16 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
   onUpdateVolume,
 }) => {
   const isCurrentlyPlaying = isPlaying && currentPlayingPrayer === pName;
+  const isFajr = pName === 'Fajr';
+
+  const availableMuezzins = React.useMemo(() => {
+    const list = muezzins.filter(m => isFajr ? m.isFajr : !m.isFajr);
+    return list.length > 0 ? list : muezzins;
+  }, [muezzins, isFajr]);
+
+  const effectiveMuezzinId = availableMuezzins.some(m => m.id === activeMuezzinId)
+    ? activeMuezzinId
+    : (availableMuezzins[0]?.id || (isFajr ? 'fajr_default' : 'prayer_default'));
 
   const getSoundIcon = () => {
     if (sMode === 'adhan') return <Volume2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />;
@@ -233,12 +243,12 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
               <Music className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <select
                 id={`muezzin_select_${pName}`}
-                value={activeMuezzinId}
+                value={effectiveMuezzinId}
                 onChange={(e) => onSelectMuezzin(e.target.value)}
                 aria-label={`اختيار صوت أذان ${arabicName}`}
                 className="bg-transparent text-[11px] sm:text-xs font-black text-slate-700 dark:text-slate-200 focus:outline-hidden cursor-pointer border-none p-0 pe-4 ms-0.5 min-w-0 flex-1 truncate"
               >
-                {muezzins.map((m) => (
+                {availableMuezzins.map((m) => (
                   <option key={m.id} value={m.id} className="dark:bg-[#161d26] text-slate-800 dark:text-slate-200">
                     {getShortMuezzinName(m.id)}
                   </option>

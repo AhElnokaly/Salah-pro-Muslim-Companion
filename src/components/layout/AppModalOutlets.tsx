@@ -99,25 +99,50 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
           activeRingingAlarm={activeRingingAlarm}
           onSnooze={() => {
             stopSpiritualSound(globalAudioRef);
+            const now = new Date();
+            const targetDate = new Date(now.getTime() + 5 * 60 * 1000);
+            const snoozeHours = targetDate.getHours().toString().padStart(2, '0');
+            const snoozeMins = targetDate.getMinutes().toString().padStart(2, '0');
+            const snoozeTime = `${snoozeHours}:${snoozeMins}`;
+            const snoozeDay = targetDate.getDay();
+
+            // Clean title of any previous (غفوة) tag
+            const rawTitle = activeRingingAlarm.title || 'منبه';
+            const cleanTitle = rawTitle.replace(/\s*\(غفوة\)/g, '').trim();
+
+            // Create a strictly FIXED-TIME one-shot alarm without relative prayer fields
             const snoozedAlarm: AlarmConfig = {
-              ...activeRingingAlarm,
               id: `snooze_${Date.now()}`,
-              title: `${activeRingingAlarm.title} (غفوة)`,
-              time: (() => {
-                const d = new Date();
-                d.setMinutes(d.getMinutes() + 5);
-                return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-              })(),
-              days: [new Date().getDay()],
+              title: `${cleanTitle} (غفوة)`,
+              type: 'fixed',
+              time: snoozeTime,
+              days: [snoozeDay],
               enabled: true,
-              soundType: activeRingingAlarm.soundType
+              soundType: activeRingingAlarm.soundType || 'takbeer',
+              notifyMode: activeRingingAlarm.notifyMode || 'both',
+              autoKhushu: activeRingingAlarm.autoKhushu,
+              khushuDurationMinutes: activeRingingAlarm.khushuDurationMinutes,
             };
-            setCustomAlarms((prev: AlarmConfig[]) => [...prev, snoozedAlarm]);
+
+            setCustomAlarms((prev: AlarmConfig[]) => {
+              const filtered = prev.filter(a => a.id !== activeRingingAlarm.id && !a.id.startsWith('snooze_'));
+              const nextAlarms = [...filtered, snoozedAlarm];
+              window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: nextAlarms }));
+              return nextAlarms;
+            });
+
             setActiveRingingAlarm(null);
             setToastMessage("تم تأجيل المنبه لمدة ٥ دقائق ⏰");
           }}
           onStop={() => {
             stopSpiritualSound(globalAudioRef);
+            if (activeRingingAlarm.id.startsWith('snooze_')) {
+              setCustomAlarms((prev: AlarmConfig[]) => {
+                const nextAlarms = prev.filter(a => a.id !== activeRingingAlarm.id);
+                window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: nextAlarms }));
+                return nextAlarms;
+              });
+            }
             setActiveRingingAlarm(null);
           }}
         />

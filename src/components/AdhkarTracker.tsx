@@ -17,6 +17,7 @@ import DhikrFavoritesView from './adhkar/DhikrFavoritesView';
 import AdhkarHubView from './adhkar/AdhkarHubView';
 import AdhkarNavigationTabs from './adhkar/AdhkarNavigationTabs';
 import PrayerAdhkarBanner from './adhkar/PrayerAdhkarBanner';
+import AdhkarTimingModal from './adhkar/AdhkarTimingModal';
 import { useAdhkarTasbeeh } from '../hooks/useAdhkarTasbeeh';
 import { useAdhkarFeedback } from '../hooks/useAdhkarFeedback';
 import { useAdhkarCounter } from '../hooks/useAdhkarCounter';
@@ -60,6 +61,15 @@ export default function AdhkarTracker({
   const [searchQuery, setSearchQuery] = useState('');
   const [fontSize, setFontSize] = useState<'md' | 'lg' | 'xl'>('lg');
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+
+  // Timing Modal states (التحكم بمواعيد أذكار الصباح والمساء)
+  const [isTimingModalOpen, setIsTimingModalOpen] = useState(false);
+  const [timingModalInitialTab, setTimingModalInitialTab] = useState<'morning' | 'evening'>('morning');
+
+  const handleOpenTimingModal = (tab: 'morning' | 'evening' = 'morning') => {
+    setTimingModalInitialTab(tab);
+    setIsTimingModalOpen(true);
+  };
 
   // Persistent Favorite Dhikr Category Pages list
   const [favoriteCategoryIds, setFavoriteCategoryIds] = useState<string[]>(() => {
@@ -335,6 +345,7 @@ export default function AdhkarTracker({
             onToggleFavoriteDhikr={toggleFavoriteDhikr}
             getCategoryVisibleItems={getCategoryVisibleItems}
             activePrayerKey={activePrayerKey}
+            onOpenTimingModal={handleOpenTimingModal}
           />
         </div>
       )}
@@ -373,6 +384,7 @@ export default function AdhkarTracker({
           particles={particles}
           onIncrementItem={handleIncrementCategoryItem}
           onMarkItemDone={handleMarkItemDone}
+          onOpenTimingModal={handleOpenTimingModal}
         />
       )}
 
@@ -430,6 +442,13 @@ export default function AdhkarTracker({
         getItemCurrentCount={getItemCurrentCount}
         getItemTargetCount={getItemTargetCount}
         getCategoryVisibleItems={getCategoryVisibleItems}
+      />
+
+      {/* Morning & Evening Adhkar Timing Controller Modal */}
+      <AdhkarTimingModal
+        isOpen={isTimingModalOpen}
+        onClose={() => setIsTimingModalOpen(false)}
+        initialTab={timingModalInitialTab}
       />
 
     </div>

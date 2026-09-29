@@ -17,7 +17,7 @@ export function useCustomAlarmTrigger({
   setActiveRingingAlarm,
   setToastMessage,
 }: UseCustomAlarmTriggerProps) {
-  const triggerCustomAlarm = useCallback((alarm: AlarmConfig, targetPrayer?: RelativePrayerTarget) => {
+  const triggerCustomAlarm = useCallback((alarm: AlarmConfig, targetPrayer?: RelativePrayerTarget, skipModal: boolean = false) => {
     const prayerSuffix = targetPrayer ? ` (${getArabicPrayerOrEventName(targetPrayer)})` : '';
     const fullTitle = `${alarm.title}${prayerSuffix}`;
 
@@ -44,10 +44,12 @@ export function useCustomAlarmTrigger({
       });
     }
 
-    setActiveRingingAlarm({
-      ...alarm,
-      title: fullTitle
-    });
+    if (!skipModal) {
+      setActiveRingingAlarm({
+        ...alarm,
+        title: fullTitle
+      });
+    }
 
     if (setToastMessage) {
       setToastMessage(`⏰ ${fullTitle}`);

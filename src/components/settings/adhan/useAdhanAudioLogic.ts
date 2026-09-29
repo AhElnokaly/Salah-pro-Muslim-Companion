@@ -15,6 +15,7 @@ import {
   getDownloadedTrackIds,
   getAudioStorageStats,
   AudioTrack,
+  LOCAL_FALLBACK_AUDIO,
 } from '../../../utils/audioStorage';
 
 interface UseAdhanAudioLogicProps {
@@ -196,9 +197,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
       const playAudioTrack = (srcUrl: string, isFallback = false) => {
         let safeUrl = srcUrl;
         if (!safeUrl || typeof safeUrl !== 'string' || safeUrl.trim() === '' || safeUrl.startsWith('db://')) {
-          safeUrl = isFajr
-            ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-            : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+          safeUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
         }
 
         if (audioRef.current) {
@@ -242,9 +241,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
 
         audio.onerror = () => {
           if (!isFallback) {
-            const fallbackUrl = isFajr
-              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+            const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
             playAudioTrack(fallbackUrl, true);
           } else {
             setAudioError('تعذر تشغيل الملف الصوتي.');
@@ -256,9 +253,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
           if (e.name === 'NotAllowedError') {
             setAudioError('⚠️ يرجى الضغط على زر التشغيل ▶ لبدء الصوت (بسبب قيود التشغيل التلقائي بالمتصفح).');
           } else if (!isFallback) {
-            const fallbackUrl = isFajr
-              ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-              : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+            const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
             playAudioTrack(fallbackUrl, true);
           } else {
             setAudioError('تعذر تشغيل الملف الصوتي.');
@@ -272,9 +267,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
         })
         .catch((err) => {
           console.error('Failed to resolve settings audio:', err);
-          const fallbackUrl = isFajr
-            ? 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/020--.mp3'
-            : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
+          const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
           playAudioTrack(fallbackUrl, true);
         });
     }

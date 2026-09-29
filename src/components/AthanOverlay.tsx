@@ -131,7 +131,11 @@ export default function AthanOverlay({
   // Unlock audio playback on first user click/tap anywhere on screen if autoplay was blocked
   useEffect(() => {
     if (isOpen && !isPlaying && !showDua) {
-      const handleUserGesture = () => {
+      const handleUserGesture = (e: Event) => {
+        const target = (e as PointerEvent).target as HTMLElement | null;
+        if (target && (target.tagName === 'SELECT' || target.tagName === 'OPTION' || target.tagName === 'BUTTON' || target.closest('select') || target.closest('button'))) {
+          return;
+        }
         if (onRetryWithLocal) {
           onRetryWithLocal();
         } else {
@@ -341,7 +345,10 @@ export default function AthanOverlay({
                     setCurrentMuezzin(newId);
                     safeSetItem('salah_general_muezzin', newId);
                   }
-                  togglePlayAthan(newId);
+                  stopAthan();
+                  setTimeout(() => {
+                    togglePlayAthan(newId);
+                  }, 50);
                 }}
                 className="bg-transparent text-amber-300 font-bold cursor-pointer outline-none border-none pe-1 focus:ring-0"
               >

@@ -34,10 +34,11 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         const val CUSTOM_ALARM_SILENT_CHANNEL_ID = "athan_custom_silent_channel_v2"
 
         fun getSoundResId(context: Context, soundType: String): Int {
-            val clean = soundType.lowercase().trim()
+            val clean = soundType.lowercase().trim().replace("-", "_")
             val rawResName = when {
+                clean == "ayat_kursi" || clean == "ayatkursi" || clean.contains("kursi") -> "ayat_kursi"
                 clean == "takbeer" -> "takbeer"
-                clean.contains("khayr") || clean == "alsalatu-khayr" || clean == "alsalatu_khayr" -> "alsalatu_khayr"
+                clean.contains("khayr") || clean == "alsalatu_khayr" -> "alsalatu_khayr"
                 clean == "hayya" -> "hayya"
                 clean == "salawat" -> "salawat"
                 clean == "istighfar" -> "istighfar"
@@ -51,9 +52,23 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             return if (resId != 0) resId else com.salahpro.app.R.raw.reminder
         }
 
+        @Volatile
+        private var lastSoundTriggerTimeMs: Long = 0L
+
         fun playAlarmAudio(context: Context, soundType: String) {
             val clean = soundType.lowercase().trim()
-            if (clean == "silent") return
+            if (clean == "silent" || clean == "vibrate") return
+
+            val now = System.currentTimeMillis()
+            // Strict anti-overlap debouncing: Prevent multiple simultaneous audible alarms within 15 seconds
+            synchronized(this) {
+                if (now - lastSoundTriggerTimeMs < 15000L) {
+                    Log.d(TAG, "Skipping overlapping audible alarm for $soundType — another alarm is already sounding")
+                    return
+                }
+                lastSoundTriggerTimeMs = now
+            }
+
             try {
                 val resId = getSoundResId(context, soundType)
                 val mp = MediaPlayer.create(context, resId)
@@ -85,7 +100,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val alarmType = intent.getStringExtra(EXTRA_ALARM_TYPE) ?: if (prayerKey.startsWith("custom_")) "custom" else if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("postalert") || prayerKey.contains("worship")) "postalert" else if (prayerKey.contains("khushu")) "khushu" else "athan"
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
-            val soundType = intent.getStringExtra("soundType") ?: "takbeer"
+            val soundType = intent.getStringExtra("soundType") ?: "reminder"
             val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
             val autoKhushu = intent.getBooleanExtra("autoKhushu", false)
             val durationMinutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)

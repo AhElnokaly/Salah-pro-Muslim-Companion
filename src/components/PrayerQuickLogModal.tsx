@@ -54,6 +54,9 @@ export const PrayerQuickLogModal: React.FC<PrayerQuickLogModalProps> = ({
   const sunnahBeforeMax = selectedPrayerToLog === 'Dhuhr' ? 4 : 2;
   const sunnahAfterMax = 2;
 
+  const currentSunnahBefore = Math.min(log.sunnahBefore || 0, sunnahBeforeMax);
+  const currentSunnahAfter = Math.min(log.sunnahAfter || 0, sunnahAfterMax);
+
   const witrLog = todayLogs['Witr'] || { status: 'not_yet', extraRakahs: 0 };
   const currentWitrRakahs = witrLog.status === 'A' ? (witrLog.extraRakahs || 0) : 0;
   const qiyamLog = todayLogs['Qiyam'] || { status: 'not_yet', extraRakahs: 0 };
@@ -161,7 +164,7 @@ export const PrayerQuickLogModal: React.FC<PrayerQuickLogModalProps> = ({
                   label="سنة قبلية"
                   prayerDisplayName={prayerDisplayName}
                   type="before"
-                  currentRakahs={log.sunnahBefore || 0}
+                  currentRakahs={currentSunnahBefore}
                   maxRakahs={sunnahBeforeMax}
                   onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta, sunnahBeforeMax)}
                   onToggleComplete={handleToggleCompleteSunnah}
@@ -173,7 +176,7 @@ export const PrayerQuickLogModal: React.FC<PrayerQuickLogModalProps> = ({
                   label="سنة بعدية"
                   prayerDisplayName={prayerDisplayName}
                   type="after"
-                  currentRakahs={log.sunnahAfter || 0}
+                  currentRakahs={currentSunnahAfter}
                   maxRakahs={sunnahAfterMax}
                   onUpdateRakahs={(t, delta) => handleUpdateSunnah(selectedPrayerToLog, t, delta, sunnahAfterMax)}
                   onToggleComplete={handleToggleCompleteSunnah}

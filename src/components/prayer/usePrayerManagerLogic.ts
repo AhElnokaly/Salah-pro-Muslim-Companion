@@ -109,15 +109,15 @@ export function usePrayerManagerLogic({
 
   // Athan Audio Player States in PrayerManager
   const [isPlaying] = useState<boolean>(false);
-  const [currentMuezzin] = useState<string>(() => {
-    return safeGetItem('salah_general_muezzin') || 'makkah';
+  const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => {
+    return safeGetItem('salah_general_muezzin') || 'prayer_default';
   });
-  const [fajrMuezzin] = useState<string>(() => {
-    return safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+  const [fajrMuezzin, setFajrMuezzin] = useState<string>(() => {
+    return safeGetItem('salah_fajr_muezzin') || 'fajr_default';
   });
-  const [prayerMuezzins] = useState<Record<string, string>>(() => {
-    const general = safeGetItem('salah_general_muezzin') || 'makkah';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf';
+  const [prayerMuezzins, setPrayerMuezzins] = useState<Record<string, string>>(() => {
+    const general = safeGetItem('salah_general_muezzin') || 'prayer_default';
+    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_default';
     return {
       Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
       Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,
@@ -344,6 +344,11 @@ export function usePrayerManagerLogic({
     setClockFace,
     isPlaying,
     prayerMuezzins,
+    setPrayerMuezzins,
+    currentMuezzin,
+    setCurrentMuezzin,
+    fajrMuezzin,
+    setFajrMuezzin,
     muezzins,
     togglePlayAthan,
     dateStr,
