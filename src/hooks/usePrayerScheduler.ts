@@ -374,11 +374,19 @@ export function usePrayerScheduler({
           });
         };
 
+        const handlePushChange = () => {
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
+            console.warn('[usePrayerScheduler] Notification re-orchestration on push settings change error:', err);
+          });
+        };
+
         window.addEventListener('khushu-settings-changed', handleKhushuChange);
         window.addEventListener('custom-alarms-changed', handleAlarmsChange);
+        window.addEventListener('push-settings-changed', handlePushChange);
         return () => {
           window.removeEventListener('khushu-settings-changed', handleKhushuChange);
           window.removeEventListener('custom-alarms-changed', handleAlarmsChange);
+          window.removeEventListener('push-settings-changed', handlePushChange);
         };
       }
     }

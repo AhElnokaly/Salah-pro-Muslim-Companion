@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { 
   getSmartNotificationsSettings, 
   dispatchSmartNotification,
@@ -236,9 +237,9 @@ export function useSmartNotificationsSystemSync({
     return () => clearInterval(interval);
   }, []);
 
-  // 3. Sync schedule with Service Worker for background wake-ups
+  // 3. Sync schedule with Service Worker for background wake-ups (PWA only)
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (Capacitor.isNativePlatform() || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 
     const syncWithServiceWorker = () => {
       const settings = settingsRef.current;

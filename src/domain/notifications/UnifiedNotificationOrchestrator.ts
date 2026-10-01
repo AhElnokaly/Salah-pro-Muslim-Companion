@@ -13,6 +13,7 @@ import { NotificationScheduler } from '../../services/NotificationScheduler';
 import { syncPrayerScheduleWithSW, getPushSettings } from '../../utils/pushNotificationService';
 import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { AppSettings, PrayerTimes, AlarmConfig } from '../../types';
+import { safeGetJSON } from '../../utils/storage';
 import { KhushuStorage } from '../khushu/khushuStorage';
 import AthanAlarm, {
   PrayerTimeAlarm,
@@ -69,9 +70,9 @@ export class UnifiedNotificationOrchestrator {
       if (days60List && days60List.length > 0) {
         const userTz = settings.timezoneId || (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
         const pushSettings = getPushSettings();
-        const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
+        const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? false;
         const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
-        const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? true;
+        const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? false;
         const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
         const khushuSettings = KhushuStorage.getSettings();
 
@@ -170,10 +171,13 @@ export class UnifiedNotificationOrchestrator {
       const keys = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
       const nativeAlarmsToSchedule: PrayerTimeAlarm[] = [];
       const pushSettings = getPushSettings();
-      const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? true;
+      const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? false;
       const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
-      const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? true;
+      const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? false;
       const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
+      const customAlarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
+      const hasBeforeSalahCustom = Boolean(customAlarms?.some(a => a.id === 'alarm_before_salah'));
+      const hasAfterSalahCustom = Boolean(customAlarms?.some(a => a.id === 'alarm_after_salah'));
       const khushuSettings = KhushuStorage.getSettings();
 
       for (const key of keys) {
@@ -195,8 +199,8 @@ export class UnifiedNotificationOrchestrator {
           });
         }
 
-        // Pre-alert alarm before prayer time (excluding sunrise)
-        if (preAlertEnabled && key !== 'Sunrise') {
+        // Pre-alert alarm before prayer time (excluding sunrise) - suppressed if custom alarm exists
+        if (preAlertEnabled && !hasBeforeSalahCustom && key !== 'Sunrise') {
           const preAlertTimeMs = triggerDate.getTime() - preAlertMins * 60000;
           if (preAlertTimeMs > Date.now()) {
             nativeAlarmsToSchedule.push({
@@ -209,8 +213,8 @@ export class UnifiedNotificationOrchestrator {
           }
         }
 
-        // Post-alert worship & adhkar reminder after prayer time (excluding sunrise)
-        if (postAlertEnabled && key !== 'Sunrise') {
+        // Post-alert worship & adhkar reminder after prayer time (excluding sunrise) - suppressed if custom alarm exists
+        if (postAlertEnabled && !hasAfterSalahCustom && key !== 'Sunrise') {
           const postAlertTimeMs = triggerDate.getTime() + postAlertMins * 60000;
           if (postAlertTimeMs > Date.now()) {
             nativeAlarmsToSchedule.push({

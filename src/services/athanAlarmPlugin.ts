@@ -78,6 +78,8 @@ export interface AthanAlarmPlugin {
   downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
   stopAthan?(): Promise<{ stopped: boolean }>;
   isNativeAthanRunning?(): Promise<{ isRunning: boolean }>;
+  setNativeAthanFiles?(options: { generalPath?: string; fajrPath?: string }): Promise<{ saved: boolean }>;
+  saveAthanFile?(options: { type: 'general' | 'fajr'; base64Data: string }): Promise<{ path: string; saved: boolean }>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
 }
 
@@ -108,6 +110,12 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     },
     isNativeAthanRunning: async () => {
       return { isRunning: false };
+    },
+    setNativeAthanFiles: async () => {
+      return { saved: true };
+    },
+    saveAthanFile: async () => {
+      return { path: '', saved: true };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -140,6 +148,9 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
       return { opened: true };
     },
     sendNotification: async (options) => {
+      if (Capacitor.isNativePlatform()) {
+        return { success: false };
+      }
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         new Notification(options.title, { body: options.body });
         return { success: true };
@@ -381,6 +392,8 @@ export async function scheduleNativeAthanAlarms(
 
     const ks = calcParams?.khushuSettings;
     const khushuEnabled = Boolean(calcParams?.khushuAutoWithIqama);
+    const hasBeforeSalahCustom = Boolean(calcParams?.customAlarms?.some(a => a.id === 'alarm_before_salah'));
+    const hasAfterSalahCustom = Boolean(calcParams?.customAlarms?.some(a => a.id === 'alarm_after_salah'));
 
     if (Array.isArray(daysListOrTodayMap)) {
       daysListOrTodayMap.forEach((entry) => {
@@ -411,7 +424,7 @@ export async function scheduleNativeAthanAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
             const preMins = calcParams.preAlertMinutes || 15;
             const preTimeMs = timeMs - preMins * 60000;
             if (preTimeMs > now) {
@@ -425,7 +438,7 @@ export async function scheduleNativeAthanAlarms(
             }
           }
 
-          if (calcParams?.prayerPostAlert && lowerKey !== 'sunrise') {
+          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
             const postMins = calcParams.postAlertMinutes || 15;
             const postTimeMs = timeMs + postMins * 60000;
             if (postTimeMs > now) {
@@ -488,7 +501,7 @@ export async function scheduleNativeAthanAlarms(
           });
         }
 
-        if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+        if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
           const preMins = calcParams.preAlertMinutes || 15;
           const preTimeMs = timeMs - preMins * 60000;
           if (preTimeMs > now) {
@@ -502,7 +515,7 @@ export async function scheduleNativeAthanAlarms(
           }
         }
 
-        if (calcParams?.prayerPostAlert && lowerKey !== 'sunrise') {
+        if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
           const postMins = calcParams.postAlertMinutes || 15;
           const postTimeMs = timeMs + postMins * 60000;
           if (postTimeMs > now) {
@@ -565,7 +578,7 @@ export async function scheduleNativeAthanAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && lowerKey !== 'sunrise') {
+          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
             const preMins = calcParams.preAlertMinutes || 15;
             const preTimeMs = timeMs - preMins * 60000;
             if (preTimeMs > now) {
@@ -579,7 +592,7 @@ export async function scheduleNativeAthanAlarms(
             }
           }
 
-          if (calcParams?.prayerPostAlert && lowerKey !== 'sunrise') {
+          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
             const postMins = calcParams.postAlertMinutes || 15;
             const postTimeMs = timeMs + postMins * 60000;
             if (postTimeMs > now) {
@@ -791,6 +804,89 @@ export async function isNativeAthanRunning(): Promise<boolean> {
   } catch (err) {
     console.warn('[AthanAlarmPlugin] isNativeAthanRunning error:', err);
     return false;
+  }
+}
+
+export async function cancelNativeAlarm(options: { alarmId?: string; requestCode?: number }): Promise<boolean> {
+  if (!Capacitor.isNativePlatform() || !AthanAlarm.cancelAlarm) return true;
+  try {
+    const res = await AthanAlarm.cancelAlarm(options);
+    return res?.cancelled ?? false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] cancelAlarm error:', err);
+    return false;
+  }
+}
+
+export async function cancelAllNativeAlarms(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform() || !AthanAlarm.cancelAllAlarms) return true;
+  try {
+    const res = await AthanAlarm.cancelAllAlarms();
+    return res?.cancelled ?? false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] cancelAllAlarms error:', err);
+    return false;
+  }
+}
+
+export async function setNativeAthanFiles(options: { generalPath?: string; fajrPath?: string }): Promise<boolean> {
+  if (!Capacitor.isNativePlatform() || !AthanAlarm.setNativeAthanFiles) return true;
+  try {
+    const res = await AthanAlarm.setNativeAthanFiles(options);
+    return res?.saved ?? false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] setNativeAthanFiles error:', err);
+    return false;
+  }
+}
+
+export async function syncAthanFileToNative(
+  type: 'general' | 'fajr',
+  audioUrlOrBlob: string | Blob
+): Promise<string | null> {
+  if (!Capacitor.isNativePlatform() || !AthanAlarm.saveAthanFile) return null;
+  try {
+    let blob: Blob;
+    if (typeof audioUrlOrBlob === 'string') {
+      const resp = await fetch(audioUrlOrBlob);
+      blob = await resp.blob();
+    } else {
+      blob = audioUrlOrBlob;
+    }
+
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const res = reader.result as string;
+        const base64 = res.includes(',') ? res.split(',')[1] : res;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const res = await AthanAlarm.saveAthanFile({ type, base64Data });
+    console.log(`[AthanAlarm] Synced ${type} athan audio to native file:`, res.path);
+    return res.path;
+  } catch (err) {
+    console.warn(`[AthanAlarm] Failed to sync ${type} athan to native:`, err);
+    return null;
+  }
+}
+
+export async function syncMuezzinIdToNative(type: 'general' | 'fajr', muezzinId: string): Promise<string | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    const { defaultMuezzins, archiveMuezzins, getCustomAudios, getAudioUrl } = await import('../utils/audioStorage');
+    const customTracks = await getCustomAudios().catch(() => []);
+    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customTracks];
+    const isFajr = type === 'fajr';
+    const track = tracks.find(t => t.id === muezzinId) || defaultMuezzins.find(t => t.isFajr === isFajr) || defaultMuezzins[0];
+    const resolvedUrl = await getAudioUrl(track.url, track.id, isFajr);
+    return await syncAthanFileToNative(type, resolvedUrl);
+  } catch (err) {
+    console.warn(`[AthanAlarm] Error syncing muezzin ID ${muezzinId} to native:`, err);
+    return null;
   }
 }
 

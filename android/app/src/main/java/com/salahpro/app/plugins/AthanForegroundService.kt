@@ -88,43 +88,89 @@ class AthanForegroundService : Service() {
     private fun playLocalAthanAudio(isFajr: Boolean) {
         try {
             mediaPlayer?.release()
+            mediaPlayer = null
 
-            val packageName = packageName
-            val rawResName = if (isFajr) "athan_fajr" else "athan_default"
-            var resId = resources.getIdentifier(rawResName, "raw", packageName)
-            
-            if (resId == 0) {
-                // Fallback to athan_default if fajr resId isn't found
-                resId = resources.getIdentifier("athan_default", "raw", packageName)
-            }
-
-            if (resId == 0) {
-                Log.w(TAG, "Raw athan audio not found in R.raw, falling back to system alarm ringtone")
-                val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                mediaPlayer = MediaPlayer.create(this, alarmUri)
+            val prefs = getSharedPreferences("AthanAlarmPrefs", Context.MODE_PRIVATE)
+            val customFilePath = if (isFajr) {
+                prefs.getString("athan_file_fajr", null)
             } else {
-                mediaPlayer = MediaPlayer.create(this, resId)
+                prefs.getString("athan_file_general", null)
             }
 
-            mediaPlayer?.apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .build()
-                )
-                isLooping = false
-                setOnCompletionListener {
-                    Log.d(TAG, "Athan audio finished playing")
-                    stopAthanAndSelf()
+            var playedCustom = false
+            if (!customFilePath.isNullOrEmpty()) {
+                val file = java.io.File(customFilePath)
+                if (file.exists() && file.length() > 0) {
+                    try {
+                        val mp = MediaPlayer()
+                        mp.setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .build()
+                        )
+                        mp.setDataSource(file.absolutePath)
+                        mp.prepare()
+                        mp.isLooping = false
+                        mp.setOnCompletionListener {
+                            Log.d(TAG, "Custom athan audio finished playing")
+                            stopAthanAndSelf()
+                        }
+                        mp.setOnErrorListener { _, what, extra ->
+                            Log.e(TAG, "MediaPlayer error on custom file: what=$what, extra=$extra")
+                            stopAthanAndSelf()
+                            true
+                        }
+                        mediaPlayer = mp
+                        mp.start()
+                        playedCustom = true
+                        Log.d(TAG, "Successfully started custom athan audio from: $customFilePath")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to play custom athan audio from file, falling back to raw", e)
+                        mediaPlayer?.release()
+                        mediaPlayer = null
+                    }
                 }
-                setOnErrorListener { _, what, extra ->
-                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    stopAthanAndSelf()
-                    true
+            }
+
+            if (!playedCustom) {
+                val packageName = packageName
+                val rawResName = if (isFajr) "athan_fajr" else "athan_default"
+                var resId = resources.getIdentifier(rawResName, "raw", packageName)
+                
+                if (resId == 0) {
+                    // Fallback to athan_default if fajr resId isn't found
+                    resId = resources.getIdentifier("athan_default", "raw", packageName)
                 }
-                start()
+
+                if (resId == 0) {
+                    Log.w(TAG, "Raw athan audio not found in R.raw, falling back to system alarm ringtone")
+                    val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    mediaPlayer = MediaPlayer.create(this, alarmUri)
+                } else {
+                    mediaPlayer = MediaPlayer.create(this, resId)
+                }
+
+                mediaPlayer?.apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .build()
+                    )
+                    isLooping = false
+                    setOnCompletionListener {
+                        Log.d(TAG, "Athan audio finished playing")
+                        stopAthanAndSelf()
+                    }
+                    setOnErrorListener { _, what, extra ->
+                        Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                        stopAthanAndSelf()
+                        true
+                    }
+                    start()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error playing athan audio in ForegroundService", e)

@@ -2,15 +2,24 @@ package com.salahpro.app.plugins
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.DownloadManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.getcapacitor.JSArray
@@ -809,22 +818,64 @@ class AthanAlarmPlugin : Plugin() {
         val alarmId = call.getString("alarmId")
         val reqCode = call.getInt("requestCode") ?: alarmId?.toIntOrNull()
 
-        if (reqCode == null) {
-            call.reject("Missing alarmId or requestCode parameter")
+        val context = context
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+
+        if (reqCode != null) {
+            var success = false
+            if (alarmManager != null) {
+                success = cancelSingleAlarmStatic(context, alarmManager, reqCode)
+            }
+            val ret = JSObject()
+            ret.put("cancelled", success)
+            ret.put("requestCode", reqCode)
+            call.resolve(ret)
             return
         }
 
-        val context = context
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-        var success = false
-        if (alarmManager != null) {
-            success = cancelSingleAlarmStatic(context, alarmManager, reqCode)
+        if (!alarmId.isNullOrBlank()) {
+            var cancelledCount = 0
+            if (alarmManager != null) {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val rawJson = prefs.getString(KEY_SAVED_ALARMS, null)
+                if (rawJson != null) {
+                    try {
+                        val array = JSONArray(rawJson)
+                        val remaining = JSONArray()
+                        for (i in 0 until array.length()) {
+                            val item = array.getJSONObject(i)
+                            val pKey = item.optString("prayerKey", "")
+                            val aType = item.optString("alarmType", "")
+                            val matches = aType.equals(alarmId, ignoreCase = true) ||
+                                          pKey.contains(alarmId, ignoreCase = true) ||
+                                          (alarmId == "prealert" && (aType == "prealert" || pKey.contains("prealert"))) ||
+                                          (alarmId == "postalert" && (aType == "postalert" || pKey.contains("postalert"))) ||
+                                          (alarmId == "athan" && (aType.isEmpty() || aType == "athan"))
+
+                            if (matches) {
+                                val timeMs = item.optLong("timeMs", 0L)
+                                val code = getDeterministicRequestCode(pKey, timeMs)
+                                cancelSingleAlarmStatic(context, alarmManager, code)
+                                cancelledCount++
+                            } else {
+                                remaining.put(item)
+                            }
+                        }
+                        prefs.edit().putString(KEY_SAVED_ALARMS, remaining.toString()).apply()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error cancelling alarms for alarmId=$alarmId", e)
+                    }
+                }
+            }
+            val ret = JSObject()
+            ret.put("cancelled", true)
+            ret.put("cancelledCount", cancelledCount)
+            ret.put("alarmId", alarmId)
+            call.resolve(ret)
+            return
         }
 
-        val ret = JSObject()
-        ret.put("cancelled", success)
-        ret.put("requestCode", reqCode)
-        call.resolve(ret)
+        call.reject("Missing alarmId or requestCode parameter")
     }
 
     @PluginMethod
@@ -892,107 +943,221 @@ class AthanAlarmPlugin : Plugin() {
         }
 
         val context = context
-        thread {
-            try {
-                Log.d(TAG, "Starting native in-app APK download from: $apkUrl")
-                val downloadDir = File(context.cacheDir, "updates")
-                if (!downloadDir.exists()) {
-                    downloadDir.mkdirs()
+
+        // Request POST_NOTIFICATIONS on Android 13+ if not granted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                try {
+                    activity?.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not request notifications permission", e)
                 }
-
-                val apkFile = File(downloadDir, "hemmaty-update.apk")
-                if (apkFile.exists()) {
-                    apkFile.delete()
-                }
-
-                // Download with redirect following
-                var currentUrl = apkUrl
-                var connection: HttpURLConnection
-                var redirects = 0
-                while (true) {
-                    val urlObj = URL(currentUrl)
-                    connection = urlObj.openConnection() as HttpURLConnection
-                    connection.instanceFollowRedirects = false
-                    connection.connectTimeout = 30000
-                    connection.readTimeout = 30000
-                    connection.setRequestProperty("User-Agent", "HemmatyApp-Android")
-                    connection.connect()
-
-                    val responseCode = connection.responseCode
-                    if (responseCode in 300..399) {
-                        val newLocation = connection.getHeaderField("Location")
-                        connection.disconnect()
-                        if (!newLocation.isNullOrEmpty() && redirects < 5) {
-                            currentUrl = newLocation
-                            redirects++
-                            continue
-                        }
-                    }
-                    break
-                }
-
-                val totalBytes = connection.contentLength.toLong()
-                var downloadedBytes = 0L
-
-                val inputStream = connection.inputStream
-                val outputStream = FileOutputStream(apkFile)
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var lastReportedProgress = -1
-
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-
-                    if (totalBytes > 0) {
-                        val progressPercent = ((downloadedBytes * 100) / totalBytes).toInt()
-                        if (progressPercent != lastReportedProgress) {
-                            lastReportedProgress = progressPercent
-                            val progressData = JSObject().apply {
-                                put("progress", progressPercent)
-                                put("downloadedBytes", downloadedBytes)
-                                put("totalBytes", totalBytes)
-                            }
-                            notifyListeners("apkDownloadProgress", progressData)
-                        }
-                    }
-                }
-
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-                connection.disconnect()
-
-                Log.d(TAG, "APK successfully downloaded to: ${apkFile.absolutePath}, size: ${apkFile.length()} bytes")
-
-                // Launch Android Package Installer
-                val authority = "${context.packageName}.fileprovider"
-                val apkUri = FileProvider.getUriForFile(context, authority, apkFile)
-
-                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(apkUri, "application/vnd.android.package-archive")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-
-                context.startActivity(installIntent)
-
-                val completeData = JSObject().apply {
-                    put("success", true)
-                    put("message", "Package installer launched successfully")
-                }
-                notifyListeners("apkDownloadComplete", completeData)
-                call.resolve(completeData)
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Error in downloading/installing APK in-app", e)
-                val errorData = JSObject().apply {
-                    put("success", false)
-                    put("error", e.message ?: "Unknown error downloading APK")
-                }
-                notifyListeners("apkDownloadError", errorData)
-                call.reject("Failed to download/install update: ${e.message}")
             }
+        }
+
+        try {
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            if (downloadManager == null) {
+                call.reject("DownloadManager service not available")
+                return
+            }
+
+            val destinationDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            if (destinationDir != null && !destinationDir.exists()) {
+                destinationDir.mkdirs()
+            }
+            val apkFile = File(destinationDir, "hemmaty-update.apk")
+            if (apkFile.exists()) {
+                apkFile.delete()
+            }
+
+            val request = DownloadManager.Request(Uri.parse(apkUrl)).apply {
+                setTitle("تحديث تطبيق هِمَّتِي")
+                setDescription("جاري تنزيل أحدث إصدار من التطبيق في الخلفية...")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "hemmaty-update.apk")
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+            }
+
+            val downloadId = downloadManager.enqueue(request)
+            Log.d(TAG, "Enqueued DownloadManager task: id=$downloadId for $apkUrl")
+
+            // Monitor progress every 1 second while app is open
+            val handler = Handler(Looper.getMainLooper())
+            var progressRunnable: Runnable? = null
+            var downloadReceiver: BroadcastReceiver? = null
+
+            progressRunnable = object : Runnable {
+                override fun run() {
+                    try {
+                        val query = DownloadManager.Query().setFilterById(downloadId)
+                        val cursor = downloadManager.query(query)
+                        if (cursor != null && cursor.moveToFirst()) {
+                            val bytesCol = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                            val totalCol = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                            val statusCol = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+
+                            val bytesDownloaded = if (bytesCol >= 0) cursor.getLong(bytesCol) else 0L
+                            val totalBytes = if (totalCol >= 0) cursor.getLong(totalCol) else 0L
+                            val status = if (statusCol >= 0) cursor.getInt(statusCol) else -1
+                            cursor.close()
+
+                            if (totalBytes > 0) {
+                                val progressPercent = ((bytesDownloaded * 100) / totalBytes).toInt()
+                                val progressData = JSObject().apply {
+                                    put("progress", progressPercent)
+                                    put("downloadedBytes", bytesDownloaded)
+                                    put("totalBytes", totalBytes)
+                                }
+                                notifyListeners("apkDownloadProgress", progressData)
+                            }
+
+                            if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) {
+                                return // Stop polling
+                            }
+                        } else {
+                            cursor?.close()
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error checking download progress", e)
+                    }
+                    handler.postDelayed(this, 1000L)
+                }
+            }
+            handler.postDelayed(progressRunnable, 1000L)
+
+            // Register completion BroadcastReceiver
+            downloadReceiver = object : BroadcastReceiver() {
+                override fun onReceive(recvContext: Context, intent: Intent) {
+                    val completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+                    if (completedId != downloadId) return
+
+                    handler.removeCallbacksAndMessages(null)
+                    try {
+                        context.unregisterReceiver(this)
+                    } catch (_: Exception) {}
+
+                    try {
+                        val query = DownloadManager.Query().setFilterById(downloadId)
+                        val cursor = downloadManager.query(query)
+                        var status = -1
+                        if (cursor != null && cursor.moveToFirst()) {
+                            val statusCol = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                            if (statusCol >= 0) status = cursor.getInt(statusCol)
+                            cursor.close()
+                        }
+
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            if (apkFile.exists() && apkFile.length() > 1024 * 1024L) {
+                                Log.d(TAG, "APK download complete and valid (${apkFile.length()} bytes)")
+
+                                val authority = "${context.packageName}.fileprovider"
+                                val apkUri = FileProvider.getUriForFile(context, authority, apkFile)
+
+                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+
+                                // Show notification "التحديث جاهز، اضغط للتثبيت"
+                                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                                if (notificationManager != null) {
+                                    val updateChannelId = "app_updates_channel"
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        val channel = NotificationChannel(
+                                            updateChannelId,
+                                            "تحديثات التطبيق",
+                                            NotificationManager.IMPORTANCE_HIGH
+                                        ).apply {
+                                            description = "إشعارات تنزيل وتثبيت تحديثات هِمَّتِي"
+                                            setShowBadge(true)
+                                        }
+                                        notificationManager.createNotificationChannel(channel)
+                                    }
+
+                                    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                                    } else {
+                                        PendingIntent.FLAG_UPDATE_CURRENT
+                                    }
+                                    val pendingIntent = PendingIntent.getActivity(context, 99991, installIntent, flags)
+
+                                    val notif = NotificationCompat.Builder(context, updateChannelId)
+                                        .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                                        .setContentTitle("التحديث جاهز، اضغط للتثبيت 🚀")
+                                        .setContentText("تم تنزيل تحديث هِمَّتِي بنجاح. اضغط هنا لبدء التثبيت الآن.")
+                                        .setStyle(NotificationCompat.BigTextStyle().bigText("تم تنزيل تحديث هِمَّتِي بنجاح. اضغط هنا لتثبيت الإصدار الجديد فوراً."))
+                                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                        .setAutoCancel(true)
+                                        .setContentIntent(pendingIntent)
+                                        .build()
+
+                                    notificationManager.notify(99991, notif)
+                                }
+
+                                // If app is in foreground, trigger installer directly
+                                val isForeground = activity != null && !activity.isFinishing
+                                if (isForeground) {
+                                    try {
+                                        context.startActivity(installIntent)
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Could not open installer directly from foreground", e)
+                                    }
+                                }
+
+                                val completeData = JSObject().apply {
+                                    put("success", true)
+                                    put("message", "Package installer ready")
+                                }
+                                notifyListeners("apkDownloadComplete", completeData)
+                                call.resolve(completeData)
+                            } else {
+                                Log.e(TAG, "APK file missing or invalid: size=${apkFile.length()}")
+                                val errorData = JSObject().apply {
+                                    put("success", false)
+                                    put("error", "ملف التحديث غير مكتمل أو تالف")
+                                }
+                                notifyListeners("apkDownloadError", errorData)
+                                call.reject("ملف التحديث غير مكتمل أو تالف")
+                            }
+                        } else {
+                            Log.e(TAG, "DownloadManager failed with status: $status")
+                            val errorData = JSObject().apply {
+                                put("success", false)
+                                put("error", "فشل تنزيل ملف التحديث")
+                            }
+                            notifyListeners("apkDownloadError", errorData)
+                            call.reject("فشل تنزيل ملف التحديث")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error handling download complete", e)
+                        val errorData = JSObject().apply {
+                            put("success", false)
+                            put("error", e.message ?: "خطأ أثناء معالجة التحديث")
+                        }
+                        notifyListeners("apkDownloadError", errorData)
+                        call.reject("خطأ أثناء معالجة التحديث: ${e.message}")
+                    }
+                }
+            }
+
+            val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.registerReceiver(context, downloadReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            } else {
+                context.registerReceiver(downloadReceiver, filter)
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start DownloadManager", e)
+            val errorData = JSObject().apply {
+                put("success", false)
+                put("error", e.message ?: "Failed to start download")
+            }
+            notifyListeners("apkDownloadError", errorData)
+            call.reject("Failed to start download: ${e.message}")
         }
     }
 

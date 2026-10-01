@@ -89,12 +89,52 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
       }
     };
 
+    const handlePushChanged = (e: Event) => {
+      const detail = (e as CustomEvent<PushNotificationSettings>).detail;
+      if (detail) setSettings(detail);
+      else setSettings(getPushSettings());
+    };
+
+    const handleAlarmsChanged = (e: Event) => {
+      const alarms = (e as CustomEvent<AlarmConfig[]>).detail || safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
+      if (alarms && Array.isArray(alarms)) {
+        setSettings(prev => {
+          const updated = { ...prev };
+          const before = alarms.find(a => a.id === 'alarm_before_salah');
+          if (before) {
+            updated.prayerPreAlert = before.enabled;
+            if (before.offsetMinutes !== undefined) updated.preAlertMinutes = before.offsetMinutes;
+          }
+          const after = alarms.find(a => a.id === 'alarm_after_salah');
+          if (after) {
+            updated.prayerPostAlert = after.enabled;
+            if (after.offsetMinutes !== undefined) updated.postAlertMinutes = after.offsetMinutes;
+          }
+          const morning = alarms.find(a => a.id === 'alarm_morning_adhkar');
+          if (morning) {
+            updated.adhkarMorning = morning.enabled;
+            if (morning.time) updated.morningTime = morning.time;
+          }
+          const evening = alarms.find(a => a.id === 'alarm_evening_adhkar');
+          if (evening) {
+            updated.adhkarEvening = evening.enabled;
+            if (evening.time) updated.eveningTime = evening.time;
+          }
+          return updated;
+        });
+      }
+    };
+
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', checkStatus);
+    window.addEventListener('push-settings-changed', handlePushChanged);
+    window.addEventListener('custom-alarms-changed', handleAlarmsChanged);
 
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', checkStatus);
+      window.removeEventListener('push-settings-changed', handlePushChanged);
+      window.removeEventListener('custom-alarms-changed', handleAlarmsChanged);
     };
   }, [checkStatus]);
 
@@ -172,6 +212,22 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
         console.warn('[PushNotificationManager] Failed to sync prayerAthan with AppSettings:', err);
       }
     }
+
+    // Two-way sync with custom worship alarms
+    if (key === 'prayerPreAlert' || key === 'prayerPostAlert' || key === 'adhkarMorning' || key === 'adhkarEvening') {
+      try {
+        const currentAlarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null) || DEFAULT_WORSHIP_ALARMS;
+        const targetId = key === 'prayerPreAlert' ? 'alarm_before_salah'
+          : key === 'prayerPostAlert' ? 'alarm_after_salah'
+          : key === 'adhkarMorning' ? 'alarm_morning_adhkar'
+          : 'alarm_evening_adhkar';
+        const updatedAlarms = currentAlarms.map(a => a.id === targetId ? { ...a, enabled: Boolean(value) } : a);
+        safeSetJSON('salah_custom_alarms', updatedAlarms);
+        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updatedAlarms }));
+      } catch (err) {
+        console.warn('[PushNotificationManager] Failed to sync toggle with custom alarms:', err);
+      }
+    }
   };
 
   // Synchronize pre-alert minutes and toggle with actual salah_custom_alarms
@@ -193,6 +249,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
         return alarm;
       });
       safeSetJSON('salah_custom_alarms', updatedAlarms);
+      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updatedAlarms }));
     } catch (err) {
       console.warn('[PushNotificationManager] Failed to sync pre-alert with custom alarms:', err);
     }
@@ -217,6 +274,7 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
         return alarm;
       });
       safeSetJSON('salah_custom_alarms', updatedAlarms);
+      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updatedAlarms }));
     } catch (err) {
       console.warn('[PushNotificationManager] Failed to sync post-alert with custom alarms:', err);
     }

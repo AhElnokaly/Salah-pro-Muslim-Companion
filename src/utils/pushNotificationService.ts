@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Capacitor } from '@capacitor/core';
 import { safeSetItem, safeGetJSON, safeSetJSON } from './storage';
 import { parseTimeToMinutes } from './prayerCalc';
 import AthanAlarm, { requestNotificationPermission as requestNativeNotificationPermission } from '../services/athanAlarmPlugin';
@@ -33,9 +34,9 @@ export interface PushNotificationSettings {
 export const DEFAULT_PUSH_SETTINGS: PushNotificationSettings = {
   enabled: true,
   prayerAthan: true,
-  prayerPreAlert: true,
+  prayerPreAlert: false,
   preAlertMinutes: 15,
-  prayerPostAlert: true,
+  prayerPostAlert: false,
   postAlertMinutes: 15,
   adhkarMorning: true,
   morningTime: '07:00',
@@ -59,7 +60,9 @@ const SETTINGS_STORAGE_KEY = 'mc_push_settings_v1';
  * Read saved push settings
  */
 export function getPushSettings(): PushNotificationSettings {
-  const saved = safeGetJSON<Partial<PushNotificationSettings> | null>(SETTINGS_STORAGE_KEY, null);
+  const saved = safeGetJSON<Partial<PushNotificationSettings> | null>(SETTINGS_STORAGE_KEY, null)
+    || safeGetJSON<Partial<PushNotificationSettings> | null>('salah_push_settings', null)
+    || safeGetJSON<Partial<PushNotificationSettings> | null>('hemmaty_push_settings', null);
   if (saved) {
     return { ...DEFAULT_PUSH_SETTINGS, ...saved };
   }
@@ -71,6 +74,11 @@ export function getPushSettings(): PushNotificationSettings {
  */
 export function savePushSettings(settings: PushNotificationSettings): void {
   safeSetJSON(SETTINGS_STORAGE_KEY, settings);
+  safeSetJSON('salah_push_settings', settings);
+  safeSetJSON('hemmaty_push_settings', settings);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('push-settings-changed', { detail: settings }));
+  }
 }
 
 /**
@@ -153,7 +161,7 @@ import { syncUpcomingPrayerSchedule } from './prayerScheduleSync';
  * Sync calculated prayer schedule with Service Worker for background notifications when browser is minimized/closed
  */
 export async function syncPrayerScheduleWithSW(settings: AppSettings): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
+  if (Capacitor.isNativePlatform() || !('serviceWorker' in navigator)) return;
 
   try {
     let reg: ServiceWorkerRegistration | null | undefined = await navigator.serviceWorker.getRegistration();
@@ -199,7 +207,7 @@ export async function syncPrayerScheduleWithSW(settings: AppSettings): Promise<v
  * Register Service Worker for background push / offline support
  */
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!('serviceWorker' in navigator)) {
+  if (Capacitor.isNativePlatform() || !('serviceWorker' in navigator)) {
     return null;
   }
 
@@ -214,6 +222,31 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 }
 
 /**
+ * Cleanup any active Service Worker and caches when running on native Capacitor app
+ */
+export async function cleanupNativeServiceWorkerAndCaches(): Promise<void> {
+  if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return;
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        await reg.unregister();
+        console.log('[PushService] Unregistered native leftover ServiceWorker:', reg.scope);
+      }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        await caches.delete(key);
+        console.log('[PushService] Cleared native cache storage:', key);
+      }
+    }
+  } catch (err) {
+    console.warn('[PushService] Native cleanup error:', err);
+  }
+}
+
+/**
  * Display a notification safely across Mobile/Android (Chrome/PWA) and Desktop browsers.
  * Uses ServiceWorkerRegistration.showNotification() when available, with a resilient fallback
  * that prevents "Failed to construct 'Notification': Illegal constructor" crashes on Android.
@@ -222,6 +255,11 @@ export async function showAppNotification(
   title: string,
   options?: NotificationOptions & { soundType?: string; url?: string }
 ): Promise<boolean> {
+  // In native Capacitor platform, all notifications are strictly handled by Kotlin
+  if (Capacitor.isNativePlatform()) {
+    return false;
+  }
+
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false;
   }
