@@ -1,4 +1,5 @@
 import { MutableRefObject } from 'react';
+import { stopAudioSafely } from './audioUtils';
 
 let spiritualAudioCtx: AudioContext | null = null;
 
@@ -179,8 +180,7 @@ export const stopSpiritualSound = (
       window.speechSynthesis.cancel();
     }
     if (audioRef && audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      stopAudioSafely(audioRef.current);
     }
   } catch (e) {
     console.warn('Error stopping spiritual sound:', e);

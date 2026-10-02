@@ -118,7 +118,7 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
               time: snoozeTime,
               days: [snoozeDay],
               enabled: true,
-              soundType: activeRingingAlarm.soundType || 'takbeer',
+              soundType: activeRingingAlarm.soundType || 'reminder',
               notifyMode: activeRingingAlarm.notifyMode || 'both',
               autoKhushu: activeRingingAlarm.autoKhushu,
               khushuDurationMinutes: activeRingingAlarm.khushuDurationMinutes,

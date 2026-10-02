@@ -27,15 +27,15 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         const val EXTRA_DURATION_MINUTES = "extra_duration_minutes"
         const val EXTRA_KHUSHU_MODE = "extra_khushu_mode"
 
-        const val PREALERT_CHANNEL_ID = "athan_prealert_channel_v2"
-        const val POSTALERT_CHANNEL_ID = "athan_postalert_channel_v2"
+        const val PREALERT_CHANNEL_ID = "athan_prealert_channel_v3"
+        const val POSTALERT_CHANNEL_ID = "athan_postalert_channel_v3"
         const val KHUSHU_CHANNEL_ID = "athan_khushu_channel"
-        const val CUSTOM_ALARM_CHANNEL_ID = "athan_custom_alarm_channel_v2"
-        const val CUSTOM_ALARM_SILENT_CHANNEL_ID = "athan_custom_silent_channel_v2"
+        const val CUSTOM_ALARM_CHANNEL_ID = "athan_custom_alarm_channel_v3"
+        const val CUSTOM_ALARM_SILENT_CHANNEL_ID = "athan_custom_silent_channel_v3"
 
-        fun getSoundResId(context: Context, soundType: String): Int {
+        fun getRawName(soundType: String): String {
             val clean = soundType.lowercase().trim().replace("-", "_")
-            val rawResName = when {
+            return when {
                 clean == "ayat_kursi" || clean == "ayatkursi" || clean.contains("kursi") -> "ayat_kursi"
                 clean == "takbeer" -> "takbeer"
                 clean.contains("khayr") || clean == "alsalatu_khayr" -> "alsalatu_khayr"
@@ -48,7 +48,11 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 clean == "fajr" -> "athan_fajr"
                 else -> "reminder"
             }
-            val resId = context.resources.getIdentifier(rawResName, "raw", context.packageName)
+        }
+
+        fun getSoundResId(context: Context, soundType: String): Int {
+            val rawName = getRawName(soundType)
+            val resId = context.resources.getIdentifier(rawName, "raw", context.packageName)
             return if (resId != 0) resId else com.salahpro.app.R.raw.reminder
         }
 
@@ -170,8 +174,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         val isSilent = soundType == "silent" || notifyMode == "notification"
-        val soundResId = getSoundResId(context, soundType)
-        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/$soundResId") else null
+        val rawName = getRawName(soundType)
+        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
         val channelId = if (isSilent) "${PREALERT_CHANNEL_ID}_silent" else "${PREALERT_CHANNEL_ID}_$cleanSound"
 
@@ -181,6 +185,11 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                notificationManager.deleteNotificationChannel("athan_prealert_channel_v2")
+                notificationManager.deleteNotificationChannel("athan_prealert_channel_v2_$cleanSound")
+                notificationManager.deleteNotificationChannel("athan_prealert_channel_v2_silent")
+            } catch (_: Exception) {}
             val channel = NotificationChannel(
                 channelId,
                 if (isSilent) "تنبيهات ما قبل الأذان (صامت)" else "تنبيهات ما قبل الأذان ($cleanSound)",
@@ -233,10 +242,6 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifId = (prayerKey.hashCode() and 0x7FFFFFFF) % 10000 + 5000
         notificationManager.notify(notifId, notifBuilder.build())
         Log.d(TAG, "Pre-alert notification displayed for $prayerName (id=$notifId)")
-
-        if (!isSilent && notifyMode != "notification") {
-            playAlarmAudio(context, soundType)
-        }
     }
 
     private fun showPostAlertNotification(
@@ -249,8 +254,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         val isSilent = soundType == "silent" || notifyMode == "notification"
-        val soundResId = getSoundResId(context, soundType)
-        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/$soundResId") else null
+        val rawName = getRawName(soundType)
+        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
         val channelId = if (isSilent) "${POSTALERT_CHANNEL_ID}_silent" else "${POSTALERT_CHANNEL_ID}_$cleanSound"
 
@@ -260,6 +265,11 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                notificationManager.deleteNotificationChannel("athan_postalert_channel_v2")
+                notificationManager.deleteNotificationChannel("athan_postalert_channel_v2_$cleanSound")
+                notificationManager.deleteNotificationChannel("athan_postalert_channel_v2_silent")
+            } catch (_: Exception) {}
             val channel = NotificationChannel(
                 channelId,
                 if (isSilent) "تنبيهات ما بعد الصلاة (صامت)" else "تنبيهات ما بعد الصلاة ($cleanSound)",
@@ -312,10 +322,6 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifId = (prayerKey.hashCode() and 0x7FFFFFFF) % 10000 + 6000
         notificationManager.notify(notifId, notifBuilder.build())
         Log.d(TAG, "Post-alert notification displayed for $prayerName (id=$notifId)")
-
-        if (!isSilent && notifyMode != "notification") {
-            playAlarmAudio(context, soundType)
-        }
     }
 
     private fun showKhushuActivatedNotification(context: Context, prayerName: String, durationMinutes: Int, prayerKey: String) {
@@ -389,12 +395,17 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         val isSilent = soundType == "silent" || notifyMode == "notification"
-        val soundResId = getSoundResId(context, soundType)
-        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/$soundResId") else null
+        val rawName = getRawName(soundType)
+        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
         val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2")
+                notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2_$cleanSound")
+                notificationManager.deleteNotificationChannel("athan_custom_silent_channel_v2")
+            } catch (_: Exception) {}
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_ALARM)
@@ -449,10 +460,6 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifId = (alarmKey.hashCode() and 0x7FFFFFFF) % 10000 + 7000
         notificationManager.notify(notifId, notifBuilder.build())
         Log.d(TAG, "Custom alarm notification displayed for $alarmTitle (id=$notifId)")
-
-        if (!isSilent && notifyMode != "notification") {
-            playAlarmAudio(context, soundType)
-        }
     }
 
     private fun updateOngoingPrayerNotificationAtPrayerTime(context: Context, prayerName: String) {

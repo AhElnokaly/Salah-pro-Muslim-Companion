@@ -18,6 +18,7 @@ import {
   dispatchSmartNotification,
   formatCountdown,
 } from '../domain/smartNotifications/smartNotificationService';
+import { stopAudioSafely } from '../utils/audioUtils';
 import { safeGetJSON, safeSetJSON } from '../utils/storage';
 import { playSpiritualChime } from '../utils/spiritualAudio';
 
@@ -217,8 +218,8 @@ export function useSmartNotifications({
   useEffect(() => {
     return () => {
       if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
+        stopAudioSafely(audioRef.current);
+        audioRef.current = null;
       }
     };
   }, []);

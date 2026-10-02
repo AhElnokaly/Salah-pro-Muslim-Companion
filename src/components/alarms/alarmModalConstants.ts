@@ -6,6 +6,7 @@
 import type { AlarmSoundType } from '../../types';
 
 export const SOUND_OPTIONS: { type: AlarmSoundType; label: string; desc: string }[] = [
+  { type: 'reminder', label: '⏰ نغمة التذكير الافتراضية', desc: 'نغمة المنبه الأساسية' },
   { type: 'ayat_kursi', label: '📖 آية الكرسي المباركة', desc: 'تلاوة عطرة خاشعة لسيدة آي القرآن الكريم' },
   { type: 'speech', label: '🎙️ نطق عنوان التنبيه', desc: 'نطق بصوت إيماني هادئ' },
   { type: 'salawat', label: '🌸 الصلاة على النبي ﷺ', desc: 'صلوات طيبة مباركة' },

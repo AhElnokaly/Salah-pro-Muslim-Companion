@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { 
   TabId, 
   SettingsSubTabId, 
@@ -9,6 +10,7 @@ import {
 } from '../../types';
 import { safeSetItem } from '../../utils/storage';
 import { getLocalDateStr } from '../../hooks/usePrayerScheduler';
+import { cleanupNativeServiceWorkerAndCaches } from '../../utils/pushNotificationService';
 
 interface UseAppGlobalEventsProps {
   setActiveTab: (tab: TabId) => void;
@@ -198,6 +200,15 @@ export function useAppGlobalEvents({
     };
   }, [current, next, togglePlayAthanGlobal, setAthanOverlayPrayer, setShowAthanOverlay, globalAudioRef]);
 
+  // Cleanup native service worker and caches on native startup
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      cleanupNativeServiceWorkerAndCaches().catch(err => {
+        console.warn('[useAppGlobalEvents] Native SW/Cache cleanup error:', err);
+      });
+    }
+  }, []);
+
   // Handle autoAthan URL parameter and Service Worker notification clicks
   useEffect(() => {
     // 1. Check URL parameters (e.g. ?autoAthan=true&prayer=Maghrib)
@@ -210,8 +221,8 @@ export function useAppGlobalEvents({
       }, 300);
     }
 
-    // 2. Listen to SW messages when app is active
-    if ('serviceWorker' in navigator) {
+    // 2. Listen to SW messages when app is active (Web / PWA only)
+    if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
       const handleSwMessage = (event: MessageEvent) => {
         if (event.data && event.data.type === 'TRIGGER_ATHAN_FROM_NOTIFICATION') {
           const prayerName = event.data.prayerName as PrayerName;

@@ -17,6 +17,7 @@ import {
   AudioTrack,
   LOCAL_FALLBACK_AUDIO,
 } from '../../../utils/audioStorage';
+import { stopAudioSafely } from '../../../utils/audioUtils';
 
 interface UseAdhanAudioLogicProps {
   audioVolume: number;
@@ -73,21 +74,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
 
   const stopAndCleanupAudio = (audio: HTMLAudioElement | null) => {
     if (!audio) return;
-    try {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.onplay = null;
-      audio.onpause = null;
-      audio.onended = null;
-      audio.ontimeupdate = null;
-      audio.ondurationchange = null;
-      audio.onloadedmetadata = null;
-      audio.onerror = null;
-      audio.src = '';
-      audio.load();
-    } catch (e) {
-      console.warn('Audio cleanup warning:', e);
-    }
+    stopAudioSafely(audio);
   };
 
   // Clean up audio on unmount

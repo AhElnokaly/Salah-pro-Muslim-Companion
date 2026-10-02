@@ -10,6 +10,7 @@ import { getHijriDate } from '../../utils/hijri';
 import { safeSetItem, safeGetItem, safeGetJSON } from '../../utils/storage';
 import { StorageFacade } from '../../domain/storage/StorageFacade';
 import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO } from '../../utils/audioStorage';
+import { stopAudioSafely } from '../../utils/audioUtils';
 import { getExactCountdown } from './prayerUtils';
 import { PrayerCityCountdownCard } from './PrayerCityCountdownCard';
 import { PrayerTimeRowItem } from './PrayerTimeRowItem';
@@ -118,7 +119,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   useEffect(() => {
     return () => {
       if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
+        stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
       }
     };
@@ -132,8 +133,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   ) => {
     if (playingPrayer === pName) {
       if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-        previewAudioRef.current.src = '';
+        stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
       }
       setPlayingPrayer(null);
@@ -142,8 +142,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     }
 
     if (previewAudioRef.current) {
-      previewAudioRef.current.pause();
-      previewAudioRef.current.src = '';
+      stopAudioSafely(previewAudioRef.current);
       previewAudioRef.current = null;
     }
 

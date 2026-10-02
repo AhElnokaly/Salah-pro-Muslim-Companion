@@ -9,6 +9,7 @@ import { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 import { useMuezzinSettings } from './useMuezzinSettings';
 import { useAudioUnlocker } from './useAudioUnlocker';
 import { stopNativeAthan } from '../services/athanAlarmPlugin';
+import { stopAudioSafely } from '../utils/audioUtils';
 
 export { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 
@@ -127,12 +128,8 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
           if (prevListenersRef.current.timeupdate) globalAudioRef.current.removeEventListener('timeupdate', prevListenersRef.current.timeupdate);
           prevListenersRef.current = null;
         }
-        try {
-          globalAudioRef.current.pause();
-          globalAudioRef.current = null;
-        } catch (e) {
-          console.warn('Error cleaning up audio element:', e);
-        }
+        stopAudioSafely(globalAudioRef.current);
+        globalAudioRef.current = null;
       }
     };
   }, []);
@@ -304,12 +301,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
   const stopAthanGlobal = useCallback(() => {
     stopNativeAthan().catch(() => {});
     if (globalAudioRef.current) {
-      try {
-        globalAudioRef.current.pause();
-        globalAudioRef.current.currentTime = 0;
-      } catch (e) {
-        console.warn('Error stopping athan:', e);
-      }
+      stopAudioSafely(globalAudioRef.current);
     }
     setIsAthanPlaying(false);
     setCurrentPhraseIdx(-1);

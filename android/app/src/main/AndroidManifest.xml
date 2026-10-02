@@ -64,6 +64,14 @@
         </receiver>
 
         <receiver
+            android:name=".plugins.ApkDownloadReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.SalahWidgetProvider"
             android:exported="true">
             <intent-filter>

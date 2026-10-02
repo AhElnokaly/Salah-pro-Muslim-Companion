@@ -52,7 +52,7 @@ export default function AlarmEditModal({
   const [offsetMinutes, setOffsetMinutes] = useState<number>(10);
   const [timeStr, setTimeStr] = useState<string>('05:00');
   const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [soundType, setSoundType] = useState<AlarmSoundType>('takbeer');
+  const [soundType, setSoundType] = useState<AlarmSoundType>('reminder');
   const [notifyMode, setNotifyMode] = useState<AlarmNotifyMode>('both');
   const [autoKhushu, setAutoKhushu] = useState<boolean>(false);
   const [khushuDurationMinutes, setKhushuDurationMinutes] = useState<number>(15);
@@ -74,7 +74,7 @@ export default function AlarmEditModal({
       setOffsetMinutes(alarm.offsetMinutes ?? 10);
       setTimeStr(alarm.time || '05:00');
       setDays(alarm.days || [0, 1, 2, 3, 4, 5, 6]);
-      setSoundType(alarm.soundType || 'takbeer');
+      setSoundType(alarm.soundType || 'reminder');
       setNotifyMode(alarm.notifyMode || 'both');
       setAutoKhushu(Boolean(alarm.autoKhushu));
       setKhushuDurationMinutes(alarm.khushuDurationMinutes || 15);
@@ -86,7 +86,7 @@ export default function AlarmEditModal({
       setOffsetMinutes(10);
       setTimeStr('05:00');
       setDays([0, 1, 2, 3, 4, 5, 6]);
-      setSoundType('takbeer');
+      setSoundType('reminder');
       setNotifyMode('both');
       setAutoKhushu(false);
       setKhushuDurationMinutes(15);
