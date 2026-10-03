@@ -10,6 +10,7 @@ import { useMuezzinSettings } from './useMuezzinSettings';
 import { useAudioUnlocker } from './useAudioUnlocker';
 import { stopNativeAthan } from '../services/athanAlarmPlugin';
 import { stopAudioSafely } from '../utils/audioUtils';
+import { resolveMuezzinId } from '../utils/muezzinResolver';
 
 export { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 
@@ -20,6 +21,8 @@ export interface UseAthanPlayerReturn {
   setShowAthanOverlay: (show: boolean) => void;
   athanOverlayPrayer: PrayerName;
   setAthanOverlayPrayer: (prayer: PrayerName) => void;
+  overrideMuezzinId: string | null;
+  setOverrideMuezzinId: (id: string | null) => void;
   currentPhraseIdx: number;
   audioError: string | null;
   setAudioError: (err: string | null) => void;
@@ -46,6 +49,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
   const [showAthanOverlay, setShowAthanOverlay] = useState<boolean>(false);
   const [athanOverlayPrayer, setAthanOverlayPrayer] = useState<PrayerName>('Asr');
+  const [overrideMuezzinId, setOverrideMuezzinId] = useState<string | null>(null);
   const [isAthanPlaying, setIsAthanPlaying] = useState<boolean>(false);
   const [currentPhraseIdx, setCurrentPhraseIdx] = useState<number>(-1);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -67,6 +71,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
 
   const markAthanDismissed = useCallback(() => {
     userDismissedRef.current = true;
+    setOverrideMuezzinId(null);
     stopNativeAthan().catch(() => {});
   }, []);
 
@@ -311,8 +316,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     userDismissedRef.current = false;
     const prayerToUse = overridePrayer || athanOverlayPrayer;
     const isFajr = prayerToUse === 'Fajr';
-    const savedMuezzin = safeGetItem(`salah_muezzin_${prayerToUse}`);
-    const activeMuezzinId = muezzinId || savedMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
+    const activeMuezzinId = muezzinId || overrideMuezzinId || resolveMuezzinId(prayerToUse);
 
     if (isAthanPlaying && !overridePrayer) {
       stopAthanGlobal();
@@ -332,13 +336,13 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
         playAudioTrack(fallbackUrl, isFajr, prayerToUse, audioVolume);
       });
     }
-  }, [isAthanPlaying, athanOverlayPrayer, fajrMuezzin, currentMuezzin, customMuezzins, audioVolume, playAudioTrack, stopAthanGlobal]);
+  }, [isAthanPlaying, athanOverlayPrayer, overrideMuezzinId, customMuezzins, audioVolume, playAudioTrack, stopAthanGlobal]);
 
   const handleRetryAudioWithLocal = useCallback(() => {
     userDismissedRef.current = false;
     setAudioError(null);
     const isFajr = athanOverlayPrayer === 'Fajr';
-    const activeMuezzinId = safeGetItem(`salah_muezzin_${athanOverlayPrayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
+    const activeMuezzinId = overrideMuezzinId || resolveMuezzinId(athanOverlayPrayer);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
     const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
@@ -349,7 +353,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     }).catch(() => {
       playAudioTrack(fallbackUrl, isFajr, athanOverlayPrayer, audioVolume);
     });
-  }, [athanOverlayPrayer, fajrMuezzin, currentMuezzin, customMuezzins, audioVolume, playAudioTrack]);
+  }, [athanOverlayPrayer, overrideMuezzinId, customMuezzins, audioVolume, playAudioTrack]);
 
   const triggerAthan = useCallback(async (
     prayer: PrayerName, 
@@ -357,6 +361,8 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     settings: AppSettings, 
     setToastMessage?: (msg: string) => void
   ) => {
+    // Real Athan trigger: always reset simulator override and NEVER read override
+    setOverrideMuezzinId(null);
     userDismissedRef.current = false;
     setAudioError(null);
     // Crucial: Stop native background athan if running so there is never two adhans playing at the same time!
@@ -382,7 +388,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     }
 
     const isFajr = prayer === 'Fajr';
-    const activeMuezzinId = safeGetItem(`salah_muezzin_${prayer}`) || (isFajr ? fajrMuezzin : currentMuezzin);
+    const activeMuezzinId = resolveMuezzinId(prayer);
     const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
     const muezzinObj = tracks.find(m => m.id === activeMuezzinId) || defaultMuezzins[0];
 
@@ -396,7 +402,7 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
         : 'https://archive.org/download/90---azan---90---azan--many----sound----mp3---alazan/003--.mp3';
       playAudioTrack(onlineFallback, isFajr, prayer, audioVolume);
     }
-  }, [fajrMuezzin, currentMuezzin, customMuezzins, audioVolume, playAudioTrack]);
+  }, [customMuezzins, audioVolume, playAudioTrack]);
 
   return {
     globalAudioRef,
@@ -405,6 +411,8 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     setShowAthanOverlay,
     athanOverlayPrayer,
     setAthanOverlayPrayer,
+    overrideMuezzinId,
+    setOverrideMuezzinId,
     currentPhraseIdx,
     audioError,
     setAudioError,

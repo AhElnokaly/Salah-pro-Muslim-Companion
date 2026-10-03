@@ -11,6 +11,7 @@ import { safeSetItem, safeGetItem, safeGetJSON } from '../../utils/storage';
 import { StorageFacade } from '../../domain/storage/StorageFacade';
 import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO } from '../../utils/audioStorage';
 import { stopAudioSafely } from '../../utils/audioUtils';
+import { resolveMuezzinId } from '../../utils/muezzinResolver';
 import { getExactCountdown } from './prayerUtils';
 import { PrayerCityCountdownCard } from './PrayerCityCountdownCard';
 import { PrayerTimeRowItem } from './PrayerTimeRowItem';
@@ -95,29 +96,27 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
 
   const activeSoundModes = soundModes || localSoundModes;
 
-  const [localPrayerMuezzins, setLocalPrayerMuezzins] = useState<Record<string, string>>(() => {
-    const general = safeGetItem('salah_general_muezzin') || 'prayer_default';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_default';
-    return {
-      Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
-      Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,
-      Dhuhr: safeGetItem('salah_muezzin_Dhuhr') || general,
-      Asr: safeGetItem('salah_muezzin_Asr') || general,
-      Maghrib: safeGetItem('salah_muezzin_Maghrib') || general,
-      Isha: safeGetItem('salah_muezzin_Isha') || general,
-    };
-  });
+  const [localPrayerMuezzins, setLocalPrayerMuezzins] = useState<Record<string, string>>(() => ({
+    Fajr: resolveMuezzinId('Fajr'),
+    Sunrise: resolveMuezzinId('Sunrise'),
+    Dhuhr: resolveMuezzinId('Dhuhr'),
+    Asr: resolveMuezzinId('Asr'),
+    Maghrib: resolveMuezzinId('Maghrib'),
+    Isha: resolveMuezzinId('Isha'),
+  }));
 
   const activePrayerMuezzins = propPrayerMuezzins || localPrayerMuezzins;
-  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || 'fajr_default';
-  const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || 'prayer_default';
+  const activeFajrMuezzin = propFajrMuezzin || activePrayerMuezzins.Fajr || resolveMuezzinId('Fajr');
+  const activeCurrentMuezzin = propCurrentMuezzin || activePrayerMuezzins.Dhuhr || resolveMuezzinId('Dhuhr');
 
   // Dedicated Audio Preview Controller for Responsive Playback
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewReqRef = useRef<number>(0);
   const [playingPrayer, setPlayingPrayer] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
+      previewReqRef.current++;
       if (previewAudioRef.current) {
         stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
@@ -131,7 +130,10 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     activeMuezzinId: string, 
     prayerVol: number
   ) => {
+    const req = ++previewReqRef.current;
+
     if (playingPrayer === pName) {
+      previewReqRef.current++;
       if (previewAudioRef.current) {
         stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
@@ -145,6 +147,9 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
       stopAudioSafely(previewAudioRef.current);
       previewAudioRef.current = null;
     }
+
+    // Call setPlayingPrayer(pName) IMMEDIATELY (before any await) so a second tap hits the stop branch
+    setPlayingPrayer(pName);
 
     // Stop global athan player if active so preview never clashes
     if (isPlaying && togglePlayAthan) {
@@ -161,17 +166,21 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     audio.volume = Math.max(0, Math.min(1, prayerVol));
 
     audio.onended = () => {
+      if (previewAudioRef.current !== audio || req !== previewReqRef.current) return;
       setPlayingPrayer(null);
     };
 
     audio.onerror = () => {
+      if (previewAudioRef.current !== audio || req !== previewReqRef.current) return;
       if (!finalSrc.startsWith('/audio/')) {
         const fallbackSrc = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
         finalSrc = fallbackSrc;
         audio.src = fallbackSrc;
         audio.play().then(() => {
+          if (previewAudioRef.current !== audio || req !== previewReqRef.current) return;
           setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
-        }).catch(() => {
+        }).catch((err: any) => {
+          if (err?.name === 'AbortError' || previewAudioRef.current !== audio || req !== previewReqRef.current) return;
           setPlayingPrayer(null);
           setLogSuccessMessage('تعذر تشغيل الصوت تلقائياً.');
         });
@@ -187,29 +196,35 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     if (initialUrl.startsWith('db://')) {
       try {
         const resolved = await getAudioUrl(initialUrl, track?.id);
+        if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
         if (resolved) {
           finalSrc = resolved;
           audio.src = resolved;
         }
       } catch {
+        if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
         // Keep initial fallback
       }
     }
 
     try {
       await audio.play();
-      setPlayingPrayer(pName);
+      if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
       setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة...`);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
+
       console.warn('Direct preview play error:', err);
       // Attempt local fallback directly without ever triggering global AthanOverlay
       if (!finalSrc.startsWith('/audio/')) {
         const fallbackSrc = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
         audio.src = fallbackSrc;
         audio.play().then(() => {
-          setPlayingPrayer(pName);
+          if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
           setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
-        }).catch(() => {
+        }).catch((fallbackErr: any) => {
+          if (fallbackErr?.name === 'AbortError' || req !== previewReqRef.current || previewAudioRef.current !== audio) return;
           setPlayingPrayer(null);
           setLogSuccessMessage('انقر مرة أخرى للسماح بتشغيل الصوت.');
         });

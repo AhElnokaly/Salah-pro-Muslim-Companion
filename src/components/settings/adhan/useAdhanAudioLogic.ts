@@ -37,6 +37,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioReqRef = useRef<number>(0);
 
   const [customMuezzins, setCustomMuezzins] = useState<MuezzinOption[]>([]);
   const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
@@ -80,6 +81,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
   // Clean up audio on unmount
   useEffect(() => {
     return () => {
+      audioReqRef.current++;
       stopAndCleanupAudio(audioRef.current);
       audioRef.current = null;
     };
@@ -155,6 +157,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
   const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
 
   const togglePlayAudio = async (id: string, url: string) => {
+    const req = ++audioReqRef.current;
     const muezzin = muezzins.find((m) => m.id === id);
     const name = muezzin ? muezzin.name : 'أذان مخصص';
     const isFajr = muezzin ? muezzin.isFajr : false;
@@ -166,7 +169,9 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
         if (audioIsPlaying) {
           audioRef.current.pause();
         } else {
-          audioRef.current.play().catch((e) => {
+          audioRef.current.play().catch((e: any) => {
+            if (e?.name === 'AbortError') return;
+            if (req !== audioReqRef.current) return;
             console.error('Error playing audio', e);
             setAudioError('فشل تشغيل الملف الصوتي. يرجى التأكد من أن صيغة الملف مدعومة وصالحة.');
           });
@@ -182,6 +187,8 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
       setAudioDuration(0);
 
       const playAudioTrack = (srcUrl: string, isFallback = false) => {
+        if (req !== audioReqRef.current) return;
+
         let safeUrl = srcUrl;
         if (!safeUrl || typeof safeUrl !== 'string' || safeUrl.trim() === '' || safeUrl.startsWith('db://')) {
           safeUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
@@ -197,36 +204,43 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
         audio.playbackRate = playbackSpeed;
 
         audio.onplay = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           setAudioIsPlaying(true);
           setAudioError(null);
         };
 
         audio.onpause = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           setAudioIsPlaying(false);
         };
 
         audio.onended = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           setAudioIsPlaying(false);
           setAudioCurrentTime(0);
         };
 
         audio.ontimeupdate = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           setAudioCurrentTime(audio.currentTime);
         };
 
         audio.ondurationchange = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
             setAudioDuration(audio.duration);
           }
         };
 
         audio.onloadedmetadata = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
             setAudioDuration(audio.duration);
           }
         };
 
         audio.onerror = () => {
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
           if (!isFallback) {
             const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
             playAudioTrack(fallbackUrl, true);
@@ -235,7 +249,10 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
           }
         };
 
-        audio.play().catch((e) => {
+        audio.play().catch((e: any) => {
+          if (e?.name === 'AbortError') return;
+          if (audioRef.current !== audio || req !== audioReqRef.current) return;
+
           console.warn('Audio play error:', e);
           if (e.name === 'NotAllowedError') {
             setAudioError('⚠️ يرجى الضغط على زر التشغيل ▶ لبدء الصوت (بسبب قيود التشغيل التلقائي بالمتصفح).');
@@ -250,9 +267,11 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
 
       getAudioUrl(url, id)
         .then((resolvedUrl) => {
+          if (req !== audioReqRef.current) return;
           playAudioTrack(resolvedUrl, false);
         })
         .catch((err) => {
+          if (req !== audioReqRef.current) return;
           console.error('Failed to resolve settings audio:', err);
           const fallbackUrl = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
           playAudioTrack(fallbackUrl, true);
@@ -285,6 +304,7 @@ export function useAdhanAudioLogic({ audioVolume }: UseAdhanAudioLogicProps) {
   };
 
   const handleStopAudio = () => {
+    audioReqRef.current++;
     if (audioRef.current) {
       stopAndCleanupAudio(audioRef.current);
       audioRef.current = null;

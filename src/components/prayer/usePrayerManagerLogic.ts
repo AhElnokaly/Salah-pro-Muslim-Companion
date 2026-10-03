@@ -20,6 +20,7 @@ import { getDateFromPrayerDay, formatDateKey } from '../../utils/prayerDayBounda
 import { trackFeatureCompletion } from '../../utils/analyticsStorage';
 import { safeUUID } from '../../utils/uuid';
 import { safeSetItem, safeGetItem } from '../../utils/storage';
+import { resolveMuezzinId } from '../../utils/muezzinResolver';
 import { 
   defaultMuezzins, 
   getCustomAudios, 
@@ -109,24 +110,16 @@ export function usePrayerManagerLogic({
 
   // Athan Audio Player States in PrayerManager
   const [isPlaying] = useState<boolean>(false);
-  const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => {
-    return safeGetItem('salah_general_muezzin') || 'prayer_default';
-  });
-  const [fajrMuezzin, setFajrMuezzin] = useState<string>(() => {
-    return safeGetItem('salah_fajr_muezzin') || 'fajr_default';
-  });
-  const [prayerMuezzins, setPrayerMuezzins] = useState<Record<string, string>>(() => {
-    const general = safeGetItem('salah_general_muezzin') || 'prayer_default';
-    const fajr = safeGetItem('salah_fajr_muezzin') || 'fajr_default';
-    return {
-      Fajr: safeGetItem('salah_muezzin_Fajr') || fajr,
-      Sunrise: safeGetItem('salah_muezzin_Sunrise') || general,
-      Dhuhr: safeGetItem('salah_muezzin_Dhuhr') || general,
-      Asr: safeGetItem('salah_muezzin_Asr') || general,
-      Maghrib: safeGetItem('salah_muezzin_Maghrib') || general,
-      Isha: safeGetItem('salah_muezzin_Isha') || general,
-    };
-  });
+  const [currentMuezzin, setCurrentMuezzin] = useState<string>(() => resolveMuezzinId('Dhuhr'));
+  const [fajrMuezzin, setFajrMuezzin] = useState<string>(() => resolveMuezzinId('Fajr'));
+  const [prayerMuezzins, setPrayerMuezzins] = useState<Record<string, string>>(() => ({
+    Fajr: resolveMuezzinId('Fajr'),
+    Sunrise: resolveMuezzinId('Sunrise'),
+    Dhuhr: resolveMuezzinId('Dhuhr'),
+    Asr: resolveMuezzinId('Asr'),
+    Maghrib: resolveMuezzinId('Maghrib'),
+    Isha: resolveMuezzinId('Isha'),
+  }));
 
   // Custom Muezzins State
   const [customMuezzins, setCustomMuezzins] = useState<{ id: string; name: string; url: string; isFajr: boolean; isCustom?: boolean; fileName?: string }[]>([]);

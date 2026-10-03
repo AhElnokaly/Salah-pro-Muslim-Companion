@@ -170,6 +170,8 @@ export default function App() {
     setShowAthanOverlay,
     athanOverlayPrayer,
     setAthanOverlayPrayer,
+    overrideMuezzinId,
+    setOverrideMuezzinId,
     currentPhraseIdx,
     audioError,
     audioVolume,
@@ -499,8 +501,11 @@ export default function App() {
         onClose={() => {
           markAthanDismissed();
           setShowAthanOverlay(false);
+          setOverrideMuezzinId(null);
           stopAthanGlobal();
         }} 
+        overrideMuezzinId={overrideMuezzinId}
+        setOverrideMuezzinId={setOverrideMuezzinId}
         prayerName={getArabicPrayerName(athanOverlayPrayer)} 
         prayerTime={times[athanOverlayPrayer]} 
         audioRef={globalAudioRef}

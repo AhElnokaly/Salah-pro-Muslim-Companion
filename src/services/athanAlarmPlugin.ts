@@ -793,11 +793,17 @@ export async function stopNativeAthan(): Promise<boolean> {
   }
 }
 
+let athanPluginBridgeForTesting: Partial<AthanAlarmPlugin> | null = null;
+export function setAthanPluginBridgeForTesting(bridge: Partial<AthanAlarmPlugin> | null): void {
+  athanPluginBridgeForTesting = bridge;
+}
+
 export async function isNativeAthanRunning(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
   try {
-    if (AthanAlarm.isNativeAthanRunning) {
-      const res = await AthanAlarm.isNativeAthanRunning();
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.isNativeAthanRunning) {
+      const res = await plugin.isNativeAthanRunning();
       return res?.isRunning ?? false;
     }
     return false;

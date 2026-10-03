@@ -5,6 +5,7 @@ import { defaultMuezzins, archiveMuezzins, silentlyCacheAudio } from '../../util
 import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { syncPrayerScheduleWithSW } from '../../utils/pushNotificationService';
 import { getHijriDate } from '../../utils/hijri';
+import { resolveMuezzinId } from '../../utils/muezzinResolver';
 
 interface UseAppSyncProps {
   isLoaded: boolean;
@@ -24,8 +25,8 @@ export function useAppSync({
   // Pre-cache preferred muezzins on app load
   useEffect(() => {
     if (!isLoaded || !navigator.onLine) return;
-    const fajrMuezzinId = safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
-    const generalMuezzinId = safeGetItem('salah_general_muezzin') || 'makkah';
+    const fajrMuezzinId = resolveMuezzinId('Fajr', { fajrFallback: 'fajr_makkah' });
+    const generalMuezzinId = resolveMuezzinId('Dhuhr', { generalFallback: 'makkah' });
     const tracks = [...defaultMuezzins, ...archiveMuezzins];
 
     [

@@ -17,6 +17,7 @@ import {
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
+import { isNativeAthanRunning } from '../services/athanAlarmPlugin';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -36,7 +37,7 @@ export interface UsePrayerSchedulerReturn {
   setAlerts: Dispatch<SetStateAction<SpiritualAlerts>>;
   activeRingingAlarm: AlarmConfig | null;
   setActiveRingingAlarm: Dispatch<SetStateAction<AlarmConfig | null>>;
-  checkTimesAndAlarms: (checkDate: Date, isCatchup?: boolean) => void;
+  checkTimesAndAlarms: (checkDate: Date, isCatchup?: boolean) => void | Promise<void>;
 }
 
 export function usePrayerScheduler({
@@ -139,7 +140,7 @@ export function usePrayerScheduler({
 
   const getCachedPrayerTimes = useCachedPrayerTimes(settings);
 
-  const checkTimesAndAlarms = useCallback((checkDate: Date, isCatchup = false) => {
+  const checkTimesAndAlarms = useCallback(async (checkDate: Date, isCatchup = false) => {
     const currentHour = checkDate.getHours();
     const currentMin = checkDate.getMinutes();
     const currentDay = checkDate.getDay();
@@ -170,6 +171,16 @@ export function usePrayerScheduler({
         } else if (isMatch) {
           if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
             safeSessionSetItem(attemptedKey, 'true');
+
+            if (isCatchup) {
+              const isRunning = await isNativeAthanRunning();
+              if (isRunning) {
+                safeSetItem(playedKey, 'true');
+                console.log(`[ATHAN] SOURCE=WEB ACTION=SKIP_CATCHUP REASON=NATIVE_RUNNING PRAYER=${prayer}`);
+                break;
+              }
+            }
+
             // Always trigger athan, which opens the full AthanOverlay screen and plays sound
             triggerAthan(prayer, currentTimes[prayer], settings, setToastMessage);
             break;
@@ -257,9 +268,13 @@ export function usePrayerScheduler({
     if (pendingAlarmsToTrigger.length > 0) {
       pendingAlarmsToTrigger.sort((a, b) => b.priority - a.priority);
 
+      const isAnyPrayerAthanAttempting = prayers.some(
+        p => safeSessionGetItem(`salah_attempted_${todayStr}_${p}`) === 'true' && !safeGetItem(`salah_played_${todayStr}_${p}`)
+      );
+
       const isAudioBusy = Boolean(
         (globalAudioRef?.current && !globalAudioRef.current.paused && globalAudioRef.current.currentTime > 0) ||
-        (safeSessionGetItem(`salah_attempted_${todayStr}_Fajr`) === 'true' && !safeGetItem(`salah_played_${todayStr}_Fajr`))
+        isAnyPrayerAthanAttempting
       );
 
       const primaryItem = pendingAlarmsToTrigger[0];

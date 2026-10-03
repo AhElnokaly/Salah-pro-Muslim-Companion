@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, X, Sparkles, RotateCcw, AlertTriangle } from 'lucide-react';
 import { toArabicNumbers } from '../utils/hijri';
-import { safeSetItem, safeGetItem } from '../utils/storage';
 import { defaultMuezzins, getCustomAudios, archiveMuezzins, getDownloadedTrackIds, AudioTrack } from '../utils/audioStorage';
 import type { MuezzinOption } from '../types';
 import MosqueBackdrop, { BackdropType } from './MosqueBackdrop';
+import { resolveMuezzinId } from '../utils/muezzinResolver';
 
 interface AthanOverlayProps {
   isOpen: boolean;
@@ -14,10 +14,12 @@ interface AthanOverlayProps {
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
   isPlaying: boolean;
   currentPhraseIdx: number;
-  currentMuezzin: string;
-  fajrMuezzin: string;
-  setCurrentMuezzin: (id: string) => void;
-  setFajrMuezzin: (id: string) => void;
+  currentMuezzin?: string;
+  fajrMuezzin?: string;
+  setCurrentMuezzin?: (id: string) => void;
+  setFajrMuezzin?: (id: string) => void;
+  overrideMuezzinId?: string | null;
+  setOverrideMuezzinId?: (id: string | null) => void;
   togglePlayAthan: (muezzinId?: string) => void;
   stopAthan: () => void;
   audioError?: string | null;
@@ -36,16 +38,36 @@ export default function AthanOverlay({
   fajrMuezzin,
   setCurrentMuezzin,
   setFajrMuezzin,
+  overrideMuezzinId,
+  setOverrideMuezzinId,
   togglePlayAthan,
   stopAthan,
   audioError,
   onRetryWithLocal
 }: AthanOverlayProps) {
+  const [localOverride, setLocalOverride] = useState<string | null>(null);
+  const currentOverride = overrideMuezzinId !== undefined ? overrideMuezzinId : localOverride;
+  const updateOverride = (id: string | null) => {
+    setLocalOverride(id);
+    setOverrideMuezzinId?.(id);
+  };
+
+  const handleClose = () => {
+    updateOverride(null);
+    onClose();
+  };
+
   const [isMuted, setIsMuted] = useState(false);
   const [showDua, setShowDua] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
   const [muezzinOptions, setMuezzinOptions] = useState<MuezzinOption[]>(defaultMuezzins as MuezzinOption[]);
   const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isOpen) {
+      updateOverride(null);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     getCustomAudios().then(tracks => {
@@ -69,8 +91,7 @@ export default function AthanOverlay({
     'العشاء': 'Isha',
   };
   const pKey = prayerKeyMap[prayerName] || prayerName;
-  const savedPrayerMuezzin = safeGetItem(`salah_muezzin_${pKey}`);
-  const activeMuezzinId = savedPrayerMuezzin || (isFajr ? fajrMuezzin : currentMuezzin);
+  const activeMuezzinId = currentOverride || resolveMuezzinId(pKey);
 
   const activeMuezzin = React.useMemo(() => {
     return muezzinOptions.find(m => m.id === activeMuezzinId);
@@ -246,7 +267,7 @@ export default function AthanOverlay({
             type="button"
             onClick={() => {
               stopAthan();
-              onClose();
+              handleClose();
             }}
             className="p-2.5 rounded-full bg-white/[0.04] hover:bg-rose-500/10 border border-white/[0.05] hover:border-rose-500/20 cursor-pointer transition-colors text-white/70 hover:text-rose-400"
             title="إغلاق"
@@ -337,14 +358,8 @@ export default function AthanOverlay({
                 value={activeMuezzinId}
                 onChange={(e) => {
                   const newId = e.target.value;
-                  safeSetItem(`salah_muezzin_${pKey}`, newId);
-                  if (isFajr) {
-                    setFajrMuezzin(newId);
-                    safeSetItem('salah_fajr_muezzin', newId);
-                  } else {
-                    setCurrentMuezzin(newId);
-                    safeSetItem('salah_general_muezzin', newId);
-                  }
+                  // Simulator override: keep in React state only (no localStorage, no safeSetItem, no syncMuezzinIdToNative)
+                  updateOverride(newId);
                   stopAthan();
                   setTimeout(() => {
                     togglePlayAthan(newId);
@@ -379,7 +394,7 @@ export default function AthanOverlay({
           type="button"
           onClick={() => {
             stopAthan();
-            onClose();
+            handleClose();
           }}
           className="w-full sm:w-auto py-2.5 px-8 bg-white text-slate-950 font-black rounded-full text-xs transition-transform cursor-pointer hover:scale-105 active:scale-95 shadow-md hover:bg-slate-100"
         >

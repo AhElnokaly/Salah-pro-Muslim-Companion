@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, MutableRefObject } from 'react';
 import { safeSetItem, safeGetItem } from '../utils/storage';
 import { getCustomAudios, AudioTrack } from '../utils/audioStorage';
 import { syncMuezzinIdToNative } from '../services/athanAlarmPlugin';
+import { resolveMuezzinId } from '../utils/muezzinResolver';
 
 export interface UseMuezzinSettingsReturn {
   audioVolume: number;
@@ -22,11 +23,11 @@ export function useMuezzinSettings(
   });
 
   const [currentMuezzin, setCurrentMuezzinState] = useState<string>(() => {
-    return safeGetItem('salah_general_muezzin') || 'makkah';
+    return resolveMuezzinId('Dhuhr', { generalFallback: 'makkah' });
   });
 
   const [fajrMuezzin, setFajrMuezzinState] = useState<string>(() => {
-    return safeGetItem('salah_fajr_muezzin') || 'fajr_makkah';
+    return resolveMuezzinId('Fajr', { fajrFallback: 'fajr_makkah' });
   });
 
   const [customMuezzins, setCustomMuezzins] = useState<AudioTrack[]>([]);
@@ -53,8 +54,10 @@ export function useMuezzinSettings(
 
   // Fetch custom muezzins and sync active muezzins to native on mount
   useEffect(() => {
-    syncMuezzinIdToNative('general', currentMuezzin).catch(() => {});
-    syncMuezzinIdToNative('fajr', fajrMuezzin).catch(() => {});
+    const generalId = resolveMuezzinId('Dhuhr', { generalFallback: currentMuezzin });
+    const fajrId = resolveMuezzinId('Fajr', { fajrFallback: fajrMuezzin });
+    syncMuezzinIdToNative('general', generalId).catch(() => {});
+    syncMuezzinIdToNative('fajr', fajrId).catch(() => {});
 
     getCustomAudios().then(tracks => {
       setCustomMuezzins(tracks);
