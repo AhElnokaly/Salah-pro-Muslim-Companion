@@ -729,17 +729,38 @@ class AthanAlarmPlugin : Plugin() {
         if (call.hasOption("preAlertMinutes")) {
             editor.putInt("preAlertMinutes", call.getInt("preAlertMinutes", 15) ?: 15)
         }
+        if (call.hasOption("preAlertSound")) {
+            editor.putString("preAlertSound", call.getString("preAlertSound", "reminder") ?: "reminder")
+        }
+        if (call.hasOption("hasBeforeSalahCustom")) {
+            editor.putBoolean("hasBeforeSalahCustom", call.getBoolean("hasBeforeSalahCustom", false) ?: false)
+        }
         if (call.hasOption("prayerPostAlert")) {
             editor.putBoolean("prayerPostAlert", call.getBoolean("prayerPostAlert", false) ?: false)
         }
         if (call.hasOption("postAlertMinutes")) {
             editor.putInt("postAlertMinutes", call.getInt("postAlertMinutes", 15) ?: 15)
         }
+        if (call.hasOption("postAlertSound")) {
+            editor.putString("postAlertSound", call.getString("postAlertSound", "reminder") ?: "reminder")
+        }
+        if (call.hasOption("hasAfterSalahCustom")) {
+            editor.putBoolean("hasAfterSalahCustom", call.getBoolean("hasAfterSalahCustom", false) ?: false)
+        }
         if (call.hasOption("khushuAutoWithIqama")) {
             editor.putBoolean("khushuAutoWithIqama", call.getBoolean("khushuAutoWithIqama", false) ?: false)
         }
         if (call.hasOption("khushuMode")) {
             editor.putString("khushuMode", call.getString("khushuMode", "silent") ?: "silent")
+        }
+        val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
+        for (prayer in prayers) {
+            val key = "athan_enabled_$prayer"
+            if (call.hasOption(key)) {
+                editor.putBoolean(key, call.getBoolean(key, true) ?: true)
+            } else if (!prefs.contains(key)) {
+                editor.putBoolean(key, true)
+            }
         }
         editor.apply()
 

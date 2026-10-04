@@ -67,6 +67,16 @@ describe('TASK 3 - Muezzin Resolver & Simulator Override', () => {
     test('falls back to DEFAULT_MUEZZIN_FAJR when neither Fajr per-prayer nor fajr general is set', () => {
       const resolved = resolveMuezzinId('Fajr');
       assert.equal(resolved, DEFAULT_MUEZZIN_FAJR);
+      assert.equal(resolved, 'fajr_default');
+    });
+
+    test('no-options defaults resolve to local bundled audio for all prayers without options', () => {
+      assert.equal(resolveMuezzinId('Fajr'), 'fajr_default');
+      assert.equal(resolveMuezzinId('Sunrise'), 'prayer_default');
+      assert.equal(resolveMuezzinId('Dhuhr'), 'prayer_default');
+      assert.equal(resolveMuezzinId('Asr'), 'prayer_default');
+      assert.equal(resolveMuezzinId('Maghrib'), 'prayer_default');
+      assert.equal(resolveMuezzinId('Isha'), 'prayer_default');
     });
 
     test('normalizes Arabic prayer names correctly to English keys', () => {

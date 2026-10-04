@@ -52,10 +52,19 @@ export interface AthanAlarmPlugin {
     ishaOffset?: number;
     prayerPreAlert?: boolean;
     preAlertMinutes?: number;
+    preAlertSound?: string;
+    hasBeforeSalahCustom?: boolean;
     prayerPostAlert?: boolean;
     postAlertMinutes?: number;
+    postAlertSound?: string;
+    hasAfterSalahCustom?: boolean;
     khushuAutoWithIqama?: boolean;
     khushuMode?: string;
+    athan_enabled_Fajr?: boolean;
+    athan_enabled_Dhuhr?: boolean;
+    athan_enabled_Asr?: boolean;
+    athan_enabled_Maghrib?: boolean;
+    athan_enabled_Isha?: boolean;
   }): Promise<ScheduleAthanResult>;
   reconcileAthanAlarms(options: {
     times: PrayerTimeAlarm[];
@@ -83,9 +92,15 @@ export interface AthanAlarmPlugin {
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
 }
 
+let lastScheduledOptions: any = null;
+export function getLastScheduledOptions(): any {
+  return lastScheduledOptions;
+}
+
 const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
   web: {
     scheduleAthanAlarms: async (options) => {
+      lastScheduledOptions = options;
       console.log('[AthanAlarm Plugin]: Web fallback simulation for scheduling native alarms:', options.times.length);
       return { scheduledCount: options.times.length, addedCount: options.times.length, removedCount: 0, retainedCount: 0 };
     },
@@ -273,35 +288,39 @@ export interface DailyPrayerTimesEntry {
   timesMap: Record<string, string> | PrayerTimes;
 }
 
+export type NativeAlarmCalcParams = {
+  lat?: number;
+  lng?: number;
+  calcMethod?: string;
+  madhab?: string;
+  timeZoneId?: string;
+  fajrOffset?: number;
+  dhuhrOffset?: number;
+  asrOffset?: number;
+  maghribOffset?: number;
+  ishaOffset?: number;
+  prayerPreAlert?: boolean;
+  preAlertMinutes?: number;
+  preAlertSound?: string;
+  prayerPostAlert?: boolean;
+  postAlertMinutes?: number;
+  postAlertSound?: string;
+  khushuAutoWithIqama?: boolean;
+  khushuSettings?: KhushuSettings;
+  customAlarms?: AlarmConfig[];
+  athanEnabledMap?: Record<string, boolean>;
+};
+
 /**
- * Helper function to schedule native Android alarms for prayer times (up to 30 days).
+ * Builds list of native prayer time alarms including pre/post alerts, custom alarms, and khushu.
  */
-export async function scheduleNativeAthanAlarms(
+export function buildNativePrayerTimeAlarms(
   daysListOrTodayMap: DailyPrayerTimesEntry[] | Record<string, string> | PrayerTimes,
   tomorrowPrayerTimesMap?: Record<string, string> | PrayerTimes,
-  calcParams?: {
-    lat?: number;
-    lng?: number;
-    calcMethod?: string;
-    madhab?: string;
-    timeZoneId?: string;
-    fajrOffset?: number;
-    dhuhrOffset?: number;
-    asrOffset?: number;
-    maghribOffset?: number;
-    ishaOffset?: number;
-    prayerPreAlert?: boolean;
-    preAlertMinutes?: number;
-    prayerPostAlert?: boolean;
-    postAlertMinutes?: number;
-    khushuAutoWithIqama?: boolean;
-    khushuSettings?: KhushuSettings;
-    customAlarms?: AlarmConfig[];
-  }
-): Promise<number> {
-  try {
-    const times: PrayerTimeAlarm[] = [];
-    const now = Date.now();
+  calcParams?: NativeAlarmCalcParams
+): PrayerTimeAlarm[] {
+  const times: PrayerTimeAlarm[] = [];
+  const now = Date.now();
 
     const prayerArabicNames: Record<string, string> = {
       fajr: 'الفجر',
@@ -415,12 +434,18 @@ export async function scheduleNativeAthanAlarms(
           pDate.setHours(hours, minutes, 0, 0);
 
           const timeMs = pDate.getTime();
-          if (timeMs > now) {
+          const canonicalKey = prayerCanonicalNames[lowerKey] || key;
+          const isAthanItemEnabled = calcParams?.athanEnabledMap
+            ? (calcParams.athanEnabledMap[canonicalKey] ?? calcParams.athanEnabledMap[key] ?? true)
+            : true;
+
+          if (timeMs > now && isAthanItemEnabled) {
             times.push({
-              prayerKey: prayerCanonicalNames[lowerKey] || key,
+              prayerKey: canonicalKey,
               prayerName: prayerArabicNames[lowerKey],
               timeMs,
               isFajr: lowerKey === 'fajr',
+              alarmType: 'athan',
             });
           }
 
@@ -434,6 +459,7 @@ export async function scheduleNativeAthanAlarms(
                 timeMs: preTimeMs,
                 isFajr: lowerKey === 'fajr',
                 alarmType: 'prealert',
+                soundType: calcParams.preAlertSound || 'reminder',
               });
             }
           }
@@ -448,6 +474,7 @@ export async function scheduleNativeAthanAlarms(
                 timeMs: postTimeMs,
                 isFajr: lowerKey === 'fajr',
                 alarmType: 'postalert',
+                soundType: calcParams.postAlertSound || 'reminder',
               });
             }
           }
@@ -492,12 +519,18 @@ export async function scheduleNativeAthanAlarms(
         pDate.setHours(hours, minutes, 0, 0);
 
         const timeMs = pDate.getTime();
-        if (timeMs > now) {
+        const canonicalKey = prayerCanonicalNames[lowerKey] || key;
+        const isAthanItemEnabled = calcParams?.athanEnabledMap
+          ? (calcParams.athanEnabledMap[canonicalKey] ?? calcParams.athanEnabledMap[key] ?? true)
+          : true;
+
+        if (timeMs > now && isAthanItemEnabled) {
           times.push({
-            prayerKey: prayerCanonicalNames[lowerKey] || key,
+            prayerKey: canonicalKey,
             prayerName: prayerArabicNames[lowerKey],
             timeMs,
             isFajr: lowerKey === 'fajr',
+            alarmType: 'athan',
           });
         }
 
@@ -511,6 +544,7 @@ export async function scheduleNativeAthanAlarms(
               timeMs: preTimeMs,
               isFajr: lowerKey === 'fajr',
               alarmType: 'prealert',
+              soundType: calcParams.preAlertSound || 'reminder',
             });
           }
         }
@@ -525,6 +559,7 @@ export async function scheduleNativeAthanAlarms(
               timeMs: postTimeMs,
               isFajr: lowerKey === 'fajr',
               alarmType: 'postalert',
+              soundType: calcParams.postAlertSound || 'reminder',
             });
           }
         }
@@ -569,12 +604,18 @@ export async function scheduleNativeAthanAlarms(
           pDate.setHours(hours, minutes, 0, 0);
 
           const timeMs = pDate.getTime();
-          if (timeMs > now) {
+          const canonicalKey = prayerCanonicalNames[lowerKey] || key;
+          const isAthanItemEnabled = calcParams?.athanEnabledMap
+            ? (calcParams.athanEnabledMap[canonicalKey] ?? calcParams.athanEnabledMap[key] ?? true)
+            : true;
+
+          if (timeMs > now && isAthanItemEnabled) {
             times.push({
-              prayerKey: prayerCanonicalNames[lowerKey] || key,
+              prayerKey: canonicalKey,
               prayerName: prayerArabicNames[lowerKey],
               timeMs,
               isFajr: lowerKey === 'fajr',
+              alarmType: 'athan',
             });
           }
 
@@ -588,6 +629,7 @@ export async function scheduleNativeAthanAlarms(
                 timeMs: preTimeMs,
                 isFajr: lowerKey === 'fajr',
                 alarmType: 'prealert',
+                soundType: calcParams.preAlertSound || 'reminder',
               });
             }
           }
@@ -602,6 +644,7 @@ export async function scheduleNativeAthanAlarms(
                 timeMs: postTimeMs,
                 isFajr: lowerKey === 'fajr',
                 alarmType: 'postalert',
+                soundType: calcParams.postAlertSound || 'reminder',
               });
             }
           }
@@ -630,20 +673,37 @@ export async function scheduleNativeAthanAlarms(
       }
     }
 
+  // Sort by timeMs ascending
+  times.sort((a, b) => a.timeMs - b.timeMs);
+
+  // Anti-collision pass: Ensure no two custom alarms share the exact same minute timestamp
+  for (let i = 1; i < times.length; i++) {
+    if (times[i].alarmType === 'custom' && Math.abs(times[i].timeMs - times[i - 1].timeMs) < 60000) {
+      times[i].timeMs = times[i - 1].timeMs + 60000;
+    }
+  }
+
+  return times;
+}
+
+/**
+ * Helper function to schedule native Android alarms for prayer times (up to 30 days).
+ */
+export async function scheduleNativeAthanAlarms(
+  daysListOrTodayMap: DailyPrayerTimesEntry[] | Record<string, string> | PrayerTimes,
+  tomorrowPrayerTimesMap?: Record<string, string> | PrayerTimes,
+  calcParams?: NativeAlarmCalcParams
+): Promise<number> {
+  try {
+    const times = buildNativePrayerTimeAlarms(daysListOrTodayMap, tomorrowPrayerTimesMap, calcParams);
     if (times.length === 0) {
       console.log('[AthanAlarm]: No upcoming prayer times to schedule on native alarm.');
       return 0;
     }
 
-    // Sort by timeMs ascending
-    times.sort((a, b) => a.timeMs - b.timeMs);
-
-    // Anti-collision pass: Ensure no two custom alarms share the exact same minute timestamp
-    for (let i = 1; i < times.length; i++) {
-      if (times[i].alarmType === 'custom' && Math.abs(times[i].timeMs - times[i - 1].timeMs) < 60000) {
-        times[i].timeMs = times[i - 1].timeMs + 60000;
-      }
-    }
+    const hasBeforeSalahCustom = Boolean(calcParams?.customAlarms?.some(a => a.id === 'alarm_before_salah'));
+    const hasAfterSalahCustom = Boolean(calcParams?.customAlarms?.some(a => a.id === 'alarm_after_salah'));
+    const athanMap = calcParams?.athanEnabledMap || {};
 
     const res = await AthanAlarm.scheduleAthanAlarms({
       times,
@@ -659,10 +719,19 @@ export async function scheduleNativeAthanAlarms(
       ishaOffset: calcParams?.ishaOffset,
       prayerPreAlert: calcParams?.prayerPreAlert,
       preAlertMinutes: calcParams?.preAlertMinutes,
+      preAlertSound: calcParams?.preAlertSound || 'reminder',
+      hasBeforeSalahCustom,
       prayerPostAlert: calcParams?.prayerPostAlert,
       postAlertMinutes: calcParams?.postAlertMinutes,
+      postAlertSound: calcParams?.postAlertSound || 'reminder',
+      hasAfterSalahCustom,
       khushuAutoWithIqama: calcParams?.khushuAutoWithIqama,
       khushuMode: calcParams?.khushuSettings?.preferredMode || 'silent',
+      athan_enabled_Fajr: athanMap['Fajr'] ?? true,
+      athan_enabled_Dhuhr: athanMap['Dhuhr'] ?? true,
+      athan_enabled_Asr: athanMap['Asr'] ?? true,
+      athan_enabled_Maghrib: athanMap['Maghrib'] ?? true,
+      athan_enabled_Isha: athanMap['Isha'] ?? true,
     });
     if (res.exactAlarmPermissionMissing) {
       console.warn('[AthanAlarm]: Exact alarm permission is missing on Android 12+');

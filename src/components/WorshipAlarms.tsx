@@ -201,6 +201,9 @@ export default function WorshipAlarms({
       };
       setPushSettings(updated);
       savePushSettings(updated);
+      if (isNative) {
+        cancelNativeAlarm({ alarmId: 'prealert' }).catch(() => {});
+      }
     } else if (savedAlarm.id === 'alarm_after_salah') {
       const updated = {
         ...pushSettings,
@@ -209,6 +212,9 @@ export default function WorshipAlarms({
       };
       setPushSettings(updated);
       savePushSettings(updated);
+      if (isNative) {
+        cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
+      }
     } else if (savedAlarm.id === 'alarm_morning_adhkar') {
       const updated = {
         ...pushSettings,

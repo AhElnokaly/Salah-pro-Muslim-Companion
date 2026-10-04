@@ -207,8 +207,10 @@ export interface AppSettings {
   notifyHijriMonthStart?: boolean;
   prayerPreAlert?: boolean;
   preAlertMinutes?: number;
+  preAlertSound?: string;
   prayerPostAlert?: boolean;
   postAlertMinutes?: number;
+  postAlertSound?: string;
 }
 
 export type CardBlockId =

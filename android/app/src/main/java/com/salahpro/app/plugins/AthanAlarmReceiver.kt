@@ -141,10 +141,18 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        val prefs = context.getSharedPreferences("athan_alarm_prefs", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
         val ongoingBarEnabled = prefs.getBoolean("ongoing_prayer_bar_enabled", false)
         if (ongoingBarEnabled) {
             updateOngoingPrayerNotificationAtPrayerTime(context, prayerName)
+        }
+
+        // Fire-time guard: verify that athan is enabled for this prayer
+        val canonicalPrayer = prayerKey.lowercase().replaceFirstChar { it.uppercase() }
+        val isAthanEnabled = prefs.getBoolean("athan_enabled_$canonicalPrayer", true)
+        if (!isAthanEnabled) {
+            Log.d(TAG, "Athan is disabled for prayer $canonicalPrayer ($prayerKey); skipping AthanForegroundService.")
+            return
         }
 
         val serviceIntent = Intent(context, AthanForegroundService::class.java).apply {

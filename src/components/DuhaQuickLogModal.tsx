@@ -11,6 +11,7 @@ import { formatDateKey } from '../utils/prayerDayBoundary';
 import { defaultMuezzins, getAudioUrlSync } from '../utils/audioStorage';
 import { safeGetItem } from '../utils/storage';
 import { safeUUID } from '../utils/uuid';
+import { resolveMuezzinId } from '../utils/muezzinResolver';
 
 export interface DuhaQuickLogModalProps {
   isOpen: boolean;
@@ -65,7 +66,7 @@ export const DuhaQuickLogModal: React.FC<DuhaQuickLogModalProps> = ({
       }
       setIsPlayingAudio(false);
     } else {
-      const sunriseMuezzinKey = safeGetItem('salah_muezzin_Sunrise') || 'mishary';
+      const sunriseMuezzinKey = resolveMuezzinId('Sunrise');
       const muezzinObj = defaultMuezzins.find(m => m.id === sunriseMuezzinKey) || defaultMuezzins[0];
       const audioUrl = getAudioUrlSync(muezzinObj?.url || './audio/azan1.mp3');
 

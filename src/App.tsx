@@ -511,10 +511,6 @@ export default function App() {
         audioRef={globalAudioRef}
         isPlaying={isAthanPlaying}
         currentPhraseIdx={currentPhraseIdx}
-        currentMuezzin={currentMuezzin}
-        fajrMuezzin={fajrMuezzin}
-        setCurrentMuezzin={setCurrentMuezzin}
-        setFajrMuezzin={setFajrMuezzin}
         togglePlayAthan={togglePlayAthanGlobal}
         stopAthan={stopAthanGlobal}
         audioError={audioError}

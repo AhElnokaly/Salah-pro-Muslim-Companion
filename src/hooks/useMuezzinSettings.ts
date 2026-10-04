@@ -23,11 +23,11 @@ export function useMuezzinSettings(
   });
 
   const [currentMuezzin, setCurrentMuezzinState] = useState<string>(() => {
-    return resolveMuezzinId('Dhuhr', { generalFallback: 'makkah' });
+    return resolveMuezzinId('Dhuhr');
   });
 
   const [fajrMuezzin, setFajrMuezzinState] = useState<string>(() => {
-    return resolveMuezzinId('Fajr', { fajrFallback: 'fajr_makkah' });
+    return resolveMuezzinId('Fajr');
   });
 
   const [customMuezzins, setCustomMuezzins] = useState<AudioTrack[]>([]);
@@ -54,8 +54,8 @@ export function useMuezzinSettings(
 
   // Fetch custom muezzins and sync active muezzins to native on mount
   useEffect(() => {
-    const generalId = resolveMuezzinId('Dhuhr', { generalFallback: currentMuezzin });
-    const fajrId = resolveMuezzinId('Fajr', { fajrFallback: fajrMuezzin });
+    const generalId = resolveMuezzinId('Dhuhr');
+    const fajrId = resolveMuezzinId('Fajr');
     syncMuezzinIdToNative('general', generalId).catch(() => {});
     syncMuezzinIdToNative('fajr', fajrId).catch(() => {});
 

@@ -11,6 +11,7 @@
 import { AlarmIdentifier } from './AlarmIdentifier';
 import { NotificationScheduler } from '../../services/NotificationScheduler';
 import { syncPrayerScheduleWithSW, getPushSettings } from '../../utils/pushNotificationService';
+import { isAthanEnabled, getAthanEnabledMap } from '../../utils/athanEnabled';
 import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { AppSettings, PrayerTimes, AlarmConfig } from '../../types';
 import { safeGetJSON } from '../../utils/storage';
@@ -72,8 +73,10 @@ export class UnifiedNotificationOrchestrator {
         const pushSettings = getPushSettings();
         const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? false;
         const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+        const preAlertSound = settings.preAlertSound ?? pushSettings.preAlertSound ?? 'reminder';
         const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? false;
         const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
+        const postAlertSound = settings.postAlertSound ?? pushSettings.postAlertSound ?? 'reminder';
         const khushuSettings = KhushuStorage.getSettings();
 
         let resolvedCustomAlarms = customAlarms;
@@ -99,11 +102,14 @@ export class UnifiedNotificationOrchestrator {
           ishaOffset: settings.prayerOffsets?.Isha || 0,
           prayerPreAlert: preAlertEnabled,
           preAlertMinutes: preAlertMins,
+          preAlertSound,
           prayerPostAlert: postAlertEnabled,
           postAlertMinutes: postAlertMins,
+          postAlertSound,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuSettings,
           customAlarms: resolvedCustomAlarms,
+          athanEnabledMap: getAthanEnabledMap(settings, pushSettings),
         });
         scheduledCount = typeof reconcileRes === 'number' ? reconcileRes : ((reconcileRes as any)?.scheduledCount ?? 0);
         addedCount = (reconcileRes as any)?.addedCount ?? 0;
@@ -173,15 +179,19 @@ export class UnifiedNotificationOrchestrator {
       const pushSettings = getPushSettings();
       const preAlertEnabled = settings.prayerPreAlert ?? pushSettings.prayerPreAlert ?? false;
       const preAlertMins = settings.preAlertMinutes ?? pushSettings.preAlertMinutes ?? 15;
+      const preAlertSound = settings.preAlertSound ?? pushSettings.preAlertSound ?? 'reminder';
       const postAlertEnabled = settings.prayerPostAlert ?? pushSettings.prayerPostAlert ?? false;
       const postAlertMins = settings.postAlertMinutes ?? pushSettings.postAlertMinutes ?? 15;
+      const postAlertSound = settings.postAlertSound ?? pushSettings.postAlertSound ?? 'reminder';
       const customAlarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
       const hasBeforeSalahCustom = Boolean(customAlarms?.some(a => a.id === 'alarm_before_salah'));
       const hasAfterSalahCustom = Boolean(customAlarms?.some(a => a.id === 'alarm_after_salah'));
       const khushuSettings = KhushuStorage.getSettings();
 
+      const athanEnabledMap = getAthanEnabledMap(settings, pushSettings);
+
       for (const key of keys) {
-        if (!enabledPrayers[key] || !prayerTimes[key as keyof PrayerTimes]) continue;
+        if (!prayerTimes[key as keyof PrayerTimes]) continue;
 
         const timeStr = prayerTimes[key as keyof PrayerTimes];
         const [hours, minutes] = (timeStr || '').split(':').map(Number);
@@ -189,13 +199,17 @@ export class UnifiedNotificationOrchestrator {
 
         const [y, m, d] = dateStr.split('-').map(Number);
         const triggerDate = new Date(y, m - 1, d, hours, minutes, 0, 0);
+        const timeMs = triggerDate.getTime();
 
-        if (triggerDate.getTime() > Date.now()) {
+        const isAthanAllowed = key !== 'Sunrise' && isAthanEnabled(key, settings, pushSettings);
+
+        if (timeMs > Date.now() && isAthanAllowed) {
           nativeAlarmsToSchedule.push({
             prayerKey: key,
             prayerName: key,
-            timeMs: triggerDate.getTime(),
+            timeMs,
             isFajr: key === 'Fajr',
+            alarmType: 'athan',
           });
         }
 
@@ -209,6 +223,7 @@ export class UnifiedNotificationOrchestrator {
               timeMs: preAlertTimeMs,
               isFajr: key === 'Fajr',
               alarmType: 'prealert',
+              soundType: preAlertSound,
             });
           }
         }
@@ -223,6 +238,7 @@ export class UnifiedNotificationOrchestrator {
               timeMs: postAlertTimeMs,
               isFajr: key === 'Fajr',
               alarmType: 'postalert',
+              soundType: postAlertSound,
             });
           }
         }
@@ -257,10 +273,19 @@ export class UnifiedNotificationOrchestrator {
           times: nativeAlarmsToSchedule,
           prayerPreAlert: preAlertEnabled,
           preAlertMinutes: preAlertMins,
+          preAlertSound,
+          hasBeforeSalahCustom,
           prayerPostAlert: postAlertEnabled,
           postAlertMinutes: postAlertMins,
+          postAlertSound,
+          hasAfterSalahCustom,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuMode: khushuSettings.preferredMode || 'silent',
+          athan_enabled_Fajr: athanEnabledMap['Fajr'],
+          athan_enabled_Dhuhr: athanEnabledMap['Dhuhr'],
+          athan_enabled_Asr: athanEnabledMap['Asr'],
+          athan_enabled_Maghrib: athanEnabledMap['Maghrib'],
+          athan_enabled_Isha: athanEnabledMap['Isha'],
         });
         nativeScheduledCount = res.scheduledCount;
       }

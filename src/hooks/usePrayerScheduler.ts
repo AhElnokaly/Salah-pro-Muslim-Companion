@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Dispatch, SetStateAction, MutableRefObject } from 'react';
+import { useState, useEffect, useCallback, Dispatch, SetStateAction, MutableRefObject, useRef } from 'react';
 import { PrayerName, AppSettings, AlarmConfig, SpiritualAlerts, PrayerTimes, RelativePrayerTarget } from '../types';
 import { calculatePrayerTimes, getArabicPrayerName, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { toArabicNumbers } from '../utils/hijri';
@@ -17,7 +17,7 @@ import {
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
-import { isNativeAthanRunning } from '../services/athanAlarmPlugin';
+import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -48,6 +48,9 @@ export function usePrayerScheduler({
   audioVolume,
   setToastMessage
 }: UsePrayerSchedulerProps): UsePrayerSchedulerReturn {
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const days60ListRef = useRef<DailyPrayerTimesEntry[]>([]);
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
     const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
     if (saved !== null && Array.isArray(saved)) {
@@ -172,13 +175,11 @@ export function usePrayerScheduler({
           if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
             safeSessionSetItem(attemptedKey, 'true');
 
-            if (isCatchup) {
-              const isRunning = await isNativeAthanRunning();
-              if (isRunning) {
-                safeSetItem(playedKey, 'true');
-                console.log(`[ATHAN] SOURCE=WEB ACTION=SKIP_CATCHUP REASON=NATIVE_RUNNING PRAYER=${prayer}`);
-                break;
-              }
+            const isRunning = await isNativeAthanRunning();
+            if (isRunning) {
+              safeSetItem(playedKey, 'true');
+              console.log(`[ATHAN] SOURCE=WEB ACTION=SKIP REASON=NATIVE_RUNNING PRAYER=${prayer}`);
+              break;
             }
 
             // Always trigger athan, which opens the full AthanOverlay screen and plays sound
@@ -373,24 +374,41 @@ export function usePrayerScheduler({
       }
 
       if (days60List.length > 0) {
+        days60ListRef.current = days60List;
         UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
           console.warn('[usePrayerScheduler] Notification orchestration error:', err);
         });
 
         const handleKhushuChange = () => {
-          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
+          const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settingsRef.current, targetDaysList, customAlarms).catch(err => {
             console.warn('[usePrayerScheduler] Notification re-orchestration on khushu change error:', err);
           });
         };
 
         const handleAlarmsChange = () => {
-          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
+          const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settingsRef.current, targetDaysList, customAlarms).catch(err => {
             console.warn('[usePrayerScheduler] Notification re-orchestration on custom alarms change error:', err);
           });
         };
 
-        const handlePushChange = () => {
-          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settings, days60List, customAlarms).catch(err => {
+        const handlePushChange = (e?: Event) => {
+          const detail = (e as CustomEvent)?.detail;
+          const currentSettings = settingsRef.current;
+          let effectiveSettings = currentSettings;
+
+          // If detail has push settings and prayerAthan is false, ensure adhanEnabled has all prayers disabled
+          if (detail && typeof detail === 'object' && 'prayerAthan' in detail && detail.prayerAthan === false) {
+            const updatedAdhan = { ...currentSettings.adhanEnabled };
+            (['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).forEach(p => {
+              updatedAdhan[p] = false;
+            });
+            effectiveSettings = { ...currentSettings, adhanEnabled: updatedAdhan };
+          }
+
+          const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(effectiveSettings, targetDaysList, customAlarms).catch(err => {
             console.warn('[usePrayerScheduler] Notification re-orchestration on push settings change error:', err);
           });
         };
@@ -406,6 +424,30 @@ export function usePrayerScheduler({
       }
     }
   }, [isLoaded, settings.latitude, settings.longitude, settings.timezoneId, settings.calcMethod, settings.madhab, settings.prayerOffsets, settings.cityName, checkTimesAndAlarms, customAlarms]);
+
+  // Reschedule immediately when adhanEnabled changes (e.g. from individual prayer toggles)
+  const prevAdhanEnabledRef = useRef<Record<string, boolean> | undefined>(undefined);
+  useEffect(() => {
+    if (!isLoaded || !settings.adhanEnabled) return;
+    if (prevAdhanEnabledRef.current === undefined) {
+      prevAdhanEnabledRef.current = settings.adhanEnabled;
+      return;
+    }
+    const prev = prevAdhanEnabledRef.current;
+    prevAdhanEnabledRef.current = settings.adhanEnabled;
+    const isDifferent = Object.keys(settings.adhanEnabled).some(
+      k => (prev as any)?.[k] !== (settings.adhanEnabled as any)?.[k]
+    );
+    if (isDifferent && days60ListRef.current && days60ListRef.current.length > 0) {
+      UnifiedNotificationOrchestrator.orchestratePrayerAlarms(
+        settings,
+        days60ListRef.current,
+        customAlarms
+      ).catch(err => {
+        console.warn('[usePrayerScheduler] Notification re-orchestration on adhanEnabled change error:', err);
+      });
+    }
+  }, [settings.adhanEnabled, isLoaded, customAlarms, settings]);
 
   // Background Web Worker tick with single fallback interval (Task 2)
   useEffect(() => {

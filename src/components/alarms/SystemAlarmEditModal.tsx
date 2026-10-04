@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { X, Check, Bell, Clock, Moon, BookOpen, Headphones, Sparkles, Volume2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Check, Bell, Clock, Moon, BookOpen, Headphones, Sparkles, Volume2, Play, Square } from 'lucide-react';
 import { PushNotificationSettings } from '../../utils/pushNotificationService';
 import { SmartNotificationsSettings } from '../../domain/smartNotifications/smartNotificationTypes';
+import { SOUND_OPTIONS } from './alarmModalConstants';
+import { playSpiritualSound, stopSpiritualSound } from '../../utils/spiritualAudio';
 
 export type SystemAlarmItemKey =
   | 'prayerAthan'
@@ -50,7 +52,9 @@ export default function SystemAlarmEditModal({
 }: SystemAlarmEditModalProps) {
   // Temporary form state
   const [preAlertMinutes, setPreAlertMinutes] = useState<number>(pushSettings.preAlertMinutes || 15);
+  const [preAlertSound, setPreAlertSound] = useState<string>(pushSettings.preAlertSound || 'reminder');
   const [postAlertMinutes, setPostAlertMinutes] = useState<number>(pushSettings.postAlertMinutes || 15);
+  const [postAlertSound, setPostAlertSound] = useState<string>(pushSettings.postAlertSound || 'reminder');
   const [morningTime, setMorningTime] = useState<string>(pushSettings.morningTime || '07:00');
   const [eveningTime, setEveningTime] = useState<string>(pushSettings.eveningTime || '16:30');
   const [periodicIntervalHours, setPeriodicIntervalHours] = useState<number>(pushSettings.periodicIntervalHours || 2);
@@ -59,6 +63,34 @@ export default function SystemAlarmEditModal({
   const [quietEnd, setQuietEnd] = useState<string>(pushSettings.quietEnd || '04:30');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(pushSettings.soundEnabled ?? true);
   const [vibrateEnabled, setVibrateEnabled] = useState<boolean>(pushSettings.vibrateEnabled ?? true);
+
+  // Audio preview testing state
+  const [testPlaying, setTestPlaying] = useState<boolean>(false);
+  const testAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleTestSound = (sound: string, testTitle: string) => {
+    if (testPlaying) {
+      stopSpiritualSound(testAudioRef);
+      setTestPlaying(false);
+      return;
+    }
+    setTestPlaying(true);
+    playSpiritualSound(
+      sound,
+      testTitle,
+      0.8,
+      testAudioRef,
+      'sound'
+    );
+  };
+
+  const handleClose = () => {
+    if (testPlaying) {
+      stopSpiritualSound(testAudioRef);
+      setTestPlaying(false);
+    }
+    onClose();
+  };
 
   // Smart settings form state
   const [showSeconds, setShowSeconds] = useState<boolean>(smartSettings.ongoingPrayerBar.showSeconds ?? true);
@@ -72,7 +104,9 @@ export default function SystemAlarmEditModal({
   useEffect(() => {
     if (isOpen) {
       setPreAlertMinutes(pushSettings.preAlertMinutes || 15);
+      setPreAlertSound(pushSettings.preAlertSound || 'reminder');
       setPostAlertMinutes(pushSettings.postAlertMinutes || 15);
+      setPostAlertSound(pushSettings.postAlertSound || 'reminder');
       setMorningTime(pushSettings.morningTime || '07:00');
       setEveningTime(pushSettings.eveningTime || '16:30');
       setPeriodicIntervalHours(pushSettings.periodicIntervalHours || 2);
@@ -81,6 +115,7 @@ export default function SystemAlarmEditModal({
       setQuietEnd(pushSettings.quietEnd || '04:30');
       setSoundEnabled(pushSettings.soundEnabled ?? true);
       setVibrateEnabled(pushSettings.vibrateEnabled ?? true);
+      setTestPlaying(false);
 
       setShowSeconds(smartSettings.ongoingPrayerBar.showSeconds ?? true);
       setShowHijriDate(smartSettings.ongoingPrayerBar.showHijriDate ?? true);
@@ -89,6 +124,11 @@ export default function SystemAlarmEditModal({
       setReadingPages(smartSettings.readingPortion.dailyPagesGoal || 2);
       setListeningTime(smartSettings.listeningPortion.scheduledTime || '20:00');
       setListeningVerses(smartSettings.listeningPortion.versesPerPortion || 5);
+    } else {
+      if (testAudioRef.current) {
+        stopSpiritualSound(testAudioRef);
+      }
+      setTestPlaying(false);
     }
   }, [isOpen, pushSettings, smartSettings]);
 
@@ -96,6 +136,10 @@ export default function SystemAlarmEditModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (testPlaying) {
+      stopSpiritualSound(testAudioRef);
+      setTestPlaying(false);
+    }
     if (
       alarmKey === 'ongoingPrayerBar' ||
       alarmKey === 'readingPortion' ||
@@ -125,7 +169,9 @@ export default function SystemAlarmEditModal({
       const updated: PushNotificationSettings = {
         ...pushSettings,
         preAlertMinutes,
+        preAlertSound,
         postAlertMinutes,
+        postAlertSound,
         morningTime,
         eveningTime,
         periodicIntervalHours,
@@ -248,7 +294,7 @@ export default function SystemAlarmEditModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="إغلاق"
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
@@ -258,52 +304,158 @@ export default function SystemAlarmEditModal({
 
         {/* Content Form */}
         <form id="system-alarm-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          {/* A. Pre-Alert Minutes */}
+          {/* A. Pre-Alert Minutes & Sound */}
           {alarmKey === 'prayerPreAlert' && (
-            <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                التنبيه قبل الصلاة بـ:
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[5, 10, 15, 20, 25, 30].map((mins) => (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  التنبيه قبل الصلاة بـ:
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[5, 10, 15, 20, 25, 30].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setPreAlertMinutes(mins)}
+                      className={`py-2 px-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                        preAlertMinutes === mins
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-500'
+                      }`}
+                    >
+                      {mins} دقيقة
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pre-Alert Sound Picker */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-300">
+                    نغمة التنبيه / الصوت:
+                  </span>
                   <button
-                    key={mins}
                     type="button"
-                    onClick={() => setPreAlertMinutes(mins)}
-                    className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
-                      preAlertMinutes === mins
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-500'
+                    onClick={() => handleTestSound(preAlertSound, 'تنبيه قبل الصلاة')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition-colors cursor-pointer ${
+                      testPlaying
+                        ? 'bg-rose-500 text-white animate-pulse'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
                     }`}
                   >
-                    {mins} دقيقة
+                    {testPlaying ? (
+                      <>
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        <span>إيقاف التجربة</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>تجربة الصوت</span>
+                      </>
+                    )}
                   </button>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-0.5">
+                  {SOUND_OPTIONS.map((opt) => {
+                    const isSelected = preAlertSound === opt.type;
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        onClick={() => setPreAlertSound(opt.type)}
+                        className={`p-2.5 rounded-xl text-right border transition-all flex flex-col justify-center cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-black shadow-xs'
+                            : 'bg-slate-50 dark:bg-[#1a232e] border-slate-200/70 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{opt.label}</div>
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
 
-          {/* B. Post-Alert Minutes */}
+          {/* B. Post-Alert Minutes & Sound */}
           {alarmKey === 'prayerPostAlert' && (
-            <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                التنبيه بعد الصلاة بـ:
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[5, 10, 15, 20, 30].map((mins) => (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  التنبيه بعد الصلاة بـ:
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                  {[5, 10, 15, 20, 30].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setPostAlertMinutes(mins)}
+                      className={`py-2 px-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                        postAlertMinutes === mins
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-500'
+                      }`}
+                    >
+                      {mins} دقيقة
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Post-Alert Sound Picker */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-300">
+                    نغمة التنبيه / الصوت:
+                  </span>
                   <button
-                    key={mins}
                     type="button"
-                    onClick={() => setPostAlertMinutes(mins)}
-                    className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
-                      postAlertMinutes === mins
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-500'
+                    onClick={() => handleTestSound(postAlertSound, 'تنبيه بعد الصلاة')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition-colors cursor-pointer ${
+                      testPlaying
+                        ? 'bg-rose-500 text-white animate-pulse'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
                     }`}
                   >
-                    {mins} دقيقة
+                    {testPlaying ? (
+                      <>
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        <span>إيقاف التجربة</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>تجربة الصوت</span>
+                      </>
+                    )}
                   </button>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-0.5">
+                  {SOUND_OPTIONS.map((opt) => {
+                    const isSelected = postAlertSound === opt.type;
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        onClick={() => setPostAlertSound(opt.type)}
+                        className={`p-2.5 rounded-xl text-right border transition-all flex flex-col justify-center cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-black shadow-xs'
+                            : 'bg-slate-50 dark:bg-[#1a232e] border-slate-200/70 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{opt.label}</div>
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

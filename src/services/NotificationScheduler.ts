@@ -1,6 +1,8 @@
 import AthanAlarm from './athanAlarmPlugin';
-import { sendPushNotification } from '../utils/pushNotificationService';
+import { sendPushNotification, getPushSettings } from '../utils/pushNotificationService';
 import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
+import { isAthanEnabled } from '../utils/athanEnabled';
+import { safeGetJSON } from '../utils/storage';
 
 export interface ScheduleNotificationParams {
   id: number | string;
@@ -31,13 +33,35 @@ export class NotificationScheduler {
       // 1. Android Native Alarm Plugin via Capacitor
       if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform()) {
         const rawTag = params.tag || 'custom';
-        const prayerKey = prayerCanonicalNames[rawTag.toLowerCase()] || rawTag;
+        const canonical = prayerCanonicalNames[rawTag.toLowerCase()];
+        if (canonical) {
+          const pushSettings = getPushSettings();
+          const storedSettings = safeGetJSON<any>('salah_settings', null);
+          if (!isAthanEnabled(canonical, storedSettings, pushSettings)) {
+            console.log(`[NotificationScheduler] Athan is disabled for ${canonical}, skipping.`);
+            return false;
+          }
+          await AthanAlarm.scheduleAthanAlarms({
+            times: [
+              {
+                prayerKey: canonical,
+                prayerName: params.title,
+                timeMs: timestamp,
+                alarmType: 'athan',
+              },
+            ],
+          });
+          return true;
+        }
+
+        // Non-prayer / custom alarm
         await AthanAlarm.scheduleAthanAlarms({
           times: [
             {
-              prayerKey,
+              prayerKey: rawTag.startsWith('custom_') ? rawTag : `custom_${rawTag}`,
               prayerName: params.title,
               timeMs: timestamp,
+              alarmType: 'custom',
             },
           ],
         });

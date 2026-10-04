@@ -25,8 +25,8 @@ export function useAppSync({
   // Pre-cache preferred muezzins on app load
   useEffect(() => {
     if (!isLoaded || !navigator.onLine) return;
-    const fajrMuezzinId = resolveMuezzinId('Fajr', { fajrFallback: 'fajr_makkah' });
-    const generalMuezzinId = resolveMuezzinId('Dhuhr', { generalFallback: 'makkah' });
+    const fajrMuezzinId = resolveMuezzinId('Fajr');
+    const generalMuezzinId = resolveMuezzinId('Dhuhr');
     const tracks = [...defaultMuezzins, ...archiveMuezzins];
 
     [

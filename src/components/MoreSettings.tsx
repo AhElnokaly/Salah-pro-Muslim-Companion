@@ -27,6 +27,7 @@ import CalendarSettingsTab from './settings/CalendarSettingsTab';
 import DuasSettingsTab from './settings/DuasSettingsTab';
 import SmartNotificationsSettingsTab from './settings/SmartNotificationsSettingsTab';
 import { safeSetItem, safeGetItem } from '../utils/storage';
+import { resolveMuezzinId } from '../utils/muezzinResolver';
 
 interface MoreSettingsProps {
   subTab: SettingsSubTabId;
@@ -79,8 +80,8 @@ export default function MoreSettings({
 }: MoreSettingsProps) {
   const [appModal, setAppModal] = useState<{ message: string; variant: AppModalVariant } | null>(null);
 
-  const [fajrMuezzin, setFajrMuezzin] = useState(() => safeGetItem('salah_fajr_muezzin') || 'fajr_yusuf');
-  const [generalMuezzin, setGeneralMuezzin] = useState(() => safeGetItem('salah_general_muezzin') || 'makkah');
+  const [fajrMuezzin, setFajrMuezzin] = useState(() => resolveMuezzinId('Fajr'));
+  const [generalMuezzin, setGeneralMuezzin] = useState(() => resolveMuezzinId('Dhuhr'));
   const [audioVolume, setAudioVolume] = useState(() => {
     const saved = safeGetItem('salah_audio_volume');
     return saved ? parseFloat(saved) : 0.8;

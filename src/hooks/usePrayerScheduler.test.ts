@@ -126,19 +126,14 @@ describe('usePrayerScheduler - Native Athan Catch-up & isAudioBusy (Task 2)', ()
 
       const checkNativeRunning = async () => true;
 
-      // Simulate the exact catch-up block from usePrayerScheduler.ts
-      const isCatchup = true;
+      // Simulate the exact scheduler block from usePrayerScheduler.ts
       if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
         safeSessionSetItem(attemptedKey, 'true');
 
-        if (isCatchup) {
-          const isRunning = await checkNativeRunning();
-          if (isRunning) {
-            safeSetItem(playedKey, 'true');
-            // skips triggerAthan
-          } else {
-            triggerAthan();
-          }
+        const isRunning = await checkNativeRunning();
+        if (isRunning) {
+          safeSetItem(playedKey, 'true');
+          // skips triggerAthan
         } else {
           triggerAthan();
         }
@@ -149,6 +144,33 @@ describe('usePrayerScheduler - Native Athan Catch-up & isAudioBusy (Task 2)', ()
       assert.equal(safeSessionGetItem(attemptedKey), 'true', 'salah_attempted must be set before await');
     });
 
+    it('real-time tick (isCatchup=false) with native running -> triggerAthan NOT called, playedKey set', async () => {
+      let triggerAthanCalled = false;
+      const triggerAthan = () => {
+        triggerAthanCalled = true;
+      };
+
+      const checkNativeRunning = async () => true;
+
+      // Real-time foreground tick: isCatchup = false
+      const isCatchup = false;
+      if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
+        safeSessionSetItem(attemptedKey, 'true');
+
+        const isRunning = await checkNativeRunning();
+        if (isRunning) {
+          safeSetItem(playedKey, 'true');
+          console.log(`[ATHAN] SOURCE=WEB ACTION=SKIP REASON=NATIVE_RUNNING PRAYER=Fajr`);
+        } else {
+          triggerAthan();
+        }
+      }
+
+      assert.equal(triggerAthanCalled, false, 'triggerAthan must NOT be called in real-time tick when native is running');
+      assert.equal(safeGetItem(playedKey), 'true', 'playedKey must be set to true');
+      assert.equal(safeSessionGetItem(attemptedKey), 'true', 'attemptedKey must be set before await');
+    });
+
     it('when native is NOT running during catch-up: existing catch-up unchanged (triggerAthan is called)', async () => {
       let triggerAthanCalled = false;
       const triggerAthan = () => {
@@ -157,17 +179,12 @@ describe('usePrayerScheduler - Native Athan Catch-up & isAudioBusy (Task 2)', ()
 
       const checkNativeRunning = async () => false;
 
-      const isCatchup = true;
       if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
         safeSessionSetItem(attemptedKey, 'true');
 
-        if (isCatchup) {
-          const isRunning = await checkNativeRunning();
-          if (isRunning) {
-            safeSetItem(playedKey, 'true');
-          } else {
-            triggerAthan();
-          }
+        const isRunning = await checkNativeRunning();
+        if (isRunning) {
+          safeSetItem(playedKey, 'true');
         } else {
           triggerAthan();
         }
@@ -191,17 +208,12 @@ describe('usePrayerScheduler - Native Athan Catch-up & isAudioBusy (Task 2)', ()
         }
       };
 
-      const isCatchup = true;
       if (!safeGetItem(playedKey) && !safeSessionGetItem(attemptedKey)) {
         safeSessionSetItem(attemptedKey, 'true');
 
-        if (isCatchup) {
-          const isRunning = await checkNativeRunning();
-          if (isRunning) {
-            safeSetItem(playedKey, 'true');
-          } else {
-            triggerAthan();
-          }
+        const isRunning = await checkNativeRunning();
+        if (isRunning) {
+          safeSetItem(playedKey, 'true');
         } else {
           triggerAthan();
         }

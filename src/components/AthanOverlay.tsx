@@ -14,10 +14,6 @@ interface AthanOverlayProps {
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
   isPlaying: boolean;
   currentPhraseIdx: number;
-  currentMuezzin?: string;
-  fajrMuezzin?: string;
-  setCurrentMuezzin?: (id: string) => void;
-  setFajrMuezzin?: (id: string) => void;
   overrideMuezzinId?: string | null;
   setOverrideMuezzinId?: (id: string | null) => void;
   togglePlayAthan: (muezzinId?: string) => void;
@@ -34,10 +30,6 @@ export default function AthanOverlay({
   audioRef,
   isPlaying,
   currentPhraseIdx,
-  currentMuezzin,
-  fajrMuezzin,
-  setCurrentMuezzin,
-  setFajrMuezzin,
   overrideMuezzinId,
   setOverrideMuezzinId,
   togglePlayAthan,

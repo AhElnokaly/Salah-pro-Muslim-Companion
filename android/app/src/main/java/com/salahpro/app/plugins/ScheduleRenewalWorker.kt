@@ -1,5 +1,6 @@
 package com.salahpro.app.plugins
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -43,11 +44,40 @@ class ScheduleRenewalWorker(
             val jsonArray = if (jsonString != null) JSONArray(jsonString) else JSONArray()
             val now = System.currentTimeMillis()
 
+            val isAthanEnabled = mapOf(
+                "Fajr" to prefs.getBoolean("athan_enabled_Fajr", true),
+                "Dhuhr" to prefs.getBoolean("athan_enabled_Dhuhr", true),
+                "Asr" to prefs.getBoolean("athan_enabled_Asr", true),
+                "Maghrib" to prefs.getBoolean("athan_enabled_Maghrib", true),
+                "Isha" to prefs.getBoolean("athan_enabled_Isha", true)
+            )
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+
             val updatedList = mutableListOf<JSONObject>()
             for (i in 0 until jsonArray.length()) {
                 val item = jsonArray.getJSONObject(i)
                 val timeMs = item.optLong("timeMs", 0L)
                 if (timeMs > now) {
+                    val prayerKey = item.optString("prayerKey", "")
+                    val alarmType = item.optString("alarmType", "")
+                    val isAthan = (alarmType.isEmpty() || alarmType == "athan") &&
+                            !prayerKey.contains("prealert") &&
+                            !prayerKey.contains("postalert") &&
+                            !prayerKey.contains("worship") &&
+                            !prayerKey.contains("khushu") &&
+                            !prayerKey.startsWith("custom_")
+
+                    if (isAthan) {
+                        val canonicalName = prayerKey.lowercase().replaceFirstChar { it.uppercase() }
+                        if (isAthanEnabled[canonicalName] == false) {
+                            if (alarmManager != null) {
+                                val reqCode = AthanAlarmPlugin.getDeterministicRequestCode(prayerKey, timeMs)
+                                AthanAlarmPlugin.cancelSingleAlarmStatic(context, alarmManager, reqCode)
+                            }
+                            continue
+                        }
+                    }
                     updatedList.add(item)
                 }
             }
@@ -85,26 +115,39 @@ class ScheduleRenewalWorker(
 
                     val prayerPreAlert = prefs.getBoolean("prayerPreAlert", false)
                     val preAlertMinutes = prefs.getInt("preAlertMinutes", 15)
+                    val hasBeforeSalahCustom = prefs.getBoolean("hasBeforeSalahCustom", false)
+                    val preAlertSound = prefs.getString("preAlertSound", "reminder") ?: "reminder"
                     val prayerPostAlert = prefs.getBoolean("prayerPostAlert", false)
                     val postAlertMinutes = prefs.getInt("postAlertMinutes", 15)
+                    val hasAfterSalahCustom = prefs.getBoolean("hasAfterSalahCustom", false)
+                    val postAlertSound = prefs.getString("postAlertSound", "reminder") ?: "reminder"
                     val khushuAutoWithIqama = prefs.getBoolean("khushuAutoWithIqama", false)
                     val khushuMode = prefs.getString("khushuMode", "silent") ?: "silent"
 
                     for (p in prayers) {
-                        if (p.third > now) {
-                            val exists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - p.third) < 60000L }
+                        val canonicalKey = canonicalPrayerNames[p.first] ?: p.first
+                        val isPrayerAllowed = isAthanEnabled[canonicalKey] ?: true
+                        if (p.third > now && isPrayerAllowed) {
+                            val exists = updatedList.any {
+                                Math.abs(it.optLong("timeMs", 0L) - p.third) < 60000L &&
+                                (it.optString("alarmType", "athan") == "athan" || it.optString("alarmType").isEmpty()) &&
+                                !it.optString("prayerKey").contains("prealert") &&
+                                !it.optString("prayerKey").contains("postalert") &&
+                                !it.optString("prayerKey").contains("khushu") &&
+                                !it.optString("prayerKey").startsWith("custom_")
+                            }
                             if (!exists) {
                                 val obj = JSONObject()
-                                val canonicalKey = canonicalPrayerNames[p.first] ?: p.first
                                 obj.put("prayerKey", canonicalKey)
                                 obj.put("prayerName", p.second)
                                 obj.put("timeMs", p.third)
                                 obj.put("isFajr", p.first == "fajr")
+                                obj.put("alarmType", "athan")
                                 updatedList.add(obj)
                             }
                         }
 
-                        if (prayerPreAlert) {
+                        if (prayerPreAlert && !hasBeforeSalahCustom) {
                             val preTimeMs = p.third - preAlertMinutes * 60000L
                             if (preTimeMs > now) {
                                 val preExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - preTimeMs) < 60000L && it.optString("prayerKey").contains("prealert") }
@@ -116,12 +159,13 @@ class ScheduleRenewalWorker(
                                     preObj.put("timeMs", preTimeMs)
                                     preObj.put("isFajr", p.first == "fajr")
                                     preObj.put("alarmType", "prealert")
+                                    preObj.put("soundType", preAlertSound)
                                     updatedList.add(preObj)
                                 }
                             }
                         }
 
-                        if (prayerPostAlert) {
+                        if (prayerPostAlert && !hasAfterSalahCustom) {
                             val postTimeMs = p.third + postAlertMinutes * 60000L
                             if (postTimeMs > now) {
                                 val postExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - postTimeMs) < 60000L && it.optString("prayerKey").contains("postalert") }
@@ -133,6 +177,7 @@ class ScheduleRenewalWorker(
                                     postObj.put("timeMs", postTimeMs)
                                     postObj.put("isFajr", p.first == "fajr")
                                     postObj.put("alarmType", "postalert")
+                                    postObj.put("soundType", postAlertSound)
                                     updatedList.add(postObj)
                                 }
                             }

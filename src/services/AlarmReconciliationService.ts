@@ -7,6 +7,8 @@ import { UnifiedNotificationOrchestrator } from '../domain/notifications/Unified
 import { NotificationScheduler } from './NotificationScheduler';
 import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
 import { AppSettings, PrayerTimes } from '../types';
+import { isAthanEnabled } from '../utils/athanEnabled';
+import { getPushSettings } from '../utils/pushNotificationService';
 
 export interface ReconciliationStatus {
   lastReconciledAt: string;
@@ -61,10 +63,11 @@ export class AlarmReconciliationService {
 
     const desiredAlarms: Array<{ key: string; name: string; timeMs: number; dateStr: string }> = [];
 
+    const pushSettings = getPushSettings();
     const processTimes = (dateObj: Date, dateStr: string, times: PrayerTimes) => {
       const keys = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
       for (const key of keys) {
-        if (!settings.adhanEnabled?.[key] || !times[key]) continue;
+        if (key === 'Sunrise' || !isAthanEnabled(key, settings, pushSettings) || !times[key]) continue;
         const timeStr = times[key];
         const minutes = parseTimeToMinutes(timeStr);
         const hours = Math.floor(minutes / 60);
