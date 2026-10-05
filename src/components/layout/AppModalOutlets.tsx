@@ -1,5 +1,5 @@
 import React, { Suspense, RefObject } from 'react';
-import { safeRemoveItem } from '../../utils/storage';
+import { safeRemoveItem, safeSetItem } from '../../utils/storage';
 import { safeLazy } from '../../utils/safeLazy';
 import { TabId, SettingsSubTabId, AppSettings, AlarmConfig } from '../../types';
 import { stopSpiritualSound } from '../../utils/spiritualAudio';
@@ -105,10 +105,17 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
             const snoozeMins = targetDate.getMinutes().toString().padStart(2, '0');
             const snoozeTime = `${snoozeHours}:${snoozeMins}`;
             const snoozeDay = targetDate.getDay();
+            const fireYear = targetDate.getFullYear();
+            const fireMonth = (targetDate.getMonth() + 1).toString().padStart(2, '0');
+            const fireDayStr = targetDate.getDate().toString().padStart(2, '0');
+            const fireDate = `${fireYear}-${fireMonth}-${fireDayStr}`; // 'YYYY-MM-DD'
 
             // Clean title of any previous (غفوة) tag
             const rawTitle = activeRingingAlarm.title || 'منبه';
             const cleanTitle = rawTitle.replace(/\s*\(غفوة\)/g, '').trim();
+
+            // The original alarm ID: if activeRingingAlarm was already a snooze, track its original ID
+            const originalId = activeRingingAlarm.snoozeOf || activeRingingAlarm.id;
 
             // Create a strictly FIXED-TIME one-shot alarm without relative prayer fields
             const snoozedAlarm: AlarmConfig = {
@@ -122,11 +129,21 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
               notifyMode: activeRingingAlarm.notifyMode || 'both',
               autoKhushu: activeRingingAlarm.autoKhushu,
               khushuDurationMinutes: activeRingingAlarm.khushuDurationMinutes,
+              oneShot: true,
+              snoozeOf: originalId,
+              fireDate: fireDate,
             };
 
             setCustomAlarms((prev: AlarmConfig[]) => {
-              const filtered = prev.filter(a => a.id !== activeRingingAlarm.id && !a.id.startsWith('snooze_'));
+              // onSnooze must NOT remove or rename the original alarm.
+              // Only remove an older snooze of the SAME original (snoozeOf === originalId or previous active snooze).
+              const filtered = prev.filter(a => {
+                if (a.snoozeOf && a.snoozeOf === originalId) return false;
+                if (a.id.startsWith('snooze_') && (a.id === activeRingingAlarm.id || a.snoozeOf === originalId)) return false;
+                return true;
+              });
               const nextAlarms = [...filtered, snoozedAlarm];
+              safeSetItem('salah_custom_alarms', JSON.stringify(nextAlarms));
               window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: nextAlarms }));
               return nextAlarms;
             });
@@ -136,9 +153,10 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
           }}
           onStop={() => {
             stopSpiritualSound(globalAudioRef);
-            if (activeRingingAlarm.id.startsWith('snooze_')) {
+            if (activeRingingAlarm.oneShot || activeRingingAlarm.snoozeOf || activeRingingAlarm.id.startsWith('snooze_')) {
               setCustomAlarms((prev: AlarmConfig[]) => {
                 const nextAlarms = prev.filter(a => a.id !== activeRingingAlarm.id);
+                safeSetItem('salah_custom_alarms', JSON.stringify(nextAlarms));
                 window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: nextAlarms }));
                 return nextAlarms;
               });

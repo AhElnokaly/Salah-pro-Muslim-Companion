@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -18,6 +19,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -915,6 +917,252 @@ class AthanAlarmPlugin : Plugin() {
     fun isNativeAthanRunning(call: PluginCall) {
         val ret = JSObject()
         ret.put("isRunning", AthanForegroundService.isServiceRunning)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun saveAthanFileChunk(call: PluginCall) {
+        val muezzinId = call.getString("muezzinId")
+        if (muezzinId.isNullOrBlank()) {
+            call.reject("Missing muezzinId")
+            return
+        }
+        val idRegex = Regex("^[A-Za-z0-9_-]{1,64}$")
+        if (!idRegex.matches(muezzinId)) {
+            call.reject("Invalid muezzinId: must match ^[A-Za-z0-9_-]{1,64}$")
+            return
+        }
+
+        val chunkBase64 = call.getString("chunkBase64")
+        if (chunkBase64 == null) {
+            call.reject("Missing chunkBase64")
+            return
+        }
+
+        val index = call.getInt("index", 0) ?: 0
+        val isLast = call.getBoolean("isLast", false) ?: false
+
+        val dir = File(context.filesDir, "athan")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val partFile = File(dir, "$muezzinId.part")
+        val audioFile = File(dir, "$muezzinId.audio")
+
+        try {
+            val bytes = Base64.decode(chunkBase64, Base64.DEFAULT)
+            // index == 0 truncates partFile; index > 0 appends to partFile
+            FileOutputStream(partFile, index > 0).use { fos ->
+                fos.write(bytes)
+                fos.flush()
+            }
+
+            if (isLast) {
+                val size = partFile.length()
+                if (size <= 10 * 1024 || size >= 25 * 1024 * 1024) {
+                    partFile.delete()
+                    call.reject("Invalid file size: $size bytes (must be > 10KB and < 25MB)")
+                    return
+                }
+
+                // Verify with MediaMetadataRetriever
+                val retriever = MediaMetadataRetriever()
+                var durationMs = 0L
+                try {
+                    retriever.setDataSource(partFile.absolutePath)
+                    val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    durationMs = durStr?.toLongOrNull() ?: 0L
+                } catch (e: Exception) {
+                    Log.e(TAG, "MediaMetadataRetriever failed on ${partFile.absolutePath}", e)
+                } finally {
+                    try {
+                        retriever.release()
+                    } catch (_: Exception) {}
+                }
+
+                if (durationMs <= 0L) {
+                    partFile.delete()
+                    call.reject("Corrupt audio file: duration <= 0")
+                    return
+                }
+
+                // Atomically rename
+                if (audioFile.exists()) {
+                    audioFile.delete()
+                }
+                val renamed = partFile.renameTo(audioFile)
+                if (!renamed) {
+                    partFile.copyTo(audioFile, overwrite = true)
+                    partFile.delete()
+                }
+
+                val ret = JSObject()
+                ret.put("path", audioFile.absolutePath)
+                ret.put("saved", true)
+                call.resolve(ret)
+            } else {
+                val ret = JSObject()
+                ret.put("saved", true)
+                ret.put("chunk", index)
+                call.resolve(ret)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving athan file chunk for $muezzinId at index $index", e)
+            try {
+                if (partFile.exists()) {
+                    partFile.delete()
+                }
+            } catch (_: Exception) {}
+            call.reject("Failed to save athan chunk: ${e.message}", e)
+        }
+    }
+
+    @PluginMethod
+    fun saveAthanFile(call: PluginCall) {
+        val type = call.getString("type") ?: "general"
+        val base64Data = call.getString("base64Data")
+        if (base64Data.isNullOrBlank()) {
+            call.reject("Missing base64Data")
+            return
+        }
+
+        val dir = File(context.filesDir, "athan")
+        if (!dir.exists()) dir.mkdirs()
+        val partFile = File(dir, "$type.part")
+        val audioFile = File(dir, "$type.audio")
+
+        try {
+            val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+            FileOutputStream(partFile, false).use { fos ->
+                fos.write(bytes)
+                fos.flush()
+            }
+
+            val size = partFile.length()
+            if (size <= 10 * 1024 || size >= 25 * 1024 * 1024) {
+                partFile.delete()
+                call.reject("Invalid file size: $size bytes (must be > 10KB and < 25MB)")
+                return
+            }
+
+            val retriever = MediaMetadataRetriever()
+            var durationMs = 0L
+            try {
+                retriever.setDataSource(partFile.absolutePath)
+                val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                durationMs = durStr?.toLongOrNull() ?: 0L
+            } catch (e: Exception) {
+                Log.e(TAG, "MediaMetadataRetriever failed on ${partFile.absolutePath}", e)
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Exception) {}
+            }
+
+            if (durationMs <= 0L) {
+                partFile.delete()
+                call.reject("Corrupt audio file: duration <= 0")
+                return
+            }
+
+            if (audioFile.exists()) audioFile.delete()
+            if (!partFile.renameTo(audioFile)) {
+                partFile.copyTo(audioFile, overwrite = true)
+                partFile.delete()
+            }
+
+            val ret = JSObject()
+            ret.put("path", audioFile.absolutePath)
+            ret.put("saved", true)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            if (partFile.exists()) partFile.delete()
+            call.reject("Failed to save athan file: ${e.message}", e)
+        }
+    }
+
+    @PluginMethod
+    fun setNativeAthanFiles(call: PluginCall) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        val keys = listOf("general", "fajr", "dhuhr", "asr", "maghrib", "isha")
+
+        val pathsObj = call.getObject("paths")
+
+        for (k in keys) {
+            var path: String? = pathsObj?.getString(k)
+            // Backward compatibility with old { generalPath, fajrPath }
+            if (path.isNullOrEmpty() && k == "general") {
+                path = call.getString("generalPath")
+            } else if (path.isNullOrEmpty() && k == "fajr") {
+                path = call.getString("fajrPath")
+            }
+
+            val prefKey = "athan_file_$k"
+            if (!path.isNullOrEmpty()) {
+                editor.putString(prefKey, path)
+            } else if (pathsObj != null || call.hasOption("${k}Path") || call.hasOption(k)) {
+                editor.remove(prefKey)
+            }
+        }
+        editor.apply()
+
+        // Delete files in filesDir/athan/ that are not referenced by any pref
+        try {
+            val referencedPaths = mutableSetOf<String>()
+            for (k in keys) {
+                val p = prefs.getString("athan_file_$k", null)
+                if (!p.isNullOrEmpty()) {
+                    try {
+                        referencedPaths.add(File(p).canonicalPath)
+                    } catch (_: Exception) {
+                        referencedPaths.add(p)
+                    }
+                }
+            }
+
+            val dir = File(context.filesDir, "athan")
+            if (dir.exists() && dir.isDirectory) {
+                dir.listFiles()?.forEach { f ->
+                    try {
+                        if (!referencedPaths.contains(f.canonicalPath) && !f.name.endsWith(".part")) {
+                            f.delete()
+                            Log.d(TAG, "Deleted unreferenced athan file: ${f.name}")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error cleaning unreferenced athan file: ${f.name}", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error during unreferenced athan file pruning", e)
+        }
+
+        val ret = JSObject()
+        ret.put("saved", true)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun getNativeAthanFiles(call: PluginCall) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val keys = listOf("general", "fajr", "dhuhr", "asr", "maghrib", "isha")
+        val ret = JSObject()
+        for (k in keys) {
+            val path = prefs.getString("athan_file_$k", null)
+            val info = JSObject()
+            info.put("path", path ?: "")
+            if (!path.isNullOrEmpty()) {
+                val f = File(path)
+                val exists = f.exists()
+                info.put("exists", exists)
+                info.put("sizeBytes", if (exists) f.length() else 0L)
+            } else {
+                info.put("exists", false)
+                info.put("sizeBytes", 0L)
+            }
+            ret.put(k, info)
+        }
         call.resolve(ret)
     }
 

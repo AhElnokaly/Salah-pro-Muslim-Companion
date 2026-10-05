@@ -272,6 +272,9 @@ export default function BackupSettingsTab({
 
       if (data.customAlarms) {
         safeSetItem('salah_custom_alarms', JSON.stringify(data.customAlarms));
+        try {
+          window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: data.customAlarms }));
+        } catch (_e) {}
         restoredCount++;
       }
       if (data.spiritualAlerts) {

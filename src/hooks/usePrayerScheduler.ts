@@ -54,7 +54,27 @@ export function usePrayerScheduler({
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
     const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
     if (saved !== null && Array.isArray(saved)) {
-      return saved;
+      // Cleanup expired one-shot / snooze alarms on app start
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+      const nowMins = today.getHours() * 60 + today.getMinutes();
+      const cleaned = saved.filter(a => {
+        if (!a.oneShot && !a.fireDate && !a.id.startsWith('snooze_')) return true;
+        if (a.fireDate) {
+          if (a.fireDate < todayStr) return false;
+          if (a.fireDate === todayStr && a.time) {
+            const [h, m] = a.time.split(':').map(Number);
+            if (!isNaN(h) && !isNaN(m) && (h * 60 + m) < (nowMins - 2)) return false;
+          }
+        } else if (a.oneShot || a.id.startsWith('snooze_')) {
+          return false;
+        }
+        return true;
+      });
+      if (cleaned.length !== saved.length) {
+        safeSetJSON('salah_custom_alarms', cleaned);
+      }
+      return cleaned;
     }
 
     // Initialize with canonical default alarms and migrate old salah_alerts if customized
@@ -224,7 +244,11 @@ export function usePrayerScheduler({
     // 2. Check Custom Alarms (Both Prayer-Relative & Fixed Times)
     customAlarms.forEach(alarm => {
       if (!alarm.enabled) return;
-      if (!alarm.days.includes(currentDay)) return;
+      if (alarm.oneShot) {
+        if (!alarm.fireDate || alarm.fireDate !== todayStr) return;
+      } else {
+        if (!alarm.days || !alarm.days.includes(currentDay)) return;
+      }
 
       const isRelative = alarm.type === 'prayer_relative' || (!alarm.type && !alarm.time && alarm.prayers);
 
@@ -286,7 +310,7 @@ export function usePrayerScheduler({
         triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
       }
 
-      if (primaryItem.alarm.id.startsWith('snooze_')) {
+      if (primaryItem.alarm.id.startsWith('snooze_') || primaryItem.alarm.oneShot) {
         setTimeout(() => {
           const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
           if (Array.isArray(currentList)) {
@@ -302,6 +326,16 @@ export function usePrayerScheduler({
         safeSetItem(secondaryItem.triggeredKey, 'true');
         // Secondary items trigger silently and skip overwriting the primary ringing modal
         triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer, true);
+        if (secondaryItem.alarm.id.startsWith('snooze_') || secondaryItem.alarm.oneShot) {
+          setTimeout(() => {
+            const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
+            if (Array.isArray(currentList)) {
+              const updated = currentList.filter(a => a.id !== secondaryItem.alarm.id);
+              safeSetJSON('salah_custom_alarms', updated);
+              window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updated }));
+            }
+          }, 1500);
+        }
       }
     }
   }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);
@@ -386,9 +420,10 @@ export function usePrayerScheduler({
           });
         };
 
-        const handleAlarmsChange = () => {
+        const handleAlarmsChange = (e?: Event) => {
           const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;
-          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settingsRef.current, targetDaysList, customAlarms).catch(err => {
+          const updatedAlarms = (e as CustomEvent)?.detail || customAlarms;
+          UnifiedNotificationOrchestrator.orchestratePrayerAlarms(settingsRef.current, targetDaysList, updatedAlarms).catch(err => {
             console.warn('[usePrayerScheduler] Notification re-orchestration on custom alarms change error:', err);
           });
         };

@@ -12,6 +12,7 @@ import { StorageFacade } from '../../domain/storage/StorageFacade';
 import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO } from '../../utils/audioStorage';
 import { stopAudioSafely } from '../../utils/audioUtils';
 import { resolveMuezzinId } from '../../utils/muezzinResolver';
+import { syncPrayerMuezzinsToNative } from '../../services/athanAlarmPlugin';
 import { getExactCountdown } from './prayerUtils';
 import { PrayerCityCountdownCard } from './PrayerCityCountdownCard';
 import { PrayerTimeRowItem } from './PrayerTimeRowItem';
@@ -260,6 +261,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
       if (propSetCurrentMuezzin) propSetCurrentMuezzin(val);
       safeSetItem('salah_general_muezzin', val);
     }
+    syncPrayerMuezzinsToNative().catch(() => {});
   };
 
   const onUpdateOffset = (prayer: PrayerName | 'Sunrise', amount: number) => {

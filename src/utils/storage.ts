@@ -6,6 +6,16 @@ export function safeSetItem(key: string, value: string): boolean {
   if (typeof localStorage === 'undefined') return false;
   try {
     localStorage.setItem(key, value);
+    if (
+      typeof window !== 'undefined' &&
+      (key.startsWith('salah_muezzin_') || key === 'salah_fajr_muezzin' || key === 'salah_general_muezzin')
+    ) {
+      try {
+        window.dispatchEvent(new CustomEvent('salah-muezzin-changed', { detail: { key, value } }));
+      } catch (_e) {
+        // ignore in test or unsupported environments
+      }
+    }
     return true;
   } catch (err) {
     console.error(`[safeSetItem] Failed to write key "${key}" to localStorage:`, err);

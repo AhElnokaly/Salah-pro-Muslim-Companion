@@ -274,6 +274,9 @@ export interface AlarmConfig {
   notifyMode?: AlarmNotifyMode;
   autoKhushu?: boolean;
   khushuDurationMinutes?: number;
+  oneShot?: boolean;
+  snoozeOf?: string;
+  fireDate?: string; // 'YYYY-MM-DD'
 }
 
 export interface SpiritualAlertRule {

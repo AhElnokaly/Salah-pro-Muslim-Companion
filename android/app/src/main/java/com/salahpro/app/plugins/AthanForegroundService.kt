@@ -67,8 +67,9 @@ class AthanForegroundService : Service() {
 
         val prayerName = intent?.getStringExtra(AthanAlarmReceiver.EXTRA_PRAYER_NAME) ?: "الصلاة"
         val isFajr = intent?.getBooleanExtra(AthanAlarmReceiver.EXTRA_IS_FAJR, false) ?: false
+        val rawPrayerKey = intent?.getStringExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY) ?: ""
 
-        Log.d(TAG, "Starting AthanForegroundService for $prayerName (isFajr: $isFajr)")
+        Log.d(TAG, "Starting AthanForegroundService for $prayerName (prayerKey: $rawPrayerKey, isFajr: $isFajr)")
 
         acquireWakeLock()
         createNotificationChannel()
@@ -76,7 +77,7 @@ class AthanForegroundService : Service() {
         val notification = buildNotification(prayerName)
         startForeground(NOTIFICATION_ID, notification)
 
-        playLocalAthanAudio(isFajr)
+        playLocalAthanAudio(isFajr, rawPrayerKey)
 
         // Set safety timeout of 3 minutes
         handler.removeCallbacks(stopRunnable)
@@ -85,57 +86,88 @@ class AthanForegroundService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun playLocalAthanAudio(isFajr: Boolean) {
+    private fun playLocalAthanAudio(isFajr: Boolean, rawPrayerKey: String = "") {
         try {
             mediaPlayer?.release()
             mediaPlayer = null
 
-            val prefs = getSharedPreferences("AthanAlarmPrefs", Context.MODE_PRIVATE)
-            val customFilePath = if (isFajr) {
-                prefs.getString("athan_file_fajr", null)
-            } else {
-                prefs.getString("athan_file_general", null)
+            val prefs = getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
+
+            val lowerKey = rawPrayerKey.lowercase().trim()
+            val normalizedPrayer = when {
+                lowerKey.contains("fajr") -> "fajr"
+                lowerKey.contains("dhuhr") -> "dhuhr"
+                lowerKey.contains("asr") -> "asr"
+                lowerKey.contains("maghrib") -> "maghrib"
+                lowerKey.contains("isha") -> "isha"
+                isFajr -> "fajr"
+                else -> ""
+            }
+
+            // Resolution order:
+            // 1. athan_file_<prayer>
+            // 2. athan_file_fajr (only if fajr)
+            // 3. athan_file_general
+            val candidateKeys = mutableListOf<String>()
+            if (normalizedPrayer.isNotEmpty()) {
+                candidateKeys.add("athan_file_$normalizedPrayer")
+            }
+            if ((isFajr || normalizedPrayer == "fajr") && !candidateKeys.contains("athan_file_fajr")) {
+                candidateKeys.add("athan_file_fajr")
+            }
+            if (!candidateKeys.contains("athan_file_general")) {
+                candidateKeys.add("athan_file_general")
             }
 
             var playedCustom = false
-            if (!customFilePath.isNullOrEmpty()) {
+            val prayerLogKey = if (normalizedPrayer.isNotEmpty()) normalizedPrayer else if (isFajr) "fajr" else "general"
+
+            for (candidateKey in candidateKeys) {
+                val customFilePath = prefs.getString(candidateKey, null)
+                if (customFilePath.isNullOrEmpty()) continue
+
                 val file = java.io.File(customFilePath)
-                if (file.exists() && file.length() > 0) {
-                    try {
-                        val mp = MediaPlayer()
-                        mp.setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .setUsage(AudioAttributes.USAGE_ALARM)
-                                .build()
-                        )
-                        mp.setDataSource(file.absolutePath)
-                        mp.prepare()
-                        mp.isLooping = false
-                        mp.setOnCompletionListener {
-                            Log.d(TAG, "Custom athan audio finished playing")
-                            stopAthanAndSelf()
-                        }
-                        mp.setOnErrorListener { _, what, extra ->
-                            Log.e(TAG, "MediaPlayer error on custom file: what=$what, extra=$extra")
-                            stopAthanAndSelf()
-                            true
-                        }
-                        mediaPlayer = mp
-                        mp.start()
-                        playedCustom = true
-                        Log.d(TAG, "Successfully started custom athan audio from: $customFilePath")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to play custom athan audio from file, falling back to raw", e)
-                        mediaPlayer?.release()
-                        mediaPlayer = null
+                if (!file.exists() || file.length() <= 0) continue
+
+                var localMp: MediaPlayer? = null
+                try {
+                    localMp = MediaPlayer()
+                    localMp.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .build()
+                    )
+                    localMp.setDataSource(file.absolutePath)
+                    localMp.prepare()
+                    localMp.isLooping = false
+                    localMp.setOnCompletionListener {
+                        Log.d(TAG, "Custom athan audio finished playing")
+                        stopAthanAndSelf()
                     }
+                    localMp.setOnErrorListener { _, what, extra ->
+                        Log.e(TAG, "MediaPlayer error on custom file: what=$what, extra=$extra")
+                        stopAthanAndSelf()
+                        true
+                    }
+                    mediaPlayer = localMp
+                    localMp.start()
+                    playedCustom = true
+                    Log.d(TAG, "[ATHAN] SOURCE=NATIVE ACTION=START TRACK=file:${file.name} PRAYER=$prayerLogKey")
+                    break
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to play custom athan audio from file: $customFilePath, falling back", e)
+                    try {
+                        localMp?.release()
+                    } catch (_: Exception) {}
+                    mediaPlayer = null
                 }
             }
 
             if (!playedCustom) {
                 val packageName = packageName
-                val rawResName = if (isFajr) "athan_fajr" else "athan_default"
+                val isFajrPrayer = isFajr || normalizedPrayer == "fajr"
+                val rawResName = if (isFajrPrayer) "athan_fajr" else "athan_default"
                 var resId = resources.getIdentifier(rawResName, "raw", packageName)
                 
                 if (resId == 0) {
@@ -151,6 +183,8 @@ class AthanForegroundService : Service() {
                 } else {
                     mediaPlayer = MediaPlayer.create(this, resId)
                 }
+
+                Log.d(TAG, "[ATHAN] SOURCE=NATIVE ACTION=START TRACK=raw:$rawResName PRAYER=$prayerLogKey")
 
                 mediaPlayer?.apply {
                     setAudioAttributes(

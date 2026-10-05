@@ -87,9 +87,29 @@ export interface AthanAlarmPlugin {
   downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
   stopAthan?(): Promise<{ stopped: boolean }>;
   isNativeAthanRunning?(): Promise<{ isRunning: boolean }>;
-  setNativeAthanFiles?(options: { generalPath?: string; fajrPath?: string }): Promise<{ saved: boolean }>;
-  saveAthanFile?(options: { type: 'general' | 'fajr'; base64Data: string }): Promise<{ path: string; saved: boolean }>;
+  setNativeAthanFiles?(options: {
+    paths?: NativeAthanPathsMap;
+    generalPath?: string;
+    fajrPath?: string;
+  }): Promise<{ saved: boolean }>;
+  saveAthanFile?(options: { type: string; base64Data: string }): Promise<{ path: string; saved: boolean }>;
+  saveAthanFileChunk?(options: {
+    muezzinId: string;
+    chunkBase64: string;
+    index: number;
+    isLast: boolean;
+  }): Promise<{ path?: string; saved: boolean; chunk?: number }>;
+  getNativeAthanFiles?(): Promise<Record<string, { path: string; exists: boolean; sizeBytes: number }>>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
+}
+
+export interface NativeAthanPathsMap {
+  general?: string;
+  fajr?: string;
+  dhuhr?: string;
+  asr?: string;
+  maghrib?: string;
+  isha?: string;
 }
 
 let lastScheduledOptions: any = null;
@@ -131,6 +151,20 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     },
     saveAthanFile: async () => {
       return { path: '', saved: true };
+    },
+    saveAthanFileChunk: async (options) => {
+      console.log('[AthanAlarm Plugin]: Web fallback saveAthanFileChunk:', options.muezzinId, options.index, options.isLast);
+      return { path: `/simulated/${options.muezzinId}.audio`, saved: true, chunk: options.index };
+    },
+    getNativeAthanFiles: async () => {
+      return {
+        general: { path: '', exists: false, sizeBytes: 0 },
+        fajr: { path: '', exists: false, sizeBytes: 0 },
+        dhuhr: { path: '', exists: false, sizeBytes: 0 },
+        asr: { path: '', exists: false, sizeBytes: 0 },
+        maghrib: { path: '', exists: false, sizeBytes: 0 },
+        isha: { path: '', exists: false, sizeBytes: 0 },
+      };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -341,7 +375,19 @@ export function buildNativePrayerTimeAlarms(
       const dayOfWeek = dayDate.getDay();
 
       customList.forEach((alarm) => {
-        if (!alarm.enabled || !alarm.days?.includes(dayOfWeek)) return;
+        if (!alarm.enabled) return;
+
+        // If oneShot is set, it must ONLY be scheduled for its specific fireDate (never weekly via days[])
+        if (alarm.oneShot) {
+          if (!alarm.fireDate) return;
+          const dayDateYear = dayDate.getFullYear();
+          const dayDateMonth = (dayDate.getMonth() + 1).toString().padStart(2, '0');
+          const dayDateDay = dayDate.getDate().toString().padStart(2, '0');
+          const dayDateStr = `${dayDateYear}-${dayDateMonth}-${dayDateDay}`;
+          if (dayDateStr !== alarm.fireDate) return;
+        } else {
+          if (!alarm.days?.includes(dayOfWeek)) return;
+        }
 
         // Fixed Time Custom Alarm
         if (alarm.type === 'fixed' || (!alarm.prayers?.length && alarm.time)) {
@@ -904,14 +950,279 @@ export async function cancelAllNativeAlarms(): Promise<boolean> {
   }
 }
 
-export async function setNativeAthanFiles(options: { generalPath?: string; fajrPath?: string }): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || !AthanAlarm.setNativeAthanFiles) return true;
+export const ATHAN_CHUNK_SIZE = 512 * 1024; // 512 KB
+
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(buffer).toString('base64');
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunk = 8192;
+  for (let i = 0; i < len; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, len)) as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+export function chunkBinaryData(
+  bytes: Uint8Array,
+  chunkSize: number = ATHAN_CHUNK_SIZE
+): { chunkBase64: string; index: number; isLast: boolean }[] {
+  const totalBytes = bytes.byteLength;
+  if (totalBytes === 0) {
+    return [{ chunkBase64: '', index: 0, isLast: true }];
+  }
+  const totalChunks = Math.ceil(totalBytes / chunkSize);
+  const chunks: { chunkBase64: string; index: number; isLast: boolean }[] = [];
+  for (let index = 0; index < totalChunks; index++) {
+    const start = index * chunkSize;
+    const end = Math.min(start + chunkSize, totalBytes);
+    const slice = bytes.subarray(start, end);
+    const chunkBase64 = arrayBufferToBase64(slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength));
+    const isLast = index === totalChunks - 1;
+    chunks.push({ chunkBase64, index, isLast });
+  }
+  return chunks;
+}
+
+export async function setNativeAthanFiles(options: {
+  paths?: NativeAthanPathsMap;
+  generalPath?: string;
+  fajrPath?: string;
+}): Promise<boolean> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return true;
+  if (!plugin.setNativeAthanFiles) return true;
   try {
-    const res = await AthanAlarm.setNativeAthanFiles(options);
+    const res = await plugin.setNativeAthanFiles(options);
     return res?.saved ?? false;
   } catch (err) {
-    console.warn('[AthanAlarmPlugin] setNativeAthanFiles error:', err);
+    console.warn('[ATHAN] SOURCE=SYNC [AthanAlarmPlugin] setNativeAthanFiles error:', err);
     return false;
+  }
+}
+
+export async function getNativeAthanFiles(): Promise<Record<string, { path: string; exists: boolean; sizeBytes: number }> | null> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return null;
+  if (!plugin.getNativeAthanFiles) return null;
+  try {
+    return await plugin.getNativeAthanFiles();
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=SYNC [AthanAlarmPlugin] getNativeAthanFiles error:', err);
+    return null;
+  }
+}
+
+export async function saveAthanFileChunk(options: {
+  muezzinId: string;
+  chunkBase64: string;
+  index: number;
+  isLast: boolean;
+}): Promise<{ path?: string; saved: boolean; chunk?: number } | null> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return null;
+  if (!plugin.saveAthanFileChunk) return null;
+  try {
+    return await plugin.saveAthanFileChunk(options);
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=SYNC [AthanAlarmPlugin] saveAthanFileChunk error:', err);
+    return null;
+  }
+}
+
+let syncInProgressPromise: Promise<NativeAthanPathsMap | null> | null = null;
+
+export async function syncPrayerMuezzinsToNative(): Promise<NativeAthanPathsMap | null> {
+  if (syncInProgressPromise) {
+    return syncInProgressPromise;
+  }
+
+  syncInProgressPromise = (async () => {
+    try {
+      const plugin = athanPluginBridgeForTesting || AthanAlarm;
+      if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) {
+        return null;
+      }
+      if (!plugin.saveAthanFileChunk || !plugin.setNativeAthanFiles) {
+        console.warn('[ATHAN] SOURCE=SYNC ACTION=SKIP REASON=NO_PLUGIN_METHOD');
+        return null;
+      }
+
+      const { resolveMuezzinId } = await import('../utils/muezzinResolver');
+      const { defaultMuezzins, archiveMuezzins, getCustomAudios, getAudioUrl } = await import('../utils/audioStorage');
+      const { safeGetItem, safeSetItem } = await import('../utils/storage');
+
+      const prayers: { key: keyof NativeAthanPathsMap; prayerName: string; isFajr: boolean }[] = [
+        { key: 'fajr', prayerName: 'Fajr', isFajr: true },
+        { key: 'dhuhr', prayerName: 'Dhuhr', isFajr: false },
+        { key: 'asr', prayerName: 'Asr', isFajr: false },
+        { key: 'maghrib', prayerName: 'Maghrib', isFajr: false },
+        { key: 'isha', prayerName: 'Isha', isFajr: false },
+        { key: 'general', prayerName: 'general', isFajr: false },
+      ];
+
+      // 1. Resolve muezzin id for each prayer + general
+      const prayerMuezzinMap: Record<keyof NativeAthanPathsMap, { muezzinId: string; isFajr: boolean }> = {
+        fajr: { muezzinId: resolveMuezzinId('Fajr'), isFajr: true },
+        dhuhr: { muezzinId: resolveMuezzinId('Dhuhr'), isFajr: false },
+        asr: { muezzinId: resolveMuezzinId('Asr'), isFajr: false },
+        maghrib: { muezzinId: resolveMuezzinId('Maghrib'), isFajr: false },
+        isha: { muezzinId: resolveMuezzinId('Isha'), isFajr: false },
+        general: {
+          muezzinId: safeGetItem('salah_general_muezzin') || resolveMuezzinId('Dhuhr') || 'prayer_default',
+          isFajr: false,
+        },
+      };
+
+      // 2. DEDUPE by muezzin id: transfer each distinct muezzin once
+      const uniqueMuezzins = new Map<string, { muezzinId: string; isFajr: boolean }>();
+      for (const p of prayers) {
+        const item = prayerMuezzinMap[p.key];
+        if (!uniqueMuezzins.has(item.muezzinId)) {
+          uniqueMuezzins.set(item.muezzinId, item);
+        }
+      }
+
+      const customTracks = await getCustomAudios().catch(() => []);
+      const allTracks = [...defaultMuezzins, ...archiveMuezzins, ...customTracks];
+
+      // Retrieve currently saved native files to check if cached files still exist on disk
+      let nativeFiles: Record<string, { path: string; exists: boolean; sizeBytes: number }> | null = null;
+      if (plugin.getNativeAthanFiles) {
+        try {
+          nativeFiles = await plugin.getNativeAthanFiles();
+        } catch (_e) {
+          // ignore
+        }
+      }
+
+      const resolvedPathsByMuezzinId = new Map<string, string>();
+
+      for (const [muezzinId, { isFajr }] of uniqueMuezzins.entries()) {
+        try {
+          const track = allTracks.find(t => t.id === muezzinId)
+            || defaultMuezzins.find(t => t.isFajr === isFajr)
+            || defaultMuezzins[0];
+
+          const resolvedUrl = await getAudioUrl(track.url, track.id, isFajr);
+          const isLocalTrack = resolvedUrl.startsWith('blob:') || resolvedUrl.startsWith('data:') || resolvedUrl.startsWith('/');
+          const isOnline = typeof navigator !== 'undefined' ? (navigator.onLine ?? true) : true;
+
+          // Skip if offline and audio is not local
+          if (!isLocalTrack && !isOnline) {
+            console.log(`[ATHAN] SOURCE=SYNC ACTION=SKIP REASON=OFFLINE MUEZZIN=${muezzinId}`);
+            continue;
+          }
+
+          let resp: Response;
+          try {
+            resp = await fetch(resolvedUrl);
+            if (!resp.ok) {
+              console.warn(`[ATHAN] SOURCE=SYNC ACTION=SKIP REASON=FETCH_HTTP_${resp.status} MUEZZIN=${muezzinId}`);
+              continue;
+            }
+          } catch (fetchErr) {
+            if (!isOnline) {
+              console.log(`[ATHAN] SOURCE=SYNC ACTION=SKIP REASON=OFFLINE MUEZZIN=${muezzinId}`);
+            } else {
+              console.warn(`[ATHAN] SOURCE=SYNC ACTION=SKIP REASON=FETCH_ERROR MUEZZIN=${muezzinId}:`, fetchErr);
+            }
+            continue;
+          }
+
+          const blob = await resp.blob();
+          const markerKey = `salah_native_athan_${muezzinId}`;
+          const pathMarkerKey = `salah_native_athan_path_${muezzinId}`;
+          const savedMarker = safeGetItem(markerKey);
+          const savedPath = safeGetItem(pathMarkerKey);
+          const sizeStr = blob.size.toString();
+
+          // Check if native already has the same ID (by size marker & verification)
+          if (savedMarker === sizeStr && savedPath) {
+            let fileStillExists = true;
+            if (nativeFiles) {
+              const matchedEntry = Object.values(nativeFiles).find(entry => entry.path === savedPath);
+              if (matchedEntry && !matchedEntry.exists) {
+                fileStillExists = false;
+              }
+            }
+            if (fileStillExists) {
+              console.log(`[ATHAN] SOURCE=SYNC ACTION=REUSE MUEZZIN=${muezzinId} SIZE=${blob.size}`);
+              resolvedPathsByMuezzinId.set(muezzinId, savedPath);
+              continue;
+            }
+          }
+
+          const arrayBuffer = await blob.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          const chunks = chunkBinaryData(bytes, ATHAN_CHUNK_SIZE);
+
+          const sanitizedId = muezzinId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64) || 'athan';
+          let finalPath = '';
+
+          for (const chunk of chunks) {
+            const res = await plugin.saveAthanFileChunk({
+              muezzinId: sanitizedId,
+              chunkBase64: chunk.chunkBase64,
+              index: chunk.index,
+              isLast: chunk.isLast,
+            });
+            if (chunk.isLast && res?.path) {
+              finalPath = res.path;
+            }
+          }
+
+          if (finalPath) {
+            safeSetItem(markerKey, sizeStr);
+            safeSetItem(pathMarkerKey, finalPath);
+            resolvedPathsByMuezzinId.set(muezzinId, finalPath);
+            console.log(`[ATHAN] SOURCE=SYNC ACTION=SAVED MUEZZIN=${muezzinId} CHUNKS=${chunks.length} PATH=${finalPath}`);
+          }
+        } catch (mErr) {
+          console.warn(`[ATHAN] SOURCE=SYNC ACTION=ERROR MUEZZIN=${muezzinId}:`, mErr);
+        }
+      }
+
+      // 3. Assemble paths map
+      const pathsMap: NativeAthanPathsMap = {};
+      for (const p of prayers) {
+        const item = prayerMuezzinMap[p.key];
+        const pPath = resolvedPathsByMuezzinId.get(item.muezzinId);
+        if (pPath) {
+          pathsMap[p.key] = pPath;
+        }
+      }
+
+      // 4. ONE setNativeAthanFiles call
+      await plugin.setNativeAthanFiles({ paths: pathsMap });
+      console.log('[ATHAN] SOURCE=SYNC ACTION=COMPLETE PATHS=', pathsMap);
+      return pathsMap;
+    } catch (err) {
+      console.warn('[ATHAN] SOURCE=SYNC ACTION=FAIL:', err);
+      return null;
+    } finally {
+      syncInProgressPromise = null;
+    }
+  })();
+
+  return syncInProgressPromise;
+}
+
+export async function syncMuezzinIdToNative(
+  type?: 'general' | 'fajr',
+  _muezzinId?: string
+): Promise<string | null> {
+  try {
+    const paths = await syncPrayerMuezzinsToNative();
+    if (!paths) return null;
+    if (type === 'fajr') return paths.fajr || paths.general || null;
+    return paths.general || paths.fajr || null;
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=SYNC syncMuezzinIdToNative delegation error:', err);
+    return null;
   }
 }
 
@@ -919,7 +1230,9 @@ export async function syncAthanFileToNative(
   type: 'general' | 'fajr',
   audioUrlOrBlob: string | Blob
 ): Promise<string | null> {
-  if (!Capacitor.isNativePlatform() || !AthanAlarm.saveAthanFile) return null;
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return null;
+  if (!plugin.saveAthanFileChunk && !plugin.saveAthanFile) return null;
   try {
     let blob: Blob;
     if (typeof audioUrlOrBlob === 'string') {
@@ -929,39 +1242,49 @@ export async function syncAthanFileToNative(
       blob = audioUrlOrBlob;
     }
 
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const res = reader.result as string;
-        const base64 = res.includes(',') ? res.split(',')[1] : res;
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    const res = await AthanAlarm.saveAthanFile({ type, base64Data });
-    console.log(`[AthanAlarm] Synced ${type} athan audio to native file:`, res.path);
-    return res.path;
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunks = chunkBinaryData(bytes, ATHAN_CHUNK_SIZE);
+    let finalPath = '';
+    for (const chunk of chunks) {
+      if (plugin.saveAthanFileChunk) {
+        const res = await plugin.saveAthanFileChunk({
+          muezzinId: type,
+          chunkBase64: chunk.chunkBase64,
+          index: chunk.index,
+          isLast: chunk.isLast,
+        });
+        if (chunk.isLast && res?.path) finalPath = res.path;
+      }
+    }
+    return finalPath || null;
   } catch (err) {
-    console.warn(`[AthanAlarm] Failed to sync ${type} athan to native:`, err);
+    console.warn(`[ATHAN] SOURCE=SYNC Failed to sync ${type} athan to native:`, err);
     return null;
   }
 }
 
-export async function syncMuezzinIdToNative(type: 'general' | 'fajr', muezzinId: string): Promise<string | null> {
-  if (!Capacitor.isNativePlatform()) return null;
+// 4. Deferred app start sync & event listeners
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncPrayerMuezzinsToNative().catch((err) => {
+      console.warn('[ATHAN] SOURCE=SYNC App start sync error:', err);
+    });
+  }, 3000);
+
+  let debouncedSyncTimeout: any = null;
+  const scheduleDebouncedSync = () => {
+    if (debouncedSyncTimeout) clearTimeout(debouncedSyncTimeout);
+    debouncedSyncTimeout = setTimeout(() => {
+      syncPrayerMuezzinsToNative().catch(() => {});
+    }, 500);
+  };
+
   try {
-    const { defaultMuezzins, archiveMuezzins, getCustomAudios, getAudioUrl } = await import('../utils/audioStorage');
-    const customTracks = await getCustomAudios().catch(() => []);
-    const tracks = [...defaultMuezzins, ...archiveMuezzins, ...customTracks];
-    const isFajr = type === 'fajr';
-    const track = tracks.find(t => t.id === muezzinId) || defaultMuezzins.find(t => t.isFajr === isFajr) || defaultMuezzins[0];
-    const resolvedUrl = await getAudioUrl(track.url, track.id, isFajr);
-    return await syncAthanFileToNative(type, resolvedUrl);
-  } catch (err) {
-    console.warn(`[AthanAlarm] Error syncing muezzin ID ${muezzinId} to native:`, err);
-    return null;
+    window.addEventListener('salah-muezzin-changed', scheduleDebouncedSync);
+    window.addEventListener('salah-muezzin-downloaded', scheduleDebouncedSync);
+  } catch (_e) {
+    // ignore
   }
 }
 

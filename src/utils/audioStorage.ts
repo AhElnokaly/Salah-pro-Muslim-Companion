@@ -55,6 +55,9 @@ export const defaultMuezzins: AudioTrack[] = [
  * Initializes the IndexedDB database for local audio storage.
  */
 export function initAudioDB(): Promise<IDBDatabase> {
+  if (typeof indexedDB === 'undefined') {
+    return Promise.reject(new Error('IndexedDB not supported'));
+  }
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -94,7 +97,16 @@ export async function downloadAndSaveAudio(track: AudioTrack): Promise<string> {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.put(record);
-    request.onsuccess = () => resolve(`db://${dbKey}`);
+    request.onsuccess = () => {
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('salah-muezzin-downloaded', { detail: { id: track.id } }));
+        } catch (_e) {
+          // ignore
+        }
+      }
+      resolve(`db://${dbKey}`);
+    };
     request.onerror = () => reject(request.error);
   });
 }
