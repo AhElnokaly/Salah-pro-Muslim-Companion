@@ -13,6 +13,8 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 
 class AthanAlarmReceiver : BroadcastReceiver() {
 
@@ -32,6 +34,38 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         const val KHUSHU_CHANNEL_ID = "athan_khushu_channel"
         const val CUSTOM_ALARM_CHANNEL_ID = "athan_custom_alarm_channel_v3"
         const val CUSTOM_ALARM_SILENT_CHANNEL_ID = "athan_custom_silent_channel_v3"
+
+        fun logFireEvent(
+            context: Context,
+            prayerName: String,
+            prayerKey: String,
+            alarmType: String,
+            decision: String,
+            reason: String
+        ) {
+            try {
+                val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
+                val rawJson = prefs.getString("athan_fire_events", "[]") ?: "[]"
+                val existingArray = JSONArray(rawJson)
+                val newEvent = JSONObject().apply {
+                    put("timestampMs", System.currentTimeMillis())
+                    put("prayerName", prayerName)
+                    put("prayerKey", prayerKey)
+                    put("alarmType", alarmType)
+                    put("decision", decision)
+                    put("reason", reason)
+                }
+                val updatedArray = JSONArray()
+                updatedArray.put(newEvent)
+                val maxEvents = 25
+                for (i in 0 until Math.min(existingArray.length(), maxEvents - 1)) {
+                    updatedArray.put(existingArray.getJSONObject(i))
+                }
+                prefs.edit().putString("athan_fire_events", updatedArray.toString()).apply()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to log athan fire event", e)
+            }
+        }
 
         fun getRawName(soundType: String): String {
             val clean = soundType.lowercase().trim().replace("-", "_")
@@ -116,6 +150,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             }
+            logFireEvent(context, prayerName, prayerKey, "custom", "played", "custom_alarm_notification (sound: $soundType)")
             return
         }
 
@@ -123,6 +158,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
             val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
             showPreAlertNotification(context, prayerName, prayerKey, soundType, notifyMode)
+            logFireEvent(context, prayerName, prayerKey, "prealert", "played", "prealert_notification (sound: $soundType)")
             return
         }
 
@@ -130,6 +166,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
             val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
             showPostAlertNotification(context, prayerName, prayerKey, soundType, notifyMode)
+            logFireEvent(context, prayerName, prayerKey, "postalert", "played", "postalert_notification (sound: $soundType)")
             return
         }
 
@@ -138,6 +175,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             val khushuMode = intent.getStringExtra(EXTRA_KHUSHU_MODE) ?: "silent"
             KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes)
             showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+            logFireEvent(context, prayerName, prayerKey, "khushu", "played", "khushu_activated (mode: $khushuMode, duration: ${durationMinutes}m)")
             return
         }
 
@@ -152,6 +190,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val isAthanEnabled = prefs.getBoolean("athan_enabled_$canonicalPrayer", true)
         if (!isAthanEnabled) {
             Log.d(TAG, "Athan is disabled for prayer $canonicalPrayer ($prayerKey); skipping AthanForegroundService.")
+            logFireEvent(context, prayerName, prayerKey, "athan", "skipped", "athan_disabled_in_prefs (athan_enabled_$canonicalPrayer is false)")
             return
         }
 
@@ -167,8 +206,10 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             } else {
                 context.startService(serviceIntent)
             }
+            logFireEvent(context, prayerName, prayerKey, "athan", "played", "foreground_service_started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start AthanForegroundService", e)
+            logFireEvent(context, prayerName, prayerKey, "athan", "skipped", "foreground_service_failed: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 

@@ -1225,6 +1225,93 @@ class AthanAlarmPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getAlarmDiagnostics(call: PluginCall) {
+        val context = context
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val usageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            context.getSystemService(Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
+        } else null
+
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val ret = JSObject()
+
+        // 1. Saved alarms from SharedPreferences
+        val rawJson = prefs.getString(KEY_SAVED_ALARMS, "[]") ?: "[]"
+        val scheduledIds = prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet()) ?: emptySet()
+        val alarmsArray = JSArray()
+        try {
+            val parsedArray = JSONArray(rawJson)
+            for (i in 0 until parsedArray.length()) {
+                val item = parsedArray.getJSONObject(i)
+                val timeMs = item.optLong("timeMs", 0L)
+                val prayerKey = item.optString("prayerKey", "")
+                val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
+                val jsItem = JSObject()
+                jsItem.put("requestCode", reqCode)
+                jsItem.put("prayerKey", prayerKey)
+                jsItem.put("prayerName", item.optString("prayerName", ""))
+                jsItem.put("timeMs", timeMs)
+                jsItem.put("isFajr", item.optBoolean("isFajr", false))
+                jsItem.put("alarmType", item.optString("alarmType", "athan"))
+                jsItem.put("soundType", item.optString("soundType", "reminder"))
+                jsItem.put("isCurrentlyScheduled", scheduledIds.contains(reqCode.toString()))
+                alarmsArray.put(jsItem)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getAlarmDiagnostics parsing saved alarms", e)
+        }
+        ret.put("savedAlarms", alarmsArray)
+
+        // 2. Next system alarm clock (from AlarmManager.getNextAlarmClock)
+        val nextAlarmClockMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            alarmManager?.nextAlarmClock?.triggerTime ?: 0L
+        } else 0L
+        ret.put("nextAlarmClockMs", nextAlarmClockMs)
+
+        // 3. Fire events log
+        val fireEventsJson = prefs.getString("athan_fire_events", "[]") ?: "[]"
+        val fireEventsArray = JSArray()
+        try {
+            val parsedEvents = JSONArray(fireEventsJson)
+            for (i in 0 until parsedEvents.length()) {
+                val eventObj = parsedEvents.getJSONObject(i)
+                val jsEvent = JSObject()
+                jsEvent.put("timestampMs", eventObj.optLong("timestampMs", 0L))
+                jsEvent.put("prayerName", eventObj.optString("prayerName", ""))
+                jsEvent.put("prayerKey", eventObj.optString("prayerKey", ""))
+                jsEvent.put("alarmType", eventObj.optString("alarmType", ""))
+                jsEvent.put("decision", eventObj.optString("decision", ""))
+                jsEvent.put("reason", eventObj.optString("reason", ""))
+                fireEventsArray.put(jsEvent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getAlarmDiagnostics parsing fire events", e)
+        }
+        ret.put("fireEvents", fireEventsArray)
+
+        // 4. Power & Battery Optimization
+        val isIgnoringBatteryOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        } else true
+        ret.put("isIgnoringBatteryOptimizations", isIgnoringBatteryOptimizations)
+
+        // 5. Exact alarm permission
+        val canScheduleExactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() ?: false
+        } else true
+        ret.put("canScheduleExactAlarms", canScheduleExactAlarms)
+
+        // 6. App standby bucket
+        val standbyBucket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            usageStatsManager?.appStandbyBucket ?: -1
+        } else -1
+        ret.put("standbyBucket", standbyBucket)
+
+        call.resolve(ret)
+    }
+
+    @PluginMethod
     fun canRequestPackageInstalls(call: PluginCall) {
         val context = context
         val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

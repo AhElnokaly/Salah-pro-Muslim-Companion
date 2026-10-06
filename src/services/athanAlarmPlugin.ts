@@ -102,7 +102,37 @@ export interface AthanAlarmPlugin {
   getNativeAthanFiles?(): Promise<Record<string, { path: string; exists: boolean; sizeBytes: number }>>;
   listAthanCache?(): Promise<Record<string, { exists: boolean; sizeBytes: number }>>;
   getLastAthanPlay?(): Promise<LastAthanPlayRecord>;
+  getAlarmDiagnostics?(): Promise<AlarmDiagnosticsResult>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
+}
+
+export interface SavedNativeAlarmItem {
+  requestCode: number;
+  prayerKey: string;
+  prayerName: string;
+  timeMs: number;
+  alarmType: string;
+  soundType?: string;
+  isFajr?: boolean;
+  isCurrentlyScheduled?: boolean;
+}
+
+export interface AthanFireEventRecord {
+  timestampMs: number;
+  prayerName: string;
+  prayerKey: string;
+  alarmType: string;
+  decision: 'played' | 'skipped' | string;
+  reason: string;
+}
+
+export interface AlarmDiagnosticsResult {
+  savedAlarms: SavedNativeAlarmItem[];
+  nextAlarmClockMs: number;
+  fireEvents: AthanFireEventRecord[];
+  isIgnoringBatteryOptimizations: boolean;
+  canScheduleExactAlarms: boolean;
+  standbyBucket: number;
 }
 
 export interface LastAthanPlayRecord {
@@ -181,6 +211,16 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     },
     getLastAthanPlay: async () => {
       return { hasRecord: false };
+    },
+    getAlarmDiagnostics: async () => {
+      return {
+        savedAlarms: [],
+        nextAlarmClockMs: 0,
+        fireEvents: [],
+        isIgnoringBatteryOptimizations: true,
+        canScheduleExactAlarms: true,
+        standbyBucket: 10,
+      };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -1148,6 +1188,18 @@ export async function getLastAthanPlay(): Promise<LastAthanPlayRecord | null> {
     return await plugin.getLastAthanPlay();
   } catch (err) {
     console.warn('[ATHAN] SOURCE=SYNC [AthanAlarmPlugin] getLastAthanPlay error:', err);
+    return null;
+  }
+}
+
+export async function getAlarmDiagnostics(): Promise<AlarmDiagnosticsResult | null> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return null;
+  if (!plugin.getAlarmDiagnostics) return null;
+  try {
+    return await plugin.getAlarmDiagnostics();
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getAlarmDiagnostics error:', err);
     return null;
   }
 }

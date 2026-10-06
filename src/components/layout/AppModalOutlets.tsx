@@ -13,6 +13,7 @@ const QuickSettingsModal = safeLazy(() => import('../QuickSettingsModal').then(m
 const PostOnboardingWelcomeModal = safeLazy(() => import('../PostOnboardingWelcomeModal'));
 const SpiritualSearchModal = safeLazy(() => import('../SpiritualSearchModal'));
 const VersionInfoModal = safeLazy(() => import('../VersionInfoModal'));
+const AthanDiagnosticsModal = safeLazy(() => import('../AthanDiagnosticsModal').then(m => ({ default: m.AthanDiagnosticsModal })));
 
 export interface AppModalOutletsProps {
   showPwaInstallGuide: boolean;
@@ -41,6 +42,8 @@ export interface AppModalOutletsProps {
   setActiveTab: (tab: TabId) => void;
   setActiveSettingsSubTab: (subTab: SettingsSubTabId) => void;
   setToastMessage: (msg: string | null) => void;
+  isDiagnosticsModalOpen?: boolean;
+  setIsDiagnosticsModalOpen?: (open: boolean) => void;
 }
 
 export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
@@ -70,6 +73,8 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
   setActiveTab,
   setActiveSettingsSubTab,
   setToastMessage,
+  isDiagnosticsModalOpen,
+  setIsDiagnosticsModalOpen,
 }) => {
   return (
     <Suspense fallback={null}>
@@ -226,6 +231,15 @@ export const AppModalOutlets: React.FC<AppModalOutletsProps> = ({
         <VersionInfoModal
           isOpen={isVersionModalOpen}
           onClose={() => setIsVersionModalOpen(false)}
+        />
+      )}
+
+      {/* Athan & Alarms Diagnostics Modal */}
+      {isDiagnosticsModalOpen && setIsDiagnosticsModalOpen && (
+        <AthanDiagnosticsModal
+          isOpen={isDiagnosticsModalOpen}
+          onClose={() => setIsDiagnosticsModalOpen(false)}
+          setToastMessage={setToastMessage}
         />
       )}
     </Suspense>

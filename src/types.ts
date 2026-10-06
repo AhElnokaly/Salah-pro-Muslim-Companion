@@ -319,7 +319,7 @@ export interface MuezzinOption {
 // Prayer Times Type
 // ============================================
 
-export type TabId = 'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon';
+export type TabId = 'home' | 'salah' | 'quran' | 'adhkar' | 'qibla' | 'fasting' | 'settings' | 'calendar' | 'widgets' | 'alarms' | 'khushu' | 'analytics' | 'moon' | 'diagnostics';
 
 export type SettingsSubTabId = 'qada' | 'prayer' | 'adhan' | 'calendar' | 'theme' | 'location' | 'backup' | 'duas' | 'dashboard' | 'smartNotifications';
 

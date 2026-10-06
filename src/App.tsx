@@ -65,6 +65,7 @@ export default function App() {
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState<SettingsSubTabId>('prayer');
   const [isTourModalOpen, setIsTourModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<AppReleaseInfo | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => safeGetItem('salah_show_post_onboarding_welcome') === 'true');
   const [notificationsCount, setNotificationsCount] = useState<number>(0);
@@ -294,6 +295,7 @@ export default function App() {
       { id: 'isSidebarOpen', isOpen: isSidebarOpen, close: () => setIsSidebarOpen(false) },
       { id: 'isQuickSettingsOpen', isOpen: isQuickSettingsOpen, close: () => setIsQuickSettingsOpen(false) },
       { id: 'isTourModalOpen', isOpen: isTourModalOpen, close: () => setIsTourModalOpen(false) },
+      { id: 'isDiagnosticsModalOpen', isOpen: isDiagnosticsModalOpen, close: () => setIsDiagnosticsModalOpen(false) },
       { id: 'availableUpdate', isOpen: Boolean(availableUpdate), close: () => setAvailableUpdate(null) },
       { id: 'isVersionModalOpen', isOpen: isVersionModalOpen, close: () => setIsVersionModalOpen(false) },
       { id: 'showSpiritualModal', isOpen: showSpiritualModal, close: () => setShowSpiritualModal(false) },
@@ -461,6 +463,7 @@ export default function App() {
           gregorianStr={gregorianStr}
           now={now}
           toArabicNumbers={toArabicNumbers}
+          setToastMessage={setToastMessage}
         />
       </main>
 
@@ -481,6 +484,7 @@ export default function App() {
         handleInstallApp={handleInstallApp}
         handleShareApp={handleShareApp}
         setToastMessage={setToastMessage}
+        setIsDiagnosticsModalOpen={setIsDiagnosticsModalOpen}
       />
 
       {/* 3. Rebalanced Fixed Bottom Navigation with Central FAB Radial Menu */}
@@ -552,6 +556,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         setActiveSettingsSubTab={setActiveSettingsSubTab}
         setToastMessage={setToastMessage}
+        isDiagnosticsModalOpen={isDiagnosticsModalOpen}
+        setIsDiagnosticsModalOpen={setIsDiagnosticsModalOpen}
       />
 
       {/* GitHub In-App Update Alert Modal */}

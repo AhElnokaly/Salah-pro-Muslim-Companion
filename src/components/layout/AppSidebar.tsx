@@ -22,6 +22,7 @@ import {
   Sunrise,
   ListChecks,
   MoreHorizontal,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TabId, SettingsSubTabId, AppSettings } from '../../types';
@@ -78,6 +79,7 @@ const WORSHIP_NAV_GROUPS: { key: string; title: string; icon: React.ElementType;
       { id: 'analytics', label: 'جدول الاستخدام والإتقان 📊', icon: BarChart3 },
       { id: 'moon', label: 'أطوار ومنازل القمر 🌙✨', icon: Moon },
       { id: 'widgets', label: 'أدوات الشاشة الذكية (Widgets) 📱', icon: Smartphone },
+      { id: 'diagnostics', label: 'تشخيص الأذان', icon: Activity },
     ],
   },
 ];
@@ -111,6 +113,7 @@ export interface AppSidebarProps {
   handleInstallApp: () => void;
   handleShareApp: () => void;
   setToastMessage: (msg: string | null) => void;
+  setIsDiagnosticsModalOpen?: (open: boolean) => void;
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -129,6 +132,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   handleInstallApp,
   handleShareApp,
   setToastMessage,
+  setIsDiagnosticsModalOpen,
 }) => {
   // Which nav group contains the currently active tab — that group opens by default,
   // so the sidebar shows where you already are instead of dumping every item on screen.
@@ -267,6 +271,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 </div>
               </button>
 
+              {/* Prominent Diagnostics Button in Sidebar */}
+              <button
+                onClick={() => {
+                  setActiveTab('diagnostics');
+                  setIsSidebarOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-transparent dark:from-purple-500/20 dark:via-purple-500/10 dark:to-transparent border border-purple-200/80 dark:border-purple-800/50 text-purple-700 dark:text-purple-300 font-extrabold hover:bg-purple-100/60 dark:hover:bg-purple-900/40 transition-all cursor-pointer shadow-xs active:scale-98"
+                aria-label="تشخيص الأذان"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black">تشخيص الأذان</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">فحص المنبهات، قيود البطارية، ونسخ تقرير الفحص 📋</div>
+                  </div>
+                </div>
+              </button>
+
               {/* Worship Navigation — grouped into collapsible categories instead of one long list */}
               <div className="space-y-3">
                 {WORSHIP_NAV_GROUPS.map(group => (
@@ -331,6 +355,23 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     </button>
                   );
                 })}
+
+                {/* Direct Diagnostics Link inside Settings */}
+                <button
+                  onClick={() => {
+                    if (setIsDiagnosticsModalOpen) {
+                      setIsDiagnosticsModalOpen(true);
+                    } else {
+                      setActiveTab('settings');
+                      setActiveSettingsSubTab('adhan');
+                    }
+                    setIsSidebarOpen(false);
+                  }}
+                  className="flex items-center gap-3 p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer w-full text-purple-700 dark:text-purple-300 bg-purple-50/50 dark:bg-purple-950/20 hover:bg-purple-100/60 dark:hover:bg-purple-900/40 border border-purple-200/50 dark:border-purple-800/40"
+                >
+                  <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                  <span>فحص وتشخيص الأذان وسجل الأحداث 📋</span>
+                </button>
               </SidebarSection>
 
               {/* More — tour / share / install, collapsed into compact rows instead of 3 full promo cards */}

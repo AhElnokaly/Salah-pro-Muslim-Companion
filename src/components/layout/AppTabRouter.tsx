@@ -16,6 +16,7 @@ import {
 import { safeLazy } from '../../utils/safeLazy';
 import Dashboard from '../Dashboard';
 import AdhkarTracker from '../AdhkarTracker';
+import { AthanDiagnosticsSection } from '../settings/adhan/AthanDiagnosticsSection';
 
 // Code-split Lazy Secondary Tabs & Features
 const QuranTracker = safeLazy(() => import('../QuranTracker'));
@@ -84,6 +85,7 @@ export interface AppTabRouterProps {
   gregorianStr: string;
   now: Date;
   toArabicNumbers: (n: number | string) => string;
+  setToastMessage?: (msg: string | null) => void;
 }
 
 export const AppTabRouter: React.FC<AppTabRouterProps> = ({
@@ -130,6 +132,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = ({
   gregorianStr,
   now,
   toArabicNumbers,
+  setToastMessage,
 }) => {
   return (
     <>
@@ -342,6 +345,12 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = ({
             toArabicNumbers={toArabicNumbers}
             onNavigateTab={(tab) => setActiveTab(tab as TabId)}
           />
+        )}
+
+        {activeTab === 'diagnostics' && (
+          <div className="pb-12 space-y-4">
+            <AthanDiagnosticsSection setToastMessage={setToastMessage} />
+          </div>
         )}
       </Suspense>
     </>
