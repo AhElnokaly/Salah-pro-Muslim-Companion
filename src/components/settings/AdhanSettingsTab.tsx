@@ -13,6 +13,7 @@ import { IndividualPrayerToggles } from './adhan/IndividualPrayerToggles';
 import { BackgroundAthansCard } from './adhan/BackgroundAthansCard';
 import { AdhanVolumeControls } from './adhan/AdhanVolumeControls';
 import { MuezzinSelectionSection } from './adhan/MuezzinSelectionSection';
+import { AthanDiagnosticsSection } from './adhan/AthanDiagnosticsSection';
 import { useAdhanAudioLogic } from './adhan/useAdhanAudioLogic';
 
 interface AdhanSettingsTabProps {
@@ -44,6 +45,8 @@ export default function AdhanSettingsTab({
 }: AdhanSettingsTabProps) {
   const [showArchiveFajr, setShowArchiveFajr] = useState(false);
   const [showArchiveGeneral, setShowArchiveGeneral] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const longPressTimerRef = React.useRef<any>(null);
   const [fajrSearch, setFajrSearch] = useState('');
   const [generalSearch, setGeneralSearch] = useState('');
 
@@ -81,12 +84,52 @@ export default function AdhanSettingsTab({
     }));
   };
 
+  const handleTouchStart = () => {
+    longPressTimerRef.current = setTimeout(() => {
+      setShowDiagnostics((prev) => !prev);
+    }, 700);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   return (
     <div className="space-y-6" dir="rtl">
-      <div className="flex items-center gap-2 mb-2">
-        <Volume2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
-        <h2 className="text-lg font-black text-slate-800 dark:text-white">إصدار الأذان وأصوات المؤذنين</h2>
+      <div
+        className="flex items-center justify-between mb-2 select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleTouchStart}
+        onMouseUp={handleTouchEnd}
+        onMouseLeave={handleTouchEnd}
+        title="اضغط مطولاً لعرض تشخيص ملفات الأذان"
+      >
+        <div className="flex items-center gap-2">
+          <Volume2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+          <h2 className="text-lg font-black text-slate-800 dark:text-white">إصدار الأذان وأصوات المؤذنين</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowDiagnostics((prev) => !prev)}
+          className={`text-[11px] px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer ${
+            showDiagnostics
+              ? 'bg-indigo-600 text-white'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+          }`}
+          title="تشخيص ملفات الأذان والنظام"
+        >
+          {showDiagnostics ? 'إخفاء التشخيص' : 'التشخيص'}
+        </button>
       </div>
+
+      {/* Athan Diagnostics Section (Hidden behind long-press / toggle) */}
+      {showDiagnostics && (
+        <AthanDiagnosticsSection />
+      )}
 
       {/* Premium Interactive Audio Player / Scrubber */}
       {playingAudio && (

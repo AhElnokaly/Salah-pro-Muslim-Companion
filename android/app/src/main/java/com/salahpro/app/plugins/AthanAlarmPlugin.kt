@@ -1090,20 +1090,33 @@ class AthanAlarmPlugin : Plugin() {
         val pathsObj = call.getObject("paths")
 
         for (k in keys) {
-            var path: String? = pathsObj?.getString(k)
+            var path: String? = null
+            var keyPresent = false
+
+            if (pathsObj != null && pathsObj.has(k)) {
+                path = pathsObj.getString(k)
+                keyPresent = true
+            }
+
             // Backward compatibility with old { generalPath, fajrPath }
-            if (path.isNullOrEmpty() && k == "general") {
+            if (!keyPresent && k == "general" && call.hasOption("generalPath")) {
                 path = call.getString("generalPath")
-            } else if (path.isNullOrEmpty() && k == "fajr") {
+                keyPresent = true
+            } else if (!keyPresent && k == "fajr" && call.hasOption("fajrPath")) {
                 path = call.getString("fajrPath")
+                keyPresent = true
             }
 
             val prefKey = "athan_file_$k"
-            if (!path.isNullOrEmpty()) {
-                editor.putString(prefKey, path)
-            } else if (pathsObj != null || call.hasOption("${k}Path") || call.hasOption(k)) {
-                editor.remove(prefKey)
+            if (keyPresent && path != null) {
+                if (path.isNotEmpty()) {
+                    editor.putString(prefKey, path)
+                } else {
+                    // Explicit empty string "" removes athan_file_<k>
+                    editor.remove(prefKey)
+                }
             }
+            // If key is absent/null in paths, LEAVE UNCHANGED in prefs!
         }
         editor.apply()
 
@@ -1144,6 +1157,28 @@ class AthanAlarmPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun listAthanCache(call: PluginCall) {
+        val ret = JSObject()
+        try {
+            val dir = File(context.filesDir, "athan")
+            if (dir.exists() && dir.isDirectory) {
+                dir.listFiles()?.forEach { f ->
+                    if (f.isFile && f.name.endsWith(".audio")) {
+                        val muezzinId = f.name.removeSuffix(".audio")
+                        val item = JSObject()
+                        item.put("exists", true)
+                        item.put("sizeBytes", f.length())
+                        ret.put(muezzinId, item)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing athan cache", e)
+        }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
     fun getNativeAthanFiles(call: PluginCall) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val keys = listOf("general", "fajr", "dhuhr", "asr", "maghrib", "isha")
@@ -1162,6 +1197,28 @@ class AthanAlarmPlugin : Plugin() {
                 info.put("sizeBytes", 0L)
             }
             ret.put(k, info)
+        }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun getLastAthanPlay(call: PluginCall) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString("athan_last_play", null)
+        val ret = JSObject()
+        if (!raw.isNullOrEmpty()) {
+            try {
+                val json = JSONObject(raw)
+                ret.put("hasRecord", true)
+                ret.put("prayer", json.optString("prayer", ""))
+                ret.put("source", json.optString("source", ""))
+                ret.put("track", json.optString("track", ""))
+                ret.put("timestampMs", json.optLong("timestampMs", 0L))
+            } catch (e: Exception) {
+                ret.put("hasRecord", false)
+            }
+        } else {
+            ret.put("hasRecord", false)
         }
         call.resolve(ret)
     }

@@ -145,8 +145,13 @@ describe('TASK 5: Custom Alarm Snooze & One-Shot Scheduling', () => {
   });
 
   test('Native scheduler: oneShot fixed alarm is scheduled ONLY for fireDate and NEVER repeats weekly', () => {
-    // Construct a 28-day schedule
-    const baseDate = new Date('2026-10-05T00:00:00'); // Monday (day 1)
+    // Construct a 28-day schedule starting on next Monday
+    const today = new Date();
+    const daysUntilNextMonday = (1 - today.getDay() + 7) % 7 || 7;
+    const baseDate = new Date(today);
+    baseDate.setDate(today.getDate() + daysUntilNextMonday);
+    baseDate.setHours(0, 0, 0, 0);
+
     const daysList: DailyPrayerTimesEntry[] = [];
     for (let i = 0; i < 28; i++) {
       const d = new Date(baseDate);
@@ -164,7 +169,10 @@ describe('TASK 5: Custom Alarm Snooze & One-Shot Scheduling', () => {
       });
     }
 
-    const fireDateStr = '2026-10-05'; // Only Day 0
+    const fireDateYear = baseDate.getFullYear();
+    const fireDateMonth = (baseDate.getMonth() + 1).toString().padStart(2, '0');
+    const fireDateDay = baseDate.getDate().toString().padStart(2, '0');
+    const fireDateStr = `${fireDateYear}-${fireDateMonth}-${fireDateDay}`; // Only Day 0
     const oneShotAlarm: AlarmConfig = {
       id: 'snooze_test_1',
       title: 'تنبيه غفوة مؤقت',
@@ -194,14 +202,14 @@ describe('TASK 5: Custom Alarm Snooze & One-Shot Scheduling', () => {
     const oneShotItems = scheduledTimes.filter(t => t.prayerKey.startsWith('custom_snooze_test_1'));
     const recurringItems = scheduledTimes.filter(t => t.prayerKey.startsWith('custom_recurring_monday_alarm'));
 
-    // The 28-day window has 4 Mondays (Oct 5, Oct 12, Oct 19, Oct 26)
+    // The 28-day window has 4 Mondays
     assert.equal(
       recurringItems.length,
       4,
       'Recurring alarm must repeat weekly on all 4 Mondays in the 28-day window'
     );
 
-    // The oneShot alarm must appear EXACTLY ONCE on its fireDate (Oct 5)
+    // The oneShot alarm must appear EXACTLY ONCE on its fireDate
     assert.equal(
       oneShotItems.length,
       1,
@@ -214,7 +222,12 @@ describe('TASK 5: Custom Alarm Snooze & One-Shot Scheduling', () => {
   });
 
   test('Reconciliation: when custom alarm is disabled or deleted, buildNativePrayerTimeAlarms omits it completely', () => {
-    const baseDate = new Date('2026-10-05T00:00:00');
+    const today = new Date();
+    const daysUntilNextMonday = (1 - today.getDay() + 7) % 7 || 7;
+    const baseDate = new Date(today);
+    baseDate.setDate(today.getDate() + daysUntilNextMonday);
+    baseDate.setHours(0, 0, 0, 0);
+
     const daysList: DailyPrayerTimesEntry[] = [{
       date: baseDate,
       timesMap: {

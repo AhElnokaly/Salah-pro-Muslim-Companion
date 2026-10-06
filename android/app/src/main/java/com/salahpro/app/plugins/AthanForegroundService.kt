@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.salahpro.app.MainActivity
+import org.json.JSONObject
 
 class AthanForegroundService : Service() {
 
@@ -154,6 +155,25 @@ class AthanForegroundService : Service() {
                     localMp.start()
                     playedCustom = true
                     Log.d(TAG, "[ATHAN] SOURCE=NATIVE ACTION=START TRACK=file:${file.name} PRAYER=$prayerLogKey")
+
+                    val sourceStr = when (candidateKey) {
+                        "athan_file_$normalizedPrayer" -> "per-prayer"
+                        "athan_file_fajr" -> "fajr"
+                        "athan_file_general" -> "general"
+                        else -> "general"
+                    }
+                    try {
+                        val recordObj = JSONObject().apply {
+                            put("prayer", prayerLogKey)
+                            put("source", sourceStr)
+                            put("track", file.name)
+                            put("timestampMs", System.currentTimeMillis())
+                        }
+                        prefs.edit().putString("athan_last_play", recordObj.toString()).apply()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to write athan_last_play pref", e)
+                    }
+
                     break
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to play custom athan audio from file: $customFilePath, falling back", e)
@@ -185,6 +205,18 @@ class AthanForegroundService : Service() {
                 }
 
                 Log.d(TAG, "[ATHAN] SOURCE=NATIVE ACTION=START TRACK=raw:$rawResName PRAYER=$prayerLogKey")
+
+                try {
+                    val recordObj = JSONObject().apply {
+                        put("prayer", prayerLogKey)
+                        put("source", "raw")
+                        put("track", rawResName)
+                        put("timestampMs", System.currentTimeMillis())
+                    }
+                    prefs.edit().putString("athan_last_play", recordObj.toString()).apply()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to write athan_last_play pref for raw track", e)
+                }
 
                 mediaPlayer?.apply {
                     setAudioAttributes(

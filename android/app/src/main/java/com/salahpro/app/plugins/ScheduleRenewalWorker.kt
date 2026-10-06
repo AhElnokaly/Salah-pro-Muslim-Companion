@@ -166,7 +166,16 @@ class ScheduleRenewalWorker(
                         }
 
                         if (prayerPostAlert && !hasAfterSalahCustom) {
-                            val postTimeMs = p.third + postAlertMinutes * 60000L
+                            var postTimeMs = p.third + postAlertMinutes * 60000L
+                            if (khushuAutoWithIqama) {
+                                val iqamaOffset = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 25L else 15L
+                                val durationMinutes = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 45L else 15L
+                                val iqamaTimeMs = p.third + iqamaOffset * 60000L
+                                val khushuEndTimeMs = iqamaTimeMs + durationMinutes * 60000L
+                                if (postTimeMs in iqamaTimeMs until khushuEndTimeMs) {
+                                    postTimeMs = khushuEndTimeMs
+                                }
+                            }
                             if (postTimeMs > now) {
                                 val postExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - postTimeMs) < 60000L && it.optString("prayerKey").contains("postalert") }
                                 if (!postExists) {

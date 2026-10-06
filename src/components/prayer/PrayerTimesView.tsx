@@ -247,7 +247,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     });
   };
 
-  const updatePrayerMuezzin = (pName: string, val: string) => {
+  const updatePrayerMuezzin = async (pName: string, val: string) => {
     if (propSetPrayerMuezzins) {
       propSetPrayerMuezzins(prev => ({ ...prev, [pName]: val }));
     }
@@ -257,11 +257,20 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
     if (pName === 'Fajr') {
       if (propSetFajrMuezzin) propSetFajrMuezzin(val);
       safeSetItem('salah_fajr_muezzin', val);
-    } else if (pName !== 'Sunrise') {
-      if (propSetCurrentMuezzin) propSetCurrentMuezzin(val);
-      safeSetItem('salah_general_muezzin', val);
     }
-    syncPrayerMuezzinsToNative().catch(() => {});
+
+    try {
+      const res = await syncPrayerMuezzinsToNative();
+      if (res && res.failed && res.failed.some(f => f.muezzinId === val)) {
+        setLogSuccessMessage(`تعذر مزامنة صوت الأذان (${pName}) مع النظام، سيتم استخدام الصوت الاحتياطي.`);
+      } else {
+        const arabicPrayer = getArabicPrayerName(pName as PrayerName);
+        setLogSuccessMessage(`تم حفظ ومزامنة صوت أذان ${arabicPrayer} بنجاح ✓`);
+      }
+    } catch (e) {
+      console.warn('[PrayerTimesView] Error syncing prayer muezzin to native:', e);
+      setLogSuccessMessage(`تعذر مزامنة صوت الأذان (${pName}) مع النظام.`);
+    }
   };
 
   const onUpdateOffset = (prayer: PrayerName | 'Sunrise', amount: number) => {
