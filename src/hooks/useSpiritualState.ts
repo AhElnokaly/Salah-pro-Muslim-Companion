@@ -100,6 +100,18 @@ export function useSpiritualState(): UseSpiritualStateReturn {
 
   // 1. Load data synchronously on mount for zero-flash initial render, then verify with IndexedDB
   useEffect(() => {
+    const handleSettingsChanged = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail === 'object') {
+        setSettings(prev => ({
+          ...prev,
+          ...detail,
+          adhanEnabled: detail.adhanEnabled ? { ...prev.adhanEnabled, ...detail.adhanEnabled } : prev.adhanEnabled,
+        }));
+      }
+    };
+    window.addEventListener('settings-changed', handleSettingsChanged);
+
     try {
       const storedSettings = StorageFacade.getSettings<Partial<AppSettings>>({});
       if (storedSettings && Object.keys(storedSettings).length > 0) {
@@ -186,6 +198,7 @@ export function useSpiritualState(): UseSpiritualStateReturn {
       console.error('Error loading states from StorageFacade', e);
     }
     setIsLoaded(true);
+    return () => window.removeEventListener('settings-changed', handleSettingsChanged);
   }, []);
 
   // 2. Persist state changes through StorageFacade (IndexedDB + localStorage fallback)

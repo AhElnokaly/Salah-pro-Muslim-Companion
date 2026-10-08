@@ -18,6 +18,7 @@ import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils'
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
 import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
+import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -50,6 +51,7 @@ export function usePrayerScheduler({
 }: UsePrayerSchedulerProps): UsePrayerSchedulerReturn {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const prevPushAthanRef = useRef<boolean | undefined>(undefined);
   const days60ListRef = useRef<DailyPrayerTimesEntry[]>([]);
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
     const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
@@ -433,13 +435,15 @@ export function usePrayerScheduler({
           const currentSettings = settingsRef.current;
           let effectiveSettings = currentSettings;
 
-          // If detail has push settings and prayerAthan is false, ensure adhanEnabled has all prayers disabled
-          if (detail && typeof detail === 'object' && 'prayerAthan' in detail && detail.prayerAthan === false) {
-            const updatedAdhan = { ...currentSettings.adhanEnabled };
-            (['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).forEach(p => {
-              updatedAdhan[p] = false;
-            });
-            effectiveSettings = { ...currentSettings, adhanEnabled: updatedAdhan };
+          const overrideResult = resolveAthanOverride(
+            detail,
+            prevPushAthanRef.current,
+            currentSettings.adhanEnabled
+          );
+          prevPushAthanRef.current = overrideResult.nextPrev;
+
+          if (overrideResult.shouldOverride) {
+            effectiveSettings = { ...currentSettings, adhanEnabled: overrideResult.adhanEnabled };
           }
 
           const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;

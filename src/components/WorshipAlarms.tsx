@@ -9,9 +9,10 @@ import { Capacitor } from '@capacitor/core';
 import type { AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
 import { DEFAULT_WORSHIP_ALARMS } from '../utils/alarmUtils';
 import { safeSetItem } from '../utils/storage';
+import { applyPrayerAthanToggle } from '../domain/notifications/prayerAthanToggle';
 import AthanAlarm, { 
   requestNotificationPermission as requestNativeNotificationPermission,
-  cancelNativeAlarm 
+  cancelNativeAlarm
 } from '../services/athanAlarmPlugin';
 import { 
   showAppNotification, 
@@ -88,9 +89,13 @@ export default function WorshipAlarms({
   // Keep system push & smart settings updated when changed elsewhere in the app
   useEffect(() => {
     const handlePushChanged = (e: Event) => {
-      const detail = (e as CustomEvent<PushNotificationSettings>).detail;
-      if (detail) setPushSettings(detail);
-      else setPushSettings(getPushSettings());
+      const detail = (e as CustomEvent<PushNotificationSettings & { changedKey?: string }>).detail;
+      if (detail && typeof detail === 'object') {
+        const { changedKey, ...rest } = detail;
+        setPushSettings(prev => ({ ...prev, ...rest }));
+      } else {
+        setPushSettings(getPushSettings());
+      }
     };
     const handleSmartChanged = (e: Event) => {
       const detail = (e as CustomEvent<SmartNotificationsSettings>).detail;
@@ -280,20 +285,18 @@ export default function WorshipAlarms({
       } else if (key === 'prayerPostAlert') {
         cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
       } else if (key === 'prayerAthan') {
-        cancelNativeAlarm({ alarmId: 'athan' }).catch(() => {});
+        // Handled inside applyPrayerAthanToggle (prefs -> cancel alarms -> stop audio)
       } else {
         cancelNativeAlarm({ alarmId: key }).catch(() => {});
       }
     }
 
-    // Sync prayerAthan with AppSettings.adhanEnabled
+    // Sync prayerAthan with native prefs & AppSettings.adhanEnabled
     if (key === 'prayerAthan') {
-      setSettings(prev => {
-        const updatedAdhan = { ...prev.adhanEnabled };
-        Object.keys(updatedAdhan).forEach(p => {
-          updatedAdhan[p] = enabled;
-        });
-        return { ...prev, adhanEnabled: updatedAdhan };
+      applyPrayerAthanToggle('prayerAthan', enabled, {
+        saveAppSettings: setSettings,
+      }).catch(err => {
+        console.warn('[WorshipAlarms] applyPrayerAthanToggle failed:', err);
       });
     }
 

@@ -34,6 +34,7 @@ import {
   sendPushNotification 
 } from '../utils/pushNotificationService';
 import { openAppNotificationSettings } from '../services/athanAlarmPlugin';
+import { applyPrayerAthanToggle } from '../domain/notifications/prayerAthanToggle';
 import { safeGetJSON, safeSetJSON } from '../utils/storage';
 import { AlarmConfig } from '../types';
 import { DEFAULT_WORSHIP_ALARMS } from '../utils/alarmUtils';
@@ -90,9 +91,13 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
     };
 
     const handlePushChanged = (e: Event) => {
-      const detail = (e as CustomEvent<PushNotificationSettings>).detail;
-      if (detail) setSettings(detail);
-      else setSettings(getPushSettings());
+      const detail = (e as CustomEvent<PushNotificationSettings & { changedKey?: string }>).detail;
+      if (detail && typeof detail === 'object') {
+        const { changedKey, ...rest } = detail;
+        setSettings(prev => ({ ...prev, ...rest }));
+      } else {
+        setSettings(getPushSettings());
+      }
     };
 
     const handleAlarmsChanged = (e: Event) => {
@@ -194,23 +199,11 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
     setSettings(updated);
     savePushSettings(updated);
 
-    // Sync Adhan toggle with AppSettings
+    // Sync Adhan toggle with AppSettings & native preferences
     if (key === 'prayerAthan') {
-      try {
-        const appSettings = StorageFacade.getSettings<any>(null);
-        if (appSettings && appSettings.adhanEnabled) {
-          const updatedAdhan = { ...appSettings.adhanEnabled };
-          Object.keys(updatedAdhan).forEach(p => {
-            updatedAdhan[p] = Boolean(value);
-          });
-          StorageFacade.saveSettings({
-            ...appSettings,
-            adhanEnabled: updatedAdhan
-          });
-        }
-      } catch (err) {
-        console.warn('[PushNotificationManager] Failed to sync prayerAthan with AppSettings:', err);
-      }
+      applyPrayerAthanToggle('prayerAthan', Boolean(value)).catch(err => {
+        console.warn('[PushNotificationManager] applyPrayerAthanToggle failed:', err);
+      });
     }
 
     // Two-way sync with custom worship alarms

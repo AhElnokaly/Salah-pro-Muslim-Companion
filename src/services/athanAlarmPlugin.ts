@@ -87,6 +87,13 @@ export interface AthanAlarmPlugin {
   downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
   stopAthan?(): Promise<{ stopped: boolean }>;
   isNativeAthanRunning?(): Promise<{ isRunning: boolean }>;
+  updateAthanPreferences?(options: {
+    athan_enabled_Fajr?: boolean;
+    athan_enabled_Dhuhr?: boolean;
+    athan_enabled_Asr?: boolean;
+    athan_enabled_Maghrib?: boolean;
+    athan_enabled_Isha?: boolean;
+  }): Promise<{ success: boolean }>;
   setNativeAthanFiles?(options: {
     paths?: NativeAthanPathsMap;
     generalPath?: string;
@@ -1061,8 +1068,9 @@ export async function downloadAndInstallAppUpdate(
 export async function stopNativeAthan(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return true;
   try {
-    if (AthanAlarm.stopAthan) {
-      const res = await AthanAlarm.stopAthan();
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.stopAthan) {
+      const res = await plugin.stopAthan();
       return res?.stopped ?? true;
     }
     return true;
@@ -1093,14 +1101,79 @@ export async function isNativeAthanRunning(): Promise<boolean> {
 }
 
 export async function cancelNativeAlarm(options: { alarmId?: string; requestCode?: number }): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || !AthanAlarm.cancelAlarm) return true;
+  if (!Capacitor.isNativePlatform()) return true;
   try {
-    const res = await AthanAlarm.cancelAlarm(options);
-    return res?.cancelled ?? false;
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.cancelAlarm) {
+      const res = await plugin.cancelAlarm(options);
+      return res?.cancelled ?? false;
+    }
+    return true;
   } catch (err) {
     console.warn('[AthanAlarmPlugin] cancelAlarm error:', err);
     return false;
   }
+}
+
+/**
+ * Writes the per-prayer athan_enabled_<Prayer> flags to native SharedPreferences (synchronous commit() on the native side).
+ * Returns false when the native method is missing or fails; true on web (no-op).
+ */
+export async function syncAthanPreferencesToNative(
+  enabledMap: Partial<Record<'Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha', boolean>>
+): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.updateAthanPreferences) {
+      const res = await plugin.updateAthanPreferences({
+        athan_enabled_Fajr: enabledMap.Fajr,
+        athan_enabled_Dhuhr: enabledMap.Dhuhr,
+        athan_enabled_Asr: enabledMap.Asr,
+        athan_enabled_Maghrib: enabledMap.Maghrib,
+        athan_enabled_Isha: enabledMap.Isha,
+      });
+      return res?.success ?? false;
+    }
+    console.warn('[AthanAlarmPlugin] updateAthanPreferences method not available on plugin');
+    return false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] syncAthanPreferencesToNative error:', err);
+    return false;
+  }
+}
+
+/**
+ * Master athan toggle -> native. Order matters:
+ * 1) write the 5 prefs (so a firing alarm's guard sees the new value),
+ * 2) when turning OFF: cancel scheduled athan alarms, then stop any playing athan.
+ */
+export async function syncMasterAthanToggle(
+  enabled: boolean,
+  options?: { stopNativeAudio?: boolean; cancelAlarms?: boolean }
+): Promise<boolean> {
+  const synced = await syncAthanPreferencesToNative({
+    Fajr: enabled,
+    Dhuhr: enabled,
+    Asr: enabled,
+    Maghrib: enabled,
+    Isha: enabled,
+  });
+
+  if (!enabled) {
+    if (options?.cancelAlarms !== false) {
+      await cancelNativeAlarm({ alarmId: 'athan' }).catch(err => {
+        console.warn('[AthanAlarmPlugin] cancelNativeAlarm failed during toggle OFF:', err);
+      });
+    }
+    if (options?.stopNativeAudio !== false) {
+      await stopNativeAthan().catch(err => {
+        console.warn('[AthanAlarmPlugin] stopNativeAthan failed during toggle OFF:', err);
+      });
+    }
+  }
+
+  return synced;
 }
 
 export async function cancelAllNativeAlarms(): Promise<boolean> {

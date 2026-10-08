@@ -777,6 +777,29 @@ class AthanAlarmPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun updateAthanPreferences(call: PluginCall) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
+            for (prayer in prayers) {
+                val key = "athan_enabled_$prayer"
+                if (call.hasOption(key)) {
+                    editor.putBoolean(key, call.getBoolean(key, true) ?: true)
+                }
+            }
+            // commit() (synchronous) on purpose: JS awaits this before re-orchestrating alarms.
+            val committed = editor.commit()
+            val ret = JSObject()
+            ret.put("success", committed)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update athan preferences", e)
+            call.reject("Failed to update athan preferences: ${e.message}", e)
+        }
+    }
+
+    @PluginMethod
     fun getScheduledAlarms(call: PluginCall) {
         val activeAlarms = getScheduledAlarmsStatic(context)
         val ret = JSObject()
