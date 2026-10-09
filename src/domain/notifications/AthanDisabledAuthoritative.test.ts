@@ -7,6 +7,7 @@ import {
   getLastScheduledOptions,
   DailyPrayerTimesEntry,
   syncMasterAthanToggle,
+  syncMasterAthanToggleDetailed,
   syncAthanPreferencesToNative,
   setAthanPluginBridgeForTesting
 } from '../../services/athanAlarmPlugin';
@@ -472,6 +473,139 @@ describe('Commit 3: Master Athan toggle', () => {
       }
       assert.equal(created.size, 1, 'exactly one 3000ms guard timer created');
       for (const t of created) assert.ok(cleared.has(t), 'guard timer must be cleared');
+    });
+  });
+
+  describe('FIX 1: latest-wins concurrency', () => {
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+    test('OFF times out, ON follows, stale OFF lands late: final push event is ON and native is re-synced to ON', async () => {
+      const syncCalls: boolean[] = [];
+      const pushEvents: any[] = [];
+      const syncMasterToggle = async (enabled: boolean) => {
+        syncCalls.push(enabled);
+        if (enabled === false && syncCalls.length === 1) await sleep(60);
+        return true;
+      };
+      const deps = {
+        syncMasterToggle,
+        nativeSyncTimeoutMs: 10,
+        dispatchPushChanged: (d: any) => pushEvents.push(d),
+        dispatchSettingsChanged: () => {},
+      };
+      const first = applyPrayerAthanToggle('prayerAthan', false, deps);
+      await sleep(15); // first already timed out (and dispatched OFF) while native is still busy
+      const second = applyPrayerAthanToggle('prayerAthan', true, deps);
+      await Promise.all([first, second]);
+      await sleep(100); // stale OFF lands + corrective re-sync runs
+
+      assert.deepEqual(pushEvents.map(e => e.prayerAthan), [false, true], 'last event wins: ON');
+      assert.deepEqual(syncCalls, [false, true, true], 'stale OFF landed late -> corrective ON re-sync');
+    });
+
+    test('overlap: older call finishing AFTER a newer one is superseded (no events, returns false)', async () => {
+      const syncCalls: boolean[] = [];
+      const pushEvents: any[] = [];
+      const settingsEvents: any[] = [];
+      const deps = {
+        syncMasterToggle: async (enabled: boolean) => {
+          syncCalls.push(enabled);
+          if (enabled === false) await sleep(60);
+          return true;
+        },
+        nativeSyncTimeoutMs: 500, // no timeout: the old call is merely slow
+        dispatchPushChanged: (d: any) => pushEvents.push(d),
+        dispatchSettingsChanged: (d: any) => settingsEvents.push(d),
+      };
+      const first = applyPrayerAthanToggle('prayerAthan', false, deps);
+      await sleep(10);
+      const second = applyPrayerAthanToggle('prayerAthan', true, deps);
+      const [r1, r2] = await Promise.all([first, second]);
+      await sleep(30);
+
+      assert.equal(r1, false, 'superseded call reports false');
+      assert.equal(r2, true);
+      assert.equal(pushEvents.length, 1);
+      assert.equal(pushEvents[0].prayerAthan, true);
+      assert.equal(settingsEvents.length, 1);
+      assert.deepEqual(syncCalls, [false, true, true], 'stale OFF landed after ON -> corrective ON re-sync');
+    });
+
+    test('stale op with the SAME value as the latest request does not trigger a corrective re-sync', async () => {
+      const syncCalls: boolean[] = [];
+      const deps = {
+        syncMasterToggle: async (e: boolean) => { syncCalls.push(e); await sleep(20); return true; },
+        nativeSyncTimeoutMs: 200,
+        dispatchPushChanged: () => {},
+        dispatchSettingsChanged: () => {},
+      };
+      const a = applyPrayerAthanToggle('prayerAthan', false, deps);
+      const b = applyPrayerAthanToggle('prayerAthan', false, deps);
+      await Promise.all([a, b]);
+      await sleep(60);
+      assert.deepEqual(syncCalls, [false, false]);
+    });
+
+    test('single call still dispatches once and returns the sync result', async () => {
+      const push: any[] = [];
+      const ok = await applyPrayerAthanToggle('prayerAthan', true, {
+        syncMasterToggle: async () => true,
+        dispatchPushChanged: d => push.push(d),
+        dispatchSettingsChanged: () => {},
+      });
+      assert.equal(ok, true);
+      assert.equal(push.length, 1);
+    });
+  });
+
+  describe('FIX 2: full-result sync reporting', () => {
+    test('OFF: cancel fails (returns false) -> ok=false, prefsSaved=true, audioStopped=true', async () => {
+      await withNative(async () => {
+        setAthanPluginBridgeForTesting({
+          updateAthanPreferences: async () => ({ success: true }),
+          cancelAlarm: async () => ({ cancelled: false }),
+          stopAthan: async () => ({ stopped: true }),
+        });
+        const r = await syncMasterAthanToggleDetailed(false);
+        assert.deepEqual(r, { prefsSaved: true, alarmsCancelled: false, audioStopped: true, ok: false });
+        assert.equal(await syncMasterAthanToggle(false), false);
+      });
+    });
+
+    test('OFF: stop fails (throws) -> ok=false, alarmsCancelled=true', async () => {
+      await withNative(async () => {
+        setAthanPluginBridgeForTesting({
+          updateAthanPreferences: async () => ({ success: true }),
+          cancelAlarm: async () => ({ cancelled: true }),
+          stopAthan: async () => { throw new Error('boom'); },
+        });
+        const r = await syncMasterAthanToggleDetailed(false);
+        assert.equal(r.alarmsCancelled, true);
+        assert.equal(r.audioStopped, false);
+        assert.equal(r.ok, false);
+      });
+    });
+
+    test('OFF: prefs write fails -> ok=false even if cancel/stop succeed', async () => {
+      await withNative(async () => {
+        setAthanPluginBridgeForTesting({
+          updateAthanPreferences: async () => ({ success: false }),
+          cancelAlarm: async () => ({ cancelled: true }),
+          stopAthan: async () => ({ stopped: true }),
+        });
+        const r = await syncMasterAthanToggleDetailed(false);
+        assert.equal(r.prefsSaved, false);
+        assert.equal(r.ok, false);
+      });
+    });
+
+    test('ON: only prefs matter; cancel/stop untouched', async () => {
+      await withNative(async () => {
+        setAthanPluginBridgeForTesting({
+          updateAthanPreferences: async () => ({ success: true }),
+        });
+        assert.deepEqual(await syncMasterAthanToggleDetailed(true), { prefsSaved: true, alarmsCancelled: true, audioStopped: true, ok: true });
+      });
     });
   });
 

@@ -9,6 +9,12 @@ import { syncMasterAthanToggle } from '../../services/athanAlarmPlugin';
 
 export const NATIVE_SYNC_TIMEOUT_MS = 3000;
 
+// Latest-wins bookkeeping. A timed-out native sync is NOT cancelled, so an older
+// call can finish after a newer one. We (a) skip the JS events of superseded calls
+// and (b) re-sync native to the latest value if a stale op finishes late.
+let toggleSeq = 0;
+let latestRequested: boolean | undefined;
+
 export interface ApplyPrayerAthanToggleDeps {
   syncMasterToggle?: (enabled: boolean) => Promise<boolean>;
   saveAppSettings?: (updater: (prev: AppSettings) => AppSettings) => void;
@@ -82,6 +88,9 @@ export function resolveAthanOverride(
  * changedKey: 'prayerAthan'. That means orchestratePrayerAlarms runs twice per toggle; the second run
  * is the authoritative one. resolveAthanOverride handles both events deterministically.
  *
+ * Concurrency: calls are latest-wins. A superseded call skips steps 4-5 and returns false; if its
+ * (possibly timed-out) native op lands after a newer request, native is re-synced to the latest value.
+ *
  * Known edge: if the native call times out, step 5 runs before native prefs are written, so the scheduler
  * may race with them in that rare case. The native receiver's athan_enabled_<Prayer> guard at fire time
  * still prevents a disabled athan from playing.
@@ -96,6 +105,8 @@ export async function applyPrayerAthanToggle(
   }
 
   const enabled = Boolean(value);
+  const mySeq = ++toggleSeq;
+  latestRequested = enabled;
   const updatedAdhanMap = {
     Fajr: enabled,
     Dhuhr: enabled,
@@ -131,8 +142,20 @@ export async function applyPrayerAthanToggle(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let synced = false;
   try {
+    const opPromise = syncFn(enabled);
+    // If this op outlives its timeout (or a newer call) and lands AFTER a newer
+    // request, it may have overwritten native prefs with an outdated value: correct it.
+    opPromise
+      .catch(() => false)
+      .then(() => {
+        if (mySeq !== toggleSeq && latestRequested !== undefined && latestRequested !== enabled) {
+          return syncFn(latestRequested).catch(err => {
+            console.warn('[applyPrayerAthanToggle] Corrective native re-sync failed:', err);
+          });
+        }
+      });
     synced = await Promise.race([
-      syncFn(enabled),
+      opPromise,
       new Promise<boolean>(resolve => {
         timer = setTimeout(() => {
           console.warn(`[applyPrayerAthanToggle] Native sync timed out after ${timeoutMs}ms; proceeding with dispatch`);
@@ -145,6 +168,14 @@ export async function applyPrayerAthanToggle(
     synced = false;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+  }
+
+  // A newer toggle superseded this one: it owns the events/reschedule now.
+  if (mySeq !== toggleSeq) {
+    return false;
+  }
+  if (!synced) {
+    console.warn('[applyPrayerAthanToggle] Native sync incomplete (prefs/cancel/stop failed or timed out); native may be out of step with the UI');
   }
 
   // 4. settings-changed

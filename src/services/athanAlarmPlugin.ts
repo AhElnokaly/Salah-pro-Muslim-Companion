@@ -1148,11 +1148,22 @@ export async function syncAthanPreferencesToNative(
  * 1) write the 5 prefs (so a firing alarm's guard sees the new value),
  * 2) when turning OFF: cancel scheduled athan alarms, then stop any playing athan.
  */
-export async function syncMasterAthanToggle(
+export interface MasterAthanSyncResult {
+  /** The 5 athan_enabled_<Prayer> flags were committed natively. */
+  prefsSaved: boolean;
+  /** Scheduled athan alarms cancelled (true when ON or when cancel was skipped). */
+  alarmsCancelled: boolean;
+  /** Playing native athan stopped (true when ON or when stop was skipped). */
+  audioStopped: boolean;
+  /** Full success: every step required for this direction succeeded. */
+  ok: boolean;
+}
+
+export async function syncMasterAthanToggleDetailed(
   enabled: boolean,
   options?: { stopNativeAudio?: boolean; cancelAlarms?: boolean }
-): Promise<boolean> {
-  const synced = await syncAthanPreferencesToNative({
+): Promise<MasterAthanSyncResult> {
+  const prefsSaved = await syncAthanPreferencesToNative({
     Fajr: enabled,
     Dhuhr: enabled,
     Asr: enabled,
@@ -1160,20 +1171,34 @@ export async function syncMasterAthanToggle(
     Isha: enabled,
   });
 
+  let alarmsCancelled = true;
+  let audioStopped = true;
+
   if (!enabled) {
     if (options?.cancelAlarms !== false) {
-      await cancelNativeAlarm({ alarmId: 'athan' }).catch(err => {
+      // cancelNativeAlarm reports failure via its boolean result (it rarely throws).
+      alarmsCancelled = await cancelNativeAlarm({ alarmId: 'athan' }).catch(err => {
         console.warn('[AthanAlarmPlugin] cancelNativeAlarm failed during toggle OFF:', err);
+        return false;
       });
     }
     if (options?.stopNativeAudio !== false) {
-      await stopNativeAthan().catch(err => {
+      audioStopped = await stopNativeAthan().catch(err => {
         console.warn('[AthanAlarmPlugin] stopNativeAthan failed during toggle OFF:', err);
+        return false;
       });
     }
   }
 
-  return synced;
+  return { prefsSaved, alarmsCancelled, audioStopped, ok: prefsSaved && alarmsCancelled && audioStopped };
+}
+
+/** Boolean wrapper: true only when EVERY required step succeeded (see syncMasterAthanToggleDetailed). */
+export async function syncMasterAthanToggle(
+  enabled: boolean,
+  options?: { stopNativeAudio?: boolean; cancelAlarms?: boolean }
+): Promise<boolean> {
+  return (await syncMasterAthanToggleDetailed(enabled, options)).ok;
 }
 
 export async function cancelAllNativeAlarms(): Promise<boolean> {
