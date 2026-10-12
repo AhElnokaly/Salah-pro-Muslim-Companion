@@ -28,7 +28,7 @@ class AthanForegroundService : Service() {
         const val CHANNEL_NAME = "أذان الصلاة - Salah Athan"
         const val NOTIFICATION_ID = 78601
         const val ACTION_STOP_ATHAN = "com.salahpro.app.ACTION_STOP_ATHAN"
-        const val TIMEOUT_MS = 180000L // 3 minutes timeout
+        const val TIMEOUT_MS = 600000L // 10 minutes safety net; athan normally stops on completion
 
         @Volatile
         var isServiceRunning: Boolean = false
