@@ -9,8 +9,9 @@ import { getArabicPrayerName } from '../../utils/prayerCalc';
 import { getHijriDate } from '../../utils/hijri';
 import { safeSetItem, safeGetItem, safeGetJSON } from '../../utils/storage';
 import { StorageFacade } from '../../domain/storage/StorageFacade';
-import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO } from '../../utils/audioStorage';
+import { AudioTrack, getAudioUrl, LOCAL_FALLBACK_AUDIO, revokeAudioBlobUrl } from '../../utils/audioStorage';
 import { stopAudioSafely } from '../../utils/audioUtils';
+import { resolvePreviewSource, describePreviewSource, PreviewSourceKind } from '../../utils/previewSource';
 import { resolveMuezzinId } from '../../utils/muezzinResolver';
 import { syncPrayerMuezzinsToNative } from '../../services/athanAlarmPlugin';
 import { getExactCountdown } from './prayerUtils';
@@ -113,6 +114,13 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
   // Dedicated Audio Preview Controller for Responsive Playback
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewReqRef = useRef<number>(0);
+  // Blob URL created for a cached muezzin preview; revoked when the preview stops or is replaced
+  // (getAudioUrl creates a fresh object URL on every call, so it would otherwise leak).
+  const previewBlobUrlRef = useRef<string | null>(null);
+  const releasePreviewBlob = () => {
+    revokeAudioBlobUrl(previewBlobUrlRef.current);
+    previewBlobUrlRef.current = null;
+  };
   const [playingPrayer, setPlayingPrayer] = useState<string | null>(null);
 
   useEffect(() => {
@@ -122,6 +130,8 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
         stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
       }
+      revokeAudioBlobUrl(previewBlobUrlRef.current);
+      previewBlobUrlRef.current = null;
     };
   }, []);
 
@@ -139,6 +149,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
         stopAudioSafely(previewAudioRef.current);
         previewAudioRef.current = null;
       }
+      releasePreviewBlob();
       setPlayingPrayer(null);
       setLogSuccessMessage(`تم إيقاف صوت ${arabicName}`);
       return;
@@ -148,6 +159,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
       stopAudioSafely(previewAudioRef.current);
       previewAudioRef.current = null;
     }
+    releasePreviewBlob();
 
     // Call setPlayingPrayer(pName) IMMEDIATELY (before any await) so a second tap hits the stop branch
     setPlayingPrayer(pName);
@@ -159,16 +171,22 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
 
     const isFajr = pName === 'Fajr';
     const track = muezzins.find(m => m.id === activeMuezzinId) || muezzins[0];
-    const initialUrl = track?.url || (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general);
+    const fallbackPath = isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general;
+    const initialUrl = track?.url || fallbackPath;
+    // Everything that is not a bundled file (remote URL or db://) goes through local-first resolution.
+    const needsResolve = !initialUrl.startsWith('/audio/');
+    let sourceKind: PreviewSourceKind = needsResolve ? 'default' : 'bundled';
 
-    // Create Audio synchronously within user gesture to prevent browser autoplay block
-    let finalSrc = initialUrl.startsWith('db://') ? (isFajr ? LOCAL_FALLBACK_AUDIO.fajr : LOCAL_FALLBACK_AUDIO.general) : initialUrl;
+    // Create Audio synchronously within user gesture to prevent browser autoplay block.
+    // For non-bundled tracks it starts from the bundled placeholder; the real source is swapped in below.
+    let finalSrc = needsResolve ? fallbackPath : initialUrl;
     const audio = new Audio(finalSrc);
     audio.volume = Math.max(0, Math.min(1, prayerVol));
 
     audio.onended = () => {
       if (previewAudioRef.current !== audio || req !== previewReqRef.current) return;
       setPlayingPrayer(null);
+      releasePreviewBlob();
     };
 
     audio.onerror = () => {
@@ -179,7 +197,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
         audio.src = fallbackSrc;
         audio.play().then(() => {
           if (previewAudioRef.current !== audio || req !== previewReqRef.current) return;
-          setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
+          setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة (${describePreviewSource('default')})...`);
         }).catch((err: any) => {
           if (err?.name === 'AbortError' || previewAudioRef.current !== audio || req !== previewReqRef.current) return;
           setPlayingPrayer(null);
@@ -193,25 +211,30 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
 
     previewAudioRef.current = audio;
 
-    // Resolve db:// asynchronously if needed
-    if (initialUrl.startsWith('db://')) {
-      try {
-        const resolved = await getAudioUrl(initialUrl, track?.id);
-        if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
-        if (resolved) {
-          finalSrc = resolved;
-          audio.src = resolved;
-        }
-      } catch {
-        if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
-        // Keep initial fallback
+    // Local-first: cached/downloaded copy -> network -> bundled default (last resort)
+    if (needsResolve) {
+      const resolved = await resolvePreviewSource(
+        track ? { id: track.id, url: initialUrl } : { url: initialUrl },
+        isFajr,
+        getAudioUrl,
+        LOCAL_FALLBACK_AUDIO,
+        typeof navigator !== 'undefined' ? navigator.onLine : true
+      );
+      if (req !== previewReqRef.current || previewAudioRef.current !== audio) {
+        // Stale request: nobody will play this blob, release it now.
+        if (resolved.kind === 'local') revokeAudioBlobUrl(resolved.src);
+        return;
       }
+      finalSrc = resolved.src;
+      sourceKind = resolved.kind;
+      previewBlobUrlRef.current = resolved.kind === 'local' ? resolved.src : null;
+      audio.src = resolved.src;
     }
 
     try {
       await audio.play();
       if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
-      setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة...`);
+      setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة (${describePreviewSource(sourceKind)})...`);
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
@@ -223,7 +246,7 @@ export const PrayerTimesView: React.FC<PrayerTimesViewProps> = ({
         audio.src = fallbackSrc;
         audio.play().then(() => {
           if (req !== previewReqRef.current || previewAudioRef.current !== audio) return;
-          setLogSuccessMessage(`جارٍ تشغيل الصوت المدمج لـ ${arabicName}...`);
+          setLogSuccessMessage(`جارٍ تشغيل صوت ${arabicName} للتجربة (${describePreviewSource('default')})...`);
         }).catch((fallbackErr: any) => {
           if (fallbackErr?.name === 'AbortError' || req !== previewReqRef.current || previewAudioRef.current !== audio) return;
           setPlayingPrayer(null);
