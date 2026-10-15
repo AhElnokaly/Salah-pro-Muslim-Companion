@@ -365,7 +365,10 @@ describe('TASK 4: Native athan file bridge (Kotlin + JS)', () => {
 });
 
 describe('TASK 6: Post-prayer alert vs Khushu collision & Same-minute priority', () => {
-  const futureDate = new Date(Date.now() + 86400000 * 2); // 2 days in future
+  // ~2 days in the future, but never a Friday: Friday Dhuhr has its own Iqama/duration offsets
+  // (covered by the dedicated Friday test below), so a Friday here made these tests fail every Wednesday.
+  const futureDate = new Date(Date.now() + 86400000 * 2);
+  while (futureDate.getDay() === 5) futureDate.setDate(futureDate.getDate() + 1);
   const baseEntry: DailyPrayerTimesEntry = {
     date: futureDate,
     timesMap: {
