@@ -318,6 +318,9 @@ class AthanAlarmPlugin : Plugin() {
             alarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
 
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            notificationManager?.cancel(reqCode)
+
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val savedIds = prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet())?.toMutableSet() ?: mutableSetOf()
             val removed = savedIds.remove(reqCode.toString())
@@ -325,6 +328,24 @@ class AthanAlarmPlugin : Plugin() {
                 prefs.edit().putStringSet(KEY_SCHEDULED_IDS, savedIds).apply()
             }
             return true
+        }
+
+        @JvmStatic
+        fun matchesAlarmId(alarmId: String, prayerKey: String, alarmType: String, snoozeOf: String = ""): Boolean {
+            return when (alarmId) {
+                "alarm_before_salah" -> prayerKey.startsWith("custom_alarm_before_salah_") ||
+                                        prayerKey.startsWith("custom_snooze_alarm_before_salah_") ||
+                                        snoozeOf == "alarm_before_salah"
+                "alarm_after_salah" -> prayerKey.startsWith("custom_alarm_after_salah_") ||
+                                       prayerKey.startsWith("custom_snooze_alarm_after_salah_") ||
+                                       snoozeOf == "alarm_after_salah"
+                "prealert" -> alarmType == "prealert" || prayerKey.contains("prealert")
+                "postalert" -> alarmType == "postalert" || prayerKey.contains("postalert")
+                "athan" -> alarmType.isEmpty() || alarmType == "athan"
+                else -> alarmType.equals(alarmId, ignoreCase = true) ||
+                        prayerKey.startsWith("custom_${alarmId}_") ||
+                        prayerKey.contains(alarmId, ignoreCase = true)
+            }
         }
     }
 
@@ -893,11 +914,7 @@ class AthanAlarmPlugin : Plugin() {
                             val item = array.getJSONObject(i)
                             val pKey = item.optString("prayerKey", "")
                             val aType = item.optString("alarmType", "")
-                            val matches = aType.equals(alarmId, ignoreCase = true) ||
-                                          pKey.contains(alarmId, ignoreCase = true) ||
-                                          (alarmId == "prealert" && (aType == "prealert" || pKey.contains("prealert"))) ||
-                                          (alarmId == "postalert" && (aType == "postalert" || pKey.contains("postalert"))) ||
-                                          (alarmId == "athan" && (aType.isEmpty() || aType == "athan"))
+                            val matches = matchesAlarmId(alarmId, pKey, aType, item.optString("snoozeOf", ""))
 
                             if (matches) {
                                 val timeMs = item.optLong("timeMs", 0L)

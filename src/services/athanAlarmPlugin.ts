@@ -15,6 +15,7 @@ export interface PrayerTimeAlarm {
   soundType?: string;
   notifyMode?: string;
   autoKhushu?: boolean;
+  snoozeOf?: string;
 }
 
 export interface ScheduleAthanResult {
@@ -463,7 +464,9 @@ export function buildNativePrayerTimeAlarms(
           const timeMs = targetDate.getTime();
           if (timeMs > now) {
             times.push({
-              prayerKey: `custom_${alarm.id}_${timeMs}`,
+              prayerKey: alarm.snoozeOf
+                ? `custom_snooze_${alarm.snoozeOf}_${alarm.id}_${timeMs}`
+                : `custom_${alarm.id}_${timeMs}`,
               prayerName: alarm.title || 'منبه مخصص',
               timeMs,
               isFajr: false,
@@ -472,6 +475,7 @@ export function buildNativePrayerTimeAlarms(
               notifyMode: alarm.notifyMode || 'both',
               autoKhushu: Boolean(alarm.autoKhushu),
               durationMinutes: alarm.khushuDurationMinutes || 15,
+              snoozeOf: alarm.snoozeOf,
             });
           }
           return;

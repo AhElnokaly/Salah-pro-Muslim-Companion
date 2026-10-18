@@ -19,6 +19,7 @@ import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
 import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
 import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
+import { migrateRemovedDefaultAlarms } from '../domain/notifications/migrateRemovedDefaultAlarms';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -61,6 +62,8 @@ export function usePrayerScheduler({
       const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
       const nowMins = today.getHours() * 60 + today.getMinutes();
       const cleaned = saved.filter(a => {
+        if (a.id === 'alarm_before_salah' || a.id === 'alarm_after_salah') return false;
+        if (a.snoozeOf === 'alarm_before_salah' || a.snoozeOf === 'alarm_after_salah') return false;
         if (!a.oneShot && !a.fireDate && !a.id.startsWith('snooze_')) return true;
         if (a.fireDate) {
           if (a.fireDate < todayStr) return false;
@@ -84,24 +87,6 @@ export function usePrayerScheduler({
     let defaults = [...DEFAULT_WORSHIP_ALARMS];
     if (oldAlerts) {
       defaults = defaults.map(def => {
-        if (def.id === 'alarm_before_salah' && oldAlerts.before) {
-          return {
-            ...def,
-            enabled: Boolean(oldAlerts.before.enabled),
-            offsetMinutes: oldAlerts.before.minutes || 10,
-            days: oldAlerts.before.days || def.days,
-            prayers: oldAlerts.before.prayers || def.prayers
-          };
-        }
-        if (def.id === 'alarm_after_salah' && oldAlerts.after) {
-          return {
-            ...def,
-            enabled: Boolean(oldAlerts.after.enabled),
-            offsetMinutes: oldAlerts.after.minutes || 15,
-            days: oldAlerts.after.days || def.days,
-            prayers: oldAlerts.after.prayers || def.prayers
-          };
-        }
         if (def.id === 'alarm_duha' && oldAlerts.duha) {
           return {
             ...def,
@@ -150,6 +135,12 @@ export function usePrayerScheduler({
     return () => {
       window.removeEventListener('custom-alarms-changed', handleAlarmsChanged);
     };
+  }, []);
+
+  useEffect(() => {
+    migrateRemovedDefaultAlarms().catch(err => {
+      console.warn('[usePrayerScheduler] migrateRemovedDefaultAlarms error:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -216,7 +207,7 @@ export function usePrayerScheduler({
       let score = 200;
       const lowerTitle = (alarm.title || '').toLowerCase();
       // 1. Prayer alerts & Pre-alerts (Highest priority custom alarms)
-      if (lowerTitle.includes('صلاة') || lowerTitle.includes('أذان') || lowerTitle.includes('اقتربت') || alarm.id === 'alarm_before_salah' || alarm.id === 'alarm_after_salah') {
+      if (lowerTitle.includes('صلاة') || lowerTitle.includes('أذان') || lowerTitle.includes('اقتربت')) {
         score = 800;
       }
       // 2. Morning & Evening Adhkar
