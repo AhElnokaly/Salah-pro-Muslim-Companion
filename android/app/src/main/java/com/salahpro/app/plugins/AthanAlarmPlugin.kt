@@ -154,6 +154,29 @@ class AthanAlarmPlugin : Plugin() {
         }
 
         @JvmStatic
+        fun isAlarmInActiveWindow(timeMs: Long, nowMs: Long, windowDays: Long = 14L): Boolean {
+            val maxWindowMs = nowMs + (windowDays * 86400000L)
+            return timeMs > nowMs && timeMs <= maxWindowMs
+        }
+
+        @JvmStatic
+        fun filterAlarmsFor14DayWindow(
+            items: JSONArray,
+            nowMs: Long = System.currentTimeMillis(),
+            windowDays: Long = 14L
+        ): List<JSONObject> {
+            val filtered = mutableListOf<JSONObject>()
+            for (i in 0 until items.length()) {
+                val item = items.optJSONObject(i) ?: continue
+                val timeMs = item.optLong("timeMs", 0L)
+                if (isAlarmInActiveWindow(timeMs, nowMs, windowDays)) {
+                    filtered.add(item)
+                }
+            }
+            return filtered
+        }
+
+        @JvmStatic
         fun reconcileAlarmsInternalStatic(
             context: Context,
             alarmManager: AlarmManager,
@@ -163,27 +186,21 @@ class AthanAlarmPlugin : Plugin() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val currentScheduledIds = (prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet()) ?: emptySet()).toMutableSet()
 
-            // 1. Build desired Map: reqCode -> JSONObject
+            // 1. Build desired Map for nearest 14 days using pure filter function
+            val active14DayList = filterAlarmsFor14DayWindow(desiredTimesArray, now, 14L)
             val desiredMap = mutableMapOf<Int, org.json.JSONObject>()
-            for (i in 0 until desiredTimesArray.length()) {
-                try {
-                    val item = desiredTimesArray.getJSONObject(i)
-                    val timeMs = item.optLong("timeMs", 0L)
-                    val prayerKey = item.optString("prayerKey", "")
-                    if (timeMs > now) {
-                        val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
-                        desiredMap[reqCode] = item
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error reading desired alarm at $i", e)
-                }
+            for (item in active14DayList) {
+                val timeMs = item.optLong("timeMs", 0L)
+                val prayerKey = item.optString("prayerKey", "")
+                val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
+                desiredMap[reqCode] = item
             }
 
             var addedCount = 0
             var removedCount = 0
             var retainedCount = 0
 
-            // 2. Identify Obsolete: in currentScheduledIds but NOT in desiredMap
+            // 2. Identify Obsolete: in currentScheduledIds but NOT in desiredMap (including past or slid past 14 days)
             val obsoleteIds = mutableListOf<Int>()
             for (idStr in currentScheduledIds) {
                 val reqCode = idStr.toIntOrNull() ?: continue
@@ -198,8 +215,8 @@ class AthanAlarmPlugin : Plugin() {
                 removedCount++
             }
 
-            // 3. Identify Retained vs Missing
-            val newSavedAlarms = JSONArray()
+            // 3. Unconditionally re-assert every 14-day alarm in AlarmManager
+            val newScheduledIds = mutableSetOf<String>()
             for ((reqCode, item) in desiredMap) {
                 val timeMs = item.optLong("timeMs", 0L)
                 val prayerName = item.optString("prayerName", "الصلاة")
@@ -212,63 +229,58 @@ class AthanAlarmPlugin : Plugin() {
                 val notifyMode = item.optString("notifyMode", "both")
                 val autoKhushu = item.optBoolean("autoKhushu", false)
 
-                newSavedAlarms.put(item)
-
-                if (currentScheduledIds.contains(reqCode.toString())) {
-                    // Already scheduled and unchanged -> Retain! Do NOT touch AlarmManager.
-                    retainedCount++
-                } else {
-                    // Missing -> Schedule newly!
-                    try {
-                        val intent = createAthanIntent(
-                            context = context,
-                            prayerName = prayerName,
-                            isFajr = isFajr,
-                            prayerKey = prayerKey,
-                            timeMs = timeMs,
-                            alarmType = alarmType,
-                            durationMinutes = durationMinutes,
-                            khushuMode = khushuMode,
-                            soundType = soundType,
-                            notifyMode = notifyMode,
-                            autoKhushu = autoKhushu
+                try {
+                    val intent = createAthanIntent(
+                        context = context,
+                        prayerName = prayerName,
+                        isFajr = isFajr,
+                        prayerKey = prayerKey,
+                        timeMs = timeMs,
+                        alarmType = alarmType,
+                        durationMinutes = durationMinutes,
+                        khushuMode = khushuMode,
+                        soundType = soundType,
+                        notifyMode = notifyMode,
+                        autoKhushu = autoKhushu
+                    )
+                    val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            timeMs,
+                            pendingIntent
                         )
-                        val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            alarmManager.setExactAndAllowWhileIdle(
-                                AlarmManager.RTC_WAKEUP,
-                                timeMs,
-                                pendingIntent
-                            )
-                        } else {
-                            alarmManager.setExact(
-                                AlarmManager.RTC_WAKEUP,
-                                timeMs,
-                                pendingIntent
-                            )
-                        }
-                        currentScheduledIds.add(reqCode.toString())
-                        addedCount++
-                        Log.d(TAG, "Reconcile: Added missing alarm for $prayerName at $timeMs (reqCode=$reqCode)")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error scheduling missing alarm reqCode=$reqCode", e)
+                    } else {
+                        alarmManager.setExact(
+                            AlarmManager.RTC_WAKEUP,
+                            timeMs,
+                            pendingIntent
+                        )
                     }
+
+                    if (currentScheduledIds.contains(reqCode.toString())) {
+                        retainedCount++
+                    } else {
+                        addedCount++
+                    }
+                    newScheduledIds.add(reqCode.toString())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error scheduling 14-day alarm reqCode=$reqCode", e)
                 }
             }
 
             // Save updated state ledger
             prefs.edit()
-                .putInt(KEY_SCHEDULED_COUNT, currentScheduledIds.size)
-                .putStringSet(KEY_SCHEDULED_IDS, currentScheduledIds)
-                .putString(KEY_SAVED_ALARMS, newSavedAlarms.toString())
+                .putInt(KEY_SCHEDULED_COUNT, newScheduledIds.size)
+                .putStringSet(KEY_SCHEDULED_IDS, newScheduledIds)
                 .apply()
 
-            Log.d(TAG, "Reconcile completed: added=$addedCount, removed=$removedCount, retained=$retainedCount, total=${currentScheduledIds.size}")
+            Log.d(TAG, "Reconcile completed: 14-day active total=${newScheduledIds.size}, added=$addedCount, removed=$removedCount, reasserted/retained=$retainedCount")
             return mapOf(
                 "added" to addedCount,
                 "removed" to removedCount,
                 "retained" to retainedCount,
-                "total" to currentScheduledIds.size
+                "total" to newScheduledIds.size
             )
         }
 
@@ -786,6 +798,7 @@ class AthanAlarmPlugin : Plugin() {
                 editor.putBoolean(key, true)
             }
         }
+        editor.putString(KEY_SAVED_ALARMS, timesArray.toString())
         editor.apply()
 
         val ret = JSObject()

@@ -59,12 +59,16 @@ class AthanBootReceiver : BroadcastReceiver() {
             }
 
             val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
+            // On reboot or app update, the OS AlarmManager has been wiped.
+            // Do NOT trust the stored scheduled IDs ledger: clear it so all alarms are freshly re-registered.
+            prefs.edit().remove(AthanAlarmPlugin.KEY_SCHEDULED_IDS).apply()
+
             val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null) ?: return
 
             val jsonArray = JSONArray(jsonString)
             val restoredCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, jsonArray)
 
-            Log.d(TAG, "Restored $restoredCount exact athan alarms after boot")
+            Log.d(TAG, "Restored $restoredCount exact athan alarms after boot (forced re-registration)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore athan alarms on boot", e)
         }

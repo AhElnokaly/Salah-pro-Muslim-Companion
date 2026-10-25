@@ -1,12 +1,9 @@
 package com.salahpro.app.plugins
 
 import android.app.AlarmManager
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import org.json.JSONArray
@@ -20,8 +17,6 @@ class ScheduleRenewalWorker(
 
     companion object {
         const val TAG = "ScheduleRenewalWorker"
-        const val LOW_SCHEDULE_CHANNEL_ID = "salah_low_schedule_channel"
-        const val LOW_SCHEDULE_NOTIF_ID = 8801
     }
 
     override fun doWork(): Result {
@@ -82,158 +77,24 @@ class ScheduleRenewalWorker(
                 }
             }
 
-            // Extend offline 60-day rolling window if remaining future alarms are less than 150 (< 30 days)
-            if (updatedList.size < 150) {
-                val cal = Calendar.getInstance()
-                for (dayOffset in 0 until 60) {
-                    cal.timeInMillis = now
-                    cal.add(Calendar.DAY_OF_YEAR, dayOffset)
-                    val year = cal.get(Calendar.YEAR)
-                    val month = cal.get(Calendar.MONTH) + 1
-                    val day = cal.get(Calendar.DAY_OF_MONTH)
-
-                    val times = PrayerTimesCalculator.calculateForDate(
-                        year, month, day, lat, lng, calcMethod, madhab,
-                        fajrOffset, dhuhrOffset, asrOffset, maghribOffset, ishaOffset, timeZoneId
-                    )
-                    val prayers = listOf(
-                        Triple("fajr", "الفجر", times.fajr),
-                        Triple("dhuhr", "الظهر", times.dhuhr),
-                        Triple("asr", "العصر", times.asr),
-                        Triple("maghrib", "المغرب", times.maghrib),
-                        Triple("isha", "العشاء", times.isha)
-                    )
-
-                    val canonicalPrayerNames = mapOf(
-                        "fajr" to "Fajr",
-                        "sunrise" to "Sunrise",
-                        "dhuhr" to "Dhuhr",
-                        "asr" to "Asr",
-                        "maghrib" to "Maghrib",
-                        "isha" to "Isha"
-                    )
-
-                    val prayerPreAlert = prefs.getBoolean("prayerPreAlert", false)
-                    val preAlertMinutes = prefs.getInt("preAlertMinutes", 15)
-                    val hasBeforeSalahCustom = prefs.getBoolean("hasBeforeSalahCustom", false)
-                    val preAlertSound = prefs.getString("preAlertSound", "reminder") ?: "reminder"
-                    val prayerPostAlert = prefs.getBoolean("prayerPostAlert", false)
-                    val postAlertMinutes = prefs.getInt("postAlertMinutes", 15)
-                    val hasAfterSalahCustom = prefs.getBoolean("hasAfterSalahCustom", false)
-                    val postAlertSound = prefs.getString("postAlertSound", "reminder") ?: "reminder"
-                    val khushuAutoWithIqama = prefs.getBoolean("khushuAutoWithIqama", false)
-                    val khushuMode = prefs.getString("khushuMode", "silent") ?: "silent"
-
-                    for (p in prayers) {
-                        val canonicalKey = canonicalPrayerNames[p.first] ?: p.first
-                        val isPrayerAllowed = isAthanEnabled[canonicalKey] ?: true
-                        if (p.third > now && isPrayerAllowed) {
-                            val exists = updatedList.any {
-                                Math.abs(it.optLong("timeMs", 0L) - p.third) < 60000L &&
-                                (it.optString("alarmType", "athan") == "athan" || it.optString("alarmType").isEmpty()) &&
-                                !it.optString("prayerKey").contains("prealert") &&
-                                !it.optString("prayerKey").contains("postalert") &&
-                                !it.optString("prayerKey").contains("khushu") &&
-                                !it.optString("prayerKey").startsWith("custom_")
-                            }
-                            if (!exists) {
-                                val obj = JSONObject()
-                                obj.put("prayerKey", canonicalKey)
-                                obj.put("prayerName", p.second)
-                                obj.put("timeMs", p.third)
-                                obj.put("isFajr", p.first == "fajr")
-                                obj.put("alarmType", "athan")
-                                updatedList.add(obj)
-                            }
-                        }
-
-                        if (prayerPreAlert && !hasBeforeSalahCustom) {
-                            val preTimeMs = p.third - preAlertMinutes * 60000L
-                            if (preTimeMs > now) {
-                                val preExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - preTimeMs) < 60000L && it.optString("prayerKey").contains("prealert") }
-                                if (!preExists) {
-                                    val preObj = JSONObject()
-                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_prealert"
-                                    preObj.put("prayerKey", canonicalKey)
-                                    preObj.put("prayerName", p.second)
-                                    preObj.put("timeMs", preTimeMs)
-                                    preObj.put("isFajr", p.first == "fajr")
-                                    preObj.put("alarmType", "prealert")
-                                    preObj.put("soundType", preAlertSound)
-                                    updatedList.add(preObj)
-                                }
-                            }
-                        }
-
-                        if (prayerPostAlert && !hasAfterSalahCustom) {
-                            var postTimeMs = p.third + postAlertMinutes * 60000L
-                            if (khushuAutoWithIqama) {
-                                val iqamaOffset = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 25L else 15L
-                                val durationMinutes = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 45L else 15L
-                                val iqamaTimeMs = p.third + iqamaOffset * 60000L
-                                val khushuEndTimeMs = iqamaTimeMs + durationMinutes * 60000L
-                                if (postTimeMs in iqamaTimeMs until khushuEndTimeMs) {
-                                    postTimeMs = khushuEndTimeMs
-                                }
-                            }
-                            if (postTimeMs > now) {
-                                val postExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - postTimeMs) < 60000L && it.optString("prayerKey").contains("postalert") }
-                                if (!postExists) {
-                                    val postObj = JSONObject()
-                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_postalert"
-                                    postObj.put("prayerKey", canonicalKey)
-                                    postObj.put("prayerName", p.second)
-                                    postObj.put("timeMs", postTimeMs)
-                                    postObj.put("isFajr", p.first == "fajr")
-                                    postObj.put("alarmType", "postalert")
-                                    postObj.put("soundType", postAlertSound)
-                                    updatedList.add(postObj)
-                                }
-                            }
-                        }
-
-                        if (khushuAutoWithIqama) {
-                            val iqamaOffset = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 25L else 15L
-                            val durationMinutes = if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY && p.first == "dhuhr") 45 else 15
-                            val iqamaTimeMs = p.third + iqamaOffset * 60000L
-                            if (iqamaTimeMs > now) {
-                                val khushuExists = updatedList.any { Math.abs(it.optLong("timeMs", 0L) - iqamaTimeMs) < 60000L && it.optString("prayerKey").contains("khushu") }
-                                if (!khushuExists) {
-                                    val khushuObj = JSONObject()
-                                    val canonicalKey = "${canonicalPrayerNames[p.first] ?: p.first}_khushu"
-                                    khushuObj.put("prayerKey", canonicalKey)
-                                    khushuObj.put("prayerName", p.second)
-                                    khushuObj.put("timeMs", iqamaTimeMs)
-                                    khushuObj.put("isFajr", p.first == "fajr")
-                                    khushuObj.put("alarmType", "khushu")
-                                    khushuObj.put("durationMinutes", durationMinutes)
-                                    khushuObj.put("khushuMode", khushuMode)
-                                    updatedList.add(khushuObj)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             updatedList.sortBy { it.optLong("timeMs", 0L) }
             val newJsonArray = JSONArray()
             for (obj in updatedList) {
                 newJsonArray.put(obj)
             }
 
-            // Save updated 60-day buffer to SharedPreferences
+            // Save clean unexpired buffer back to SharedPreferences
             prefs.edit().putString(AthanAlarmPlugin.KEY_SAVED_ALARMS, newJsonArray.toString()).apply()
 
             val futureCount = newJsonArray.length()
-            Log.d(TAG, "ScheduleRenewalWorker: updated 60-day rolling schedule buffer ($futureCount future alarms)")
+            Log.d(TAG, "ScheduleRenewalWorker: sliding 14-day window over stored buffer ($futureCount future alarms remaining in buffer)")
 
-            // Replenish active native AlarmManager exact alarms from the stored 60-day buffer
+            // Slide active 14-day registration window in AlarmManager over stored buffer
             val scheduledCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, newJsonArray)
-            Log.d(TAG, "ScheduleRenewalWorker: successfully replenished $scheduledCount active native alarms offline.")
+            Log.d(TAG, "ScheduleRenewalWorker: successfully refreshed $scheduledCount active 14-day native alarms.")
 
             if (futureCount < 25) {
-                sendLowScheduleNotification(context, futureCount)
+                Log.w(TAG, "ScheduleRenewalWorker: remaining unexpired buffer is low ($futureCount alarms remaining). Replenishment recommended upon next app launch.")
             }
 
             return Result.success()
@@ -241,27 +102,5 @@ class ScheduleRenewalWorker(
             Log.e(TAG, "Error in ScheduleRenewalWorker", e)
             return Result.retry()
         }
-    }
-
-    private fun sendLowScheduleNotification(context: Context, remainingCount: Int) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                LOW_SCHEDULE_CHANNEL_ID,
-                "تحديث مواقيت الصلاة",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val builder = NotificationCompat.Builder(context, LOW_SCHEDULE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle("تحديث مواقيت الصلاة")
-            .setContentText("تبقى $remainingCount تنبيه للأذان. يرجى فتح التطبيق لتحديث جدول المواقيت الشهرية.")
-            .setAutoCancel(true)
-
-        notificationManager.notify(LOW_SCHEDULE_NOTIF_ID, builder.build())
     }
 }

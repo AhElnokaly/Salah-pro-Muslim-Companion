@@ -354,15 +354,16 @@ export function usePrayerScheduler({
           settings.prayerOffsets || {}
         );
 
-        if (cached && cached.schedule && cached.schedule.length >= 60) {
-          // Cache hit within 25km with 60 days -> reuse schedule
-          days60List = cached.schedule.map(s => ({
+        const SCHEDULE_BUFFER_DAYS = 30;
+        if (cached && cached.schedule && cached.schedule.length >= SCHEDULE_BUFFER_DAYS) {
+          // Cache hit within 25km with 30-day buffer -> reuse schedule
+          days60List = cached.schedule.slice(0, SCHEDULE_BUFFER_DAYS).map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
           }));
         } else {
-          // Cache miss or needs 60-day extension -> compute fresh 60 days
-          for (let i = 0; i < 60; i++) {
+          // Cache miss or needs extension -> compute fresh 30-day buffer
+          for (let i = 0; i < SCHEDULE_BUFFER_DAYS; i++) {
             const d = new Date(now);
             d.setDate(d.getDate() + i);
             const tzOffset = getTimezoneOffsetForLocation(d, settings.timezoneId);
