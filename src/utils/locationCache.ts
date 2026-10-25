@@ -103,3 +103,17 @@ export function saveLocationSchedule(
 export function getLastCachedLocationSchedule(): LocationScheduleCache | null {
   return safeGetJSON<LocationScheduleCache | null>(LAST_LOCATION_KEY, null);
 }
+
+export function selectUpcomingCachedDays(
+  schedule: CachedScheduleDay[],
+  now: Date,
+  minDays: number
+): CachedScheduleDay[] | null {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const upcoming = schedule.filter((day) => {
+    const t = new Date(day.dateStr).getTime();
+    return Number.isFinite(t) && t >= todayStart;
+  });
+  return upcoming.length >= minDays ? upcoming.slice(0, minDays) : null;
+}
+

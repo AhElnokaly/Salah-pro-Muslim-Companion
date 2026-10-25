@@ -13,6 +13,7 @@ import {
   findNearestLocationCache,
   saveLocationSchedule,
   getLastCachedLocationSchedule,
+  selectUpcomingCachedDays,
 } from '../utils/locationCache';
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
@@ -355,9 +356,11 @@ export function usePrayerScheduler({
         );
 
         const SCHEDULE_BUFFER_DAYS = 30;
-        if (cached && cached.schedule && cached.schedule.length >= SCHEDULE_BUFFER_DAYS) {
-          // Cache hit within 25km with 30-day buffer -> reuse schedule
-          days60List = cached.schedule.slice(0, SCHEDULE_BUFFER_DAYS).map(s => ({
+        const upcomingCached = cached && cached.schedule
+          ? selectUpcomingCachedDays(cached.schedule, now, SCHEDULE_BUFFER_DAYS)
+          : null;
+        if (upcomingCached) {
+          days60List = upcomingCached.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
           }));

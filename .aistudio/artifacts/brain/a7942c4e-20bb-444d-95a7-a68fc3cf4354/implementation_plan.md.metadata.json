@@ -1,6 +1,0 @@
-{
-  "summary":  "Approved and executed implementation plan for Batches B0, B1, and B2 with the 3 user amendments applied. Documents the payload contract, pure Long-based window filter test, log-only warning on low buffer, and diagnostics isCurrentlyScheduled device verification.",
-  "updatedAt":  "2026-10-25T12:38:44.563810078Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}
