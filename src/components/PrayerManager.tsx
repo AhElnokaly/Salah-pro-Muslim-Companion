@@ -73,6 +73,7 @@ export default function PrayerManager({
     fajrMuezzin,
     setFajrMuezzin,
     muezzins,
+    downloadedTrackIds,
     togglePlayAthan,
     dateStr,
     targetDate,
@@ -126,6 +127,7 @@ export default function PrayerManager({
           fajrMuezzin={fajrMuezzin}
           setFajrMuezzin={setFajrMuezzin}
           muezzins={muezzins}
+          downloadedTrackIds={downloadedTrackIds}
           isPlaying={isPlaying}
           currentPlayingPrayer={null}
           togglePlayAthan={togglePlayAthan}

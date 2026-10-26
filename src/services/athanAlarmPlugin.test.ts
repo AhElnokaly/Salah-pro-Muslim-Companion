@@ -380,7 +380,7 @@ describe('TASK 6: Post-prayer alert vs Khushu collision & Same-minute priority',
     },
   };
 
-  test('default offsets (iqama 15m, duration 15m): postalert (15m) moves from +15m to +30m (end of Khushu window)', () => {
+  test('B6: system postalert items are completely removed and never produced, Khushu alarms remain functional', () => {
     const alarms = buildNativePrayerTimeAlarms([baseEntry], undefined, {
       prayerPostAlert: true,
       postAlertMinutes: 15,
@@ -403,58 +403,12 @@ describe('TASK 6: Post-prayer alert vs Khushu collision & Same-minute priority',
     const dhuhrPost = alarms.find(a => a.prayerKey === 'Dhuhr_postalert');
     const dhuhrKhushu = alarms.find(a => a.prayerKey === 'Dhuhr_khushu');
 
-    assert.ok(dhuhrAthan && dhuhrPost && dhuhrKhushu);
-    // Dhuhr is at 12:00
-    // Khushu is at 12:15 with duration 15m (ends at 12:30)
-    // Postalert should be shifted from 12:15 to 12:30 (30m after athan)
-    assert.equal(dhuhrPost.timeMs, dhuhrAthan.timeMs + 30 * 60000, 'Postalert must be moved to the end of Khushu window (+30m)');
-    assert.equal(dhuhrKhushu.timeMs, dhuhrAthan.timeMs + 15 * 60000);
+    assert.ok(dhuhrAthan && dhuhrKhushu, 'Dhuhr athan and khushu must be scheduled');
+    assert.equal(dhuhrPost, undefined, 'B6: System postalert must not be generated');
+    assert.equal(dhuhrKhushu.timeMs, dhuhrAthan.timeMs + 15 * 60000, 'Khushu alarm must be at Iqama offset (+15m)');
   });
 
-  test('custom offsets (iqama 10m, duration 20m): postalert at +15m collides and moves to +30m', () => {
-    const alarms = buildNativePrayerTimeAlarms([baseEntry], undefined, {
-      prayerPostAlert: true,
-      postAlertMinutes: 15,
-      khushuAutoWithIqama: true,
-      khushuSettings: {
-        autoWithIqama: true,
-        defaultDurationMinutes: 15,
-        iqamaOffsets: { fajr: 10, dhuhr: 10, asr: 10, maghrib: 10, isha: 10, friday: 25 },
-        prayerDurations: { fajr: 20, dhuhr: 20, asr: 20, maghrib: 20, isha: 20, friday: 45 },
-        preferredMode: 'silent',
-        enableGentleHapticPulse: true,
-        enableDistractionShield: true,
-        enableEmergencyCallBypass: true,
-        enablePostPrayerAthkar: true,
-        enableFridaySpecial: true,
-      },
-    });
-
-    const dhuhrAthan = alarms.find(a => a.prayerKey === 'Dhuhr' && a.alarmType === 'athan');
-    const dhuhrPost = alarms.find(a => a.prayerKey === 'Dhuhr_postalert');
-
-    assert.ok(dhuhrAthan && dhuhrPost);
-    // Window is [12:10, 12:30). 12:15 is inside window -> shifted to 12:30.
-    assert.equal(dhuhrPost.timeMs, dhuhrAthan.timeMs + 30 * 60000);
-  });
-
-  test('Khushu disabled (khushuAutoWithIqama: false): postalert stays at +15m without shifting', () => {
-    const alarms = buildNativePrayerTimeAlarms([baseEntry], undefined, {
-      prayerPostAlert: true,
-      postAlertMinutes: 15,
-      khushuAutoWithIqama: false,
-    });
-
-    const dhuhrAthan = alarms.find(a => a.prayerKey === 'Dhuhr' && a.alarmType === 'athan');
-    const dhuhrPost = alarms.find(a => a.prayerKey === 'Dhuhr_postalert');
-
-    assert.ok(dhuhrAthan && dhuhrPost);
-    // Postalert remains at +15m
-    assert.equal(dhuhrPost.timeMs, dhuhrAthan.timeMs + 15 * 60000);
-  });
-
-  test('Friday Dhuhr special case: (iqama 25m, duration 45m => window [25m, 70m]), postalert at 30m shifts to +70m', () => {
-    // Construct a Friday date
+  test('B6: Friday Dhuhr special case preserves Friday Khushu window (+25m offset, 45m duration) with no postalert items', () => {
     const fridayDate = new Date();
     fridayDate.setDate(fridayDate.getDate() + ((7 - fridayDate.getDay() + 5) % 7 || 7)); // Next Friday
     fridayDate.setHours(0, 0, 0, 0);
@@ -472,7 +426,7 @@ describe('TASK 6: Post-prayer alert vs Khushu collision & Same-minute priority',
 
     const alarms = buildNativePrayerTimeAlarms([fridayEntry], undefined, {
       prayerPostAlert: true,
-      postAlertMinutes: 30, // 12:30 is inside [12:25, 13:10)
+      postAlertMinutes: 30,
       khushuAutoWithIqama: true,
       khushuSettings: {
         autoWithIqama: true,
@@ -490,10 +444,12 @@ describe('TASK 6: Post-prayer alert vs Khushu collision & Same-minute priority',
 
     const dhuhrAthan = alarms.find(a => a.prayerKey === 'Dhuhr' && a.alarmType === 'athan');
     const dhuhrPost = alarms.find(a => a.prayerKey === 'Dhuhr_postalert');
+    const dhuhrKhushu = alarms.find(a => a.prayerKey === 'Dhuhr_khushu');
 
-    assert.ok(dhuhrAthan && dhuhrPost);
-    // 25m iqama + 45m duration = 70m
-    assert.equal(dhuhrPost.timeMs, dhuhrAthan.timeMs + 70 * 60000, 'Friday Dhuhr postalert must shift to +70m');
+    assert.ok(dhuhrAthan && dhuhrKhushu);
+    assert.equal(dhuhrPost, undefined, 'B6: Postalert must not be generated');
+    assert.equal(dhuhrKhushu.timeMs, dhuhrAthan.timeMs + 25 * 60000, 'Friday Dhuhr Khushu must use friday iqama offset (+25m)');
+    assert.equal(dhuhrKhushu.durationMinutes, 45, 'Friday Dhuhr Khushu duration must be 45m');
   });
 
   test('Same-minute priority: athan > prealert > postalert > khushu > custom (lower priority gets +1 min)', () => {
@@ -534,7 +490,7 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     },
   };
 
-  test('building native items with preAlertSound="hayya" yields soundType="hayya"; default is "reminder"', () => {
+  test('B6: building native items with prayerPreAlert=true produces NO prealert items', () => {
     const alarmsWithCustomSound = buildNativePrayerTimeAlarms([baseEntry], undefined, {
       prayerPreAlert: true,
       preAlertMinutes: 15,
@@ -542,19 +498,10 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     });
 
     const preAlertItem = alarmsWithCustomSound.find(a => a.alarmType === 'prealert');
-    assert.ok(preAlertItem, 'Prealert item should be present');
-    assert.equal(preAlertItem.soundType, 'hayya');
-
-    const alarmsWithDefaultSound = buildNativePrayerTimeAlarms([baseEntry], undefined, {
-      prayerPreAlert: true,
-      preAlertMinutes: 15,
-    });
-    const defaultPreAlertItem = alarmsWithDefaultSound.find(a => a.alarmType === 'prealert');
-    assert.ok(defaultPreAlertItem);
-    assert.equal(defaultPreAlertItem.soundType, 'reminder');
+    assert.equal(preAlertItem, undefined, 'B6: No system prealert item must be built');
   });
 
-  test('building native items with postAlertSound="ayat_kursi" yields soundType="ayat_kursi"; default is "reminder"', () => {
+  test('B6: building native items with prayerPostAlert=true produces NO postalert items', () => {
     const alarmsWithCustomSound = buildNativePrayerTimeAlarms([baseEntry], undefined, {
       prayerPostAlert: true,
       postAlertMinutes: 20,
@@ -562,11 +509,10 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     });
 
     const postAlertItem = alarmsWithCustomSound.find(a => a.alarmType === 'postalert');
-    assert.ok(postAlertItem, 'Postalert item should be present');
-    assert.equal(postAlertItem.soundType, 'ayat_kursi');
+    assert.equal(postAlertItem, undefined, 'B6: No system postalert item must be built');
   });
 
-  test('with a custom alarm_before_salah present, no system prealert items are built', () => {
+  test('user-created prayer-relative before-salah alarm produces custom alarm items', () => {
     const customBeforeAlarm = {
       id: 'alarm_before_salah',
       title: 'Custom Pre Salah',
@@ -587,13 +533,14 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     });
 
     const systemPreAlerts = alarms.filter(a => a.alarmType === 'prealert');
-    assert.equal(systemPreAlerts.length, 0, 'System prealerts must not be scheduled when custom alarm_before_salah is present');
+    assert.equal(systemPreAlerts.length, 0, 'No system prealerts must be scheduled');
 
     const customPreAlerts = alarms.filter(a => a.alarmType === 'custom' && a.prayerKey.includes('alarm_before_salah'));
-    assert.ok(customPreAlerts.length > 0, 'Custom before prayer alarm must be scheduled');
+    assert.ok(customPreAlerts.length > 0, 'User custom before prayer alarm must be scheduled');
+    assert.equal(customPreAlerts[0].soundType, 'hayya');
   });
 
-  test('with a custom alarm_after_salah present, no system postalert items are built', () => {
+  test('user-created prayer-relative after-salah alarm produces custom alarm items', () => {
     const customAfterAlarm = {
       id: 'alarm_after_salah',
       title: 'Custom Post Salah',
@@ -613,6 +560,10 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     });
 
     const systemPostAlerts = alarms.filter(a => a.alarmType === 'postalert');
-    assert.equal(systemPostAlerts.length, 0, 'System postalerts must not be scheduled when custom alarm_after_salah is present');
+    assert.equal(systemPostAlerts.length, 0, 'No system postalerts must be scheduled');
+
+    const customPostAlerts = alarms.filter(a => a.alarmType === 'custom' && a.prayerKey.includes('alarm_after_salah'));
+    assert.ok(customPostAlerts.length > 0, 'User custom after prayer alarm must be scheduled');
+    assert.equal(customPostAlerts[0].soundType, 'salawat');
   });
 });

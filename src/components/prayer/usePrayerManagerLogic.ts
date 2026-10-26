@@ -24,7 +24,8 @@ import { resolveMuezzinId } from '../../utils/muezzinResolver';
 import { 
   defaultMuezzins, 
   getCustomAudios, 
-  archiveMuezzins 
+  archiveMuezzins,
+  getDownloadedTrackIds,
 } from '../../utils/audioStorage';
 import { FIVE_DAILY_PRAYERS } from './prayerUtils';
 
@@ -121,8 +122,9 @@ export function usePrayerManagerLogic({
     Isha: resolveMuezzinId('Isha'),
   }));
 
-  // Custom Muezzins State
+  // Custom Muezzins & Downloaded State
   const [customMuezzins, setCustomMuezzins] = useState<{ id: string; name: string; url: string; isFajr: boolean; isCustom?: boolean; fileName?: string }[]>([]);
+  const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getCustomAudios().then(tracks => {
@@ -130,6 +132,16 @@ export function usePrayerManagerLogic({
     }).catch(err => {
       console.error('Failed to load custom muezzins from IndexedDB:', err);
     });
+
+    const refreshDownloaded = () => {
+      getDownloadedTrackIds().then(setDownloadedTrackIds).catch(console.error);
+    };
+    refreshDownloaded();
+
+    window.addEventListener('salah-muezzin-downloaded', refreshDownloaded);
+    return () => {
+      window.removeEventListener('salah-muezzin-downloaded', refreshDownloaded);
+    };
   }, []);
 
   const muezzins = [...defaultMuezzins, ...archiveMuezzins, ...customMuezzins];
@@ -343,6 +355,7 @@ export function usePrayerManagerLogic({
     fajrMuezzin,
     setFajrMuezzin,
     muezzins,
+    downloadedTrackIds,
     togglePlayAthan,
     dateStr,
     targetDate,

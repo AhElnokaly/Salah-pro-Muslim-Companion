@@ -21,6 +21,7 @@ import { useCachedPrayerTimes } from './useCachedPrayerTimes';
 import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
 import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
 import { migrateRemovedDefaultAlarms } from '../domain/notifications/migrateRemovedDefaultAlarms';
+import { migrateRemovedSystemPrePostAlerts } from '../domain/notifications/migrateRemovedSystemPrePostAlerts';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -141,6 +142,9 @@ export function usePrayerScheduler({
   useEffect(() => {
     migrateRemovedDefaultAlarms().catch(err => {
       console.warn('[usePrayerScheduler] migrateRemovedDefaultAlarms error:', err);
+    });
+    migrateRemovedSystemPrePostAlerts().catch(err => {
+      console.warn('[usePrayerScheduler] migrateRemovedSystemPrePostAlerts error:', err);
     });
   }, []);
 

@@ -585,53 +585,8 @@ export function buildNativePrayerTimeAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-            const preMins = calcParams.preAlertMinutes || 15;
-            const preTimeMs = timeMs - preMins * 60000;
-            if (preTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: preTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'prealert',
-                soundType: calcParams.preAlertSound || 'reminder',
-              });
-            }
-          }
-
-          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-            const postMins = calcParams.postAlertMinutes || 15;
-            let postTimeMs = timeMs + postMins * 60000;
-
-            if (khushuEnabled) {
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-              let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-              if (isFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
-                duration = ks.prayerDurations.friday || 45;
-              }
-              const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-              const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-              if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-                const oldTime = postTimeMs;
-                postTimeMs = khushuEndTimeMs;
-                console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-              }
-            }
-
-            if (postTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: postTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'postalert',
-                soundType: calcParams.postAlertSound || 'reminder',
-              });
-            }
-          }
+          // System prealert and postalert paths removed in B6.
+          // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
             let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
@@ -688,53 +643,8 @@ export function buildNativePrayerTimeAlarms(
           });
         }
 
-        if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-          const preMins = calcParams.preAlertMinutes || 15;
-          const preTimeMs = timeMs - preMins * 60000;
-          if (preTimeMs > now) {
-            times.push({
-              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-              prayerName: prayerArabicNames[lowerKey],
-              timeMs: preTimeMs,
-              isFajr: lowerKey === 'fajr',
-              alarmType: 'prealert',
-              soundType: calcParams.preAlertSound || 'reminder',
-            });
-          }
-        }
-
-        if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-          const postMins = calcParams.postAlertMinutes || 15;
-          let postTimeMs = timeMs + postMins * 60000;
-
-          if (khushuEnabled) {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-            let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-            if (isTodayFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
-              duration = ks.prayerDurations.friday || 45;
-            }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-            const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-            if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-              const oldTime = postTimeMs;
-              postTimeMs = khushuEndTimeMs;
-              console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-            }
-          }
-
-          if (postTimeMs > now) {
-            times.push({
-              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-              prayerName: prayerArabicNames[lowerKey],
-              timeMs: postTimeMs,
-              isFajr: lowerKey === 'fajr',
-              alarmType: 'postalert',
-              soundType: calcParams.postAlertSound || 'reminder',
-            });
-          }
-        }
+        // System prealert and postalert paths removed in B6.
+        // User-created prayer_relative custom alarms continue to be generated below.
 
         if (khushuEnabled && lowerKey !== 'sunrise') {
           let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
@@ -791,53 +701,8 @@ export function buildNativePrayerTimeAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-            const preMins = calcParams.preAlertMinutes || 15;
-            const preTimeMs = timeMs - preMins * 60000;
-            if (preTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: preTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'prealert',
-                soundType: calcParams.preAlertSound || 'reminder',
-              });
-            }
-          }
-
-          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-            const postMins = calcParams.postAlertMinutes || 15;
-            let postTimeMs = timeMs + postMins * 60000;
-
-            if (khushuEnabled) {
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-              let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-              if (isTomorrowFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
-                duration = ks.prayerDurations.friday || 45;
-              }
-              const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-              const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-              if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-                const oldTime = postTimeMs;
-                postTimeMs = khushuEndTimeMs;
-                console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-              }
-            }
-
-            if (postTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: postTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'postalert',
-                soundType: calcParams.postAlertSound || 'reminder',
-              });
-            }
-          }
+          // System prealert and postalert paths removed in B6.
+          // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
             let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
@@ -938,14 +803,14 @@ export async function scheduleNativeAthanAlarms(
       asrOffset: calcParams?.asrOffset,
       maghribOffset: calcParams?.maghribOffset,
       ishaOffset: calcParams?.ishaOffset,
-      prayerPreAlert: calcParams?.prayerPreAlert,
-      preAlertMinutes: calcParams?.preAlertMinutes,
+      prayerPreAlert: false,
+      preAlertMinutes: calcParams?.preAlertMinutes || 15,
       preAlertSound: calcParams?.preAlertSound || 'reminder',
-      hasBeforeSalahCustom,
-      prayerPostAlert: calcParams?.prayerPostAlert,
-      postAlertMinutes: calcParams?.postAlertMinutes,
+      hasBeforeSalahCustom: false,
+      prayerPostAlert: false,
+      postAlertMinutes: calcParams?.postAlertMinutes || 15,
       postAlertSound: calcParams?.postAlertSound || 'reminder',
-      hasAfterSalahCustom,
+      hasAfterSalahCustom: false,
       khushuAutoWithIqama: calcParams?.khushuAutoWithIqama,
       khushuMode: calcParams?.khushuSettings?.preferredMode || 'silent',
       athan_enabled_Fajr: athanMap['Fajr'] ?? true,

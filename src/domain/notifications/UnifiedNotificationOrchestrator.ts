@@ -100,12 +100,12 @@ export class UnifiedNotificationOrchestrator {
           asrOffset: settings.prayerOffsets?.Asr || 0,
           maghribOffset: settings.prayerOffsets?.Maghrib || 0,
           ishaOffset: settings.prayerOffsets?.Isha || 0,
-          prayerPreAlert: preAlertEnabled,
-          preAlertMinutes: preAlertMins,
-          preAlertSound,
-          prayerPostAlert: postAlertEnabled,
-          postAlertMinutes: postAlertMins,
-          postAlertSound,
+          prayerPreAlert: false,
+          preAlertMinutes: 15,
+          preAlertSound: 'reminder',
+          prayerPostAlert: false,
+          postAlertMinutes: 15,
+          postAlertSound: 'reminder',
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuSettings,
           customAlarms: resolvedCustomAlarms,
@@ -213,35 +213,8 @@ export class UnifiedNotificationOrchestrator {
           });
         }
 
-        // Pre-alert alarm before prayer time (excluding sunrise) - suppressed if custom alarm exists
-        if (preAlertEnabled && !hasBeforeSalahCustom && key !== 'Sunrise') {
-          const preAlertTimeMs = triggerDate.getTime() - preAlertMins * 60000;
-          if (preAlertTimeMs > Date.now()) {
-            nativeAlarmsToSchedule.push({
-              prayerKey: `${key}_prealert`,
-              prayerName: key,
-              timeMs: preAlertTimeMs,
-              isFajr: key === 'Fajr',
-              alarmType: 'prealert',
-              soundType: preAlertSound,
-            });
-          }
-        }
-
-        // Post-alert worship & adhkar reminder after prayer time (excluding sunrise) - suppressed if custom alarm exists
-        if (postAlertEnabled && !hasAfterSalahCustom && key !== 'Sunrise') {
-          const postAlertTimeMs = triggerDate.getTime() + postAlertMins * 60000;
-          if (postAlertTimeMs > Date.now()) {
-            nativeAlarmsToSchedule.push({
-              prayerKey: `${key}_postalert`,
-              prayerName: key,
-              timeMs: postAlertTimeMs,
-              isFajr: key === 'Fajr',
-              alarmType: 'postalert',
-              soundType: postAlertSound,
-            });
-          }
-        }
+        // System prealert and postalert paths removed in B6.
+        // User-created prayer_relative custom alarms continue to be handled via custom alarms engine.
 
         // Auto Khushu alarm at Iqama moment (excluding sunrise)
         if (khushuSettings.autoWithIqama && key !== 'Sunrise') {
@@ -271,14 +244,14 @@ export class UnifiedNotificationOrchestrator {
       if (nativeAlarmsToSchedule.length > 0) {
         const res = await AthanAlarm.scheduleAthanAlarms({
           times: nativeAlarmsToSchedule,
-          prayerPreAlert: preAlertEnabled,
-          preAlertMinutes: preAlertMins,
-          preAlertSound,
-          hasBeforeSalahCustom,
-          prayerPostAlert: postAlertEnabled,
-          postAlertMinutes: postAlertMins,
-          postAlertSound,
-          hasAfterSalahCustom,
+          prayerPreAlert: false,
+          preAlertMinutes: 15,
+          preAlertSound: 'reminder',
+          hasBeforeSalahCustom: false,
+          prayerPostAlert: false,
+          postAlertMinutes: 15,
+          postAlertSound: 'reminder',
+          hasAfterSalahCustom: false,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuMode: khushuSettings.preferredMode || 'silent',
           athan_enabled_Fajr: athanEnabledMap['Fajr'],

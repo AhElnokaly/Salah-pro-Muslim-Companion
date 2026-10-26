@@ -198,29 +198,7 @@ export default function WorshipAlarms({
     });
 
     // Two-way sync: reflect custom alarm edit in pushSettings
-    if (savedAlarm.id === 'alarm_before_salah') {
-      const updated = {
-        ...pushSettings,
-        prayerPreAlert: savedAlarm.enabled,
-        preAlertMinutes: savedAlarm.offsetMinutes ?? pushSettings.preAlertMinutes,
-      };
-      setPushSettings(updated);
-      savePushSettings(updated);
-      if (isNative) {
-        cancelNativeAlarm({ alarmId: 'prealert' }).catch(() => {});
-      }
-    } else if (savedAlarm.id === 'alarm_after_salah') {
-      const updated = {
-        ...pushSettings,
-        prayerPostAlert: savedAlarm.enabled,
-        postAlertMinutes: savedAlarm.offsetMinutes ?? pushSettings.postAlertMinutes,
-      };
-      setPushSettings(updated);
-      savePushSettings(updated);
-      if (isNative) {
-        cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
-      }
-    } else if (savedAlarm.id === 'alarm_morning_adhkar') {
+    if (savedAlarm.id === 'alarm_morning_adhkar') {
       const updated = {
         ...pushSettings,
         adhkarMorning: savedAlarm.enabled,
@@ -280,11 +258,7 @@ export default function WorshipAlarms({
 
     // If disabled, explicitly cancel any native scheduled alarms
     if (!enabled && isNative) {
-      if (key === 'prayerPreAlert') {
-        cancelNativeAlarm({ alarmId: 'prealert' }).catch(() => {});
-      } else if (key === 'prayerPostAlert') {
-        cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
-      } else if (key === 'prayerAthan') {
+      if (key === 'prayerAthan') {
         // Handled inside applyPrayerAthanToggle (prefs -> cancel alarms -> stop audio)
       } else {
         cancelNativeAlarm({ alarmId: key }).catch(() => {});
@@ -301,23 +275,7 @@ export default function WorshipAlarms({
     }
 
     // Two-way sync back to custom alarms if one exists
-    if (key === 'prayerPreAlert') {
-      setCustomAlarms(prev => {
-        if (!prev.some(a => a.id === 'alarm_before_salah')) return prev;
-        const next = prev.map(a => a.id === 'alarm_before_salah' ? { ...a, enabled } : a);
-        safeSetItem('salah_custom_alarms', JSON.stringify(next));
-        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
-        return next;
-      });
-    } else if (key === 'prayerPostAlert') {
-      setCustomAlarms(prev => {
-        if (!prev.some(a => a.id === 'alarm_after_salah')) return prev;
-        const next = prev.map(a => a.id === 'alarm_after_salah' ? { ...a, enabled } : a);
-        safeSetItem('salah_custom_alarms', JSON.stringify(next));
-        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
-        return next;
-      });
-    } else if (key === 'adhkarMorning') {
+    if (key === 'adhkarMorning') {
       setCustomAlarms(prev => {
         if (!prev.some(a => a.id === 'alarm_morning_adhkar')) return prev;
         const next = prev.map(a => a.id === 'alarm_morning_adhkar' ? { ...a, enabled } : a);
@@ -370,8 +328,6 @@ export default function WorshipAlarms({
   const enabledCount = customAlarms.filter(a => a.enabled).length;
 
   // De-duplication checks: if custom alarm exists, hide matching system alarm card
-  const hasBeforeSalahCustom = customAlarms.some(a => a.id === 'alarm_before_salah');
-  const hasAfterSalahCustom = customAlarms.some(a => a.id === 'alarm_after_salah');
   const hasMorningAdhkarCustom = customAlarms.some(a => a.id === 'alarm_morning_adhkar');
   const hasEveningAdhkarCustom = customAlarms.some(a => a.id === 'alarm_evening_adhkar');
 
@@ -480,39 +436,7 @@ export default function WorshipAlarms({
             onEdit={handleOpenSystemEditModal}
           />
 
-          {/* 2. تنبيه قبل الصلاة (prayerPreAlert) — Shown if not overridden by custom alarm */}
-          {!hasBeforeSalahCustom && (
-            <SystemAlarmCard
-              alarmKey="prayerPreAlert"
-              title="تنبيه قبل الصلاة (الاستعداد والوضوء)"
-              timingDesc={`قبل الأذان بـ ${pushSettings.preAlertMinutes || 15} دقيقة`}
-              enabled={pushSettings.prayerPreAlert}
-              isDefault={
-                pushSettings.prayerPreAlert === DEFAULT_PUSH_SETTINGS.prayerPreAlert &&
-                pushSettings.preAlertMinutes === DEFAULT_PUSH_SETTINGS.preAlertMinutes
-              }
-              onToggle={handleToggleSystemAlarm}
-              onEdit={handleOpenSystemEditModal}
-            />
-          )}
-
-          {/* 3. تنبيه بعد الصلاة (prayerPostAlert) — Shown if not overridden by custom alarm */}
-          {!hasAfterSalahCustom && (
-            <SystemAlarmCard
-              alarmKey="prayerPostAlert"
-              title="تنبيه بعد الصلاة (الأذكار والسنن)"
-              timingDesc={`بعد الأذان بـ ${pushSettings.postAlertMinutes || 15} دقيقة`}
-              enabled={pushSettings.prayerPostAlert}
-              isDefault={
-                pushSettings.prayerPostAlert === DEFAULT_PUSH_SETTINGS.prayerPostAlert &&
-                pushSettings.postAlertMinutes === DEFAULT_PUSH_SETTINGS.postAlertMinutes
-              }
-              onToggle={handleToggleSystemAlarm}
-              onEdit={handleOpenSystemEditModal}
-            />
-          )}
-
-          {/* 4. أذكار الصباح (adhkarMorning) — Shown if not overridden by custom alarm */}
+          {/* 2. أذكار الصباح (adhkarMorning) — Shown if not overridden by custom alarm */}
           {!hasMorningAdhkarCustom && (
             <SystemAlarmCard
               alarmKey="adhkarMorning"

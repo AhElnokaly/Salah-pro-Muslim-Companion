@@ -31,7 +31,6 @@ export const SystemAlarmCard: React.FC<SystemAlarmCardProps> = ({
       case 'prayerAthan':
       case 'ongoingPrayerBar':
         return Bell;
-      case 'prayerPreAlert':
       case 'adhkarMorning':
       case 'adhkarEvening':
         return Clock;

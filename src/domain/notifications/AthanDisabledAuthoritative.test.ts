@@ -189,8 +189,9 @@ describe('TASK 8: Authoritative Athan Disabled Everywhere', () => {
       const customItems = scheduledTimes.filter(t => t.alarmType === 'custom');
 
       assert.equal(athanItems.length, 0, 'With all false, zero athan items must be produced');
-      assert.ok(preAlertItems.length > 0, 'Pre-alert items must still be scheduled when athan is disabled');
-      assert.ok(postAlertItems.length > 0, 'Post-alert items must still be scheduled when athan is disabled');
+      // B6: System pre/post alerts are completely removed and never produced
+      assert.equal(preAlertItems.length, 0, 'No system pre-alert items must be produced');
+      assert.equal(postAlertItems.length, 0, 'No system post-alert items must be scheduled');
       assert.ok(customItems.length > 0, 'Custom alarms must still be scheduled when athan is disabled');
 
       // Verify all five per-prayer flags are false

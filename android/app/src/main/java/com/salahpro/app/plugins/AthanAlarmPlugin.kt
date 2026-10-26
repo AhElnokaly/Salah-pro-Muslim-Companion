@@ -759,30 +759,7 @@ class AthanAlarmPlugin : Plugin() {
         if (call.hasOption("ishaOffset")) {
             editor.putFloat("ishaOffset", call.getDouble("ishaOffset", 0.0)?.toFloat() ?: 0f)
         }
-        if (call.hasOption("prayerPreAlert")) {
-            editor.putBoolean("prayerPreAlert", call.getBoolean("prayerPreAlert", false) ?: false)
-        }
-        if (call.hasOption("preAlertMinutes")) {
-            editor.putInt("preAlertMinutes", call.getInt("preAlertMinutes", 15) ?: 15)
-        }
-        if (call.hasOption("preAlertSound")) {
-            editor.putString("preAlertSound", call.getString("preAlertSound", "reminder") ?: "reminder")
-        }
-        if (call.hasOption("hasBeforeSalahCustom")) {
-            editor.putBoolean("hasBeforeSalahCustom", call.getBoolean("hasBeforeSalahCustom", false) ?: false)
-        }
-        if (call.hasOption("prayerPostAlert")) {
-            editor.putBoolean("prayerPostAlert", call.getBoolean("prayerPostAlert", false) ?: false)
-        }
-        if (call.hasOption("postAlertMinutes")) {
-            editor.putInt("postAlertMinutes", call.getInt("postAlertMinutes", 15) ?: 15)
-        }
-        if (call.hasOption("postAlertSound")) {
-            editor.putString("postAlertSound", call.getString("postAlertSound", "reminder") ?: "reminder")
-        }
-        if (call.hasOption("hasAfterSalahCustom")) {
-            editor.putBoolean("hasAfterSalahCustom", call.getBoolean("hasAfterSalahCustom", false) ?: false)
-        }
+        // B6: System prealert and postalert prefs saving removed; not read anywhere in Kotlin.
         if (call.hasOption("khushuAutoWithIqama")) {
             editor.putBoolean("khushuAutoWithIqama", call.getBoolean("khushuAutoWithIqama", false) ?: false)
         }

@@ -57,17 +57,6 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
   // Initialize settings with sync from custom worship alarms
   const [settings, setSettings] = useState<PushNotificationSettings>(() => {
     const pushSet = getPushSettings();
-    const alarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
-    const beforeAlarm = alarms?.find(a => a.id === 'alarm_before_salah');
-    if (beforeAlarm) {
-      pushSet.prayerPreAlert = beforeAlarm.enabled;
-      pushSet.preAlertMinutes = beforeAlarm.offsetMinutes || 15;
-    }
-    const afterAlarm = alarms?.find(a => a.id === 'alarm_after_salah');
-    if (afterAlarm) {
-      pushSet.prayerPostAlert = afterAlarm.enabled;
-      pushSet.postAlertMinutes = afterAlarm.offsetMinutes || 15;
-    }
     return pushSet;
   });
 
@@ -105,16 +94,6 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
       if (alarms && Array.isArray(alarms)) {
         setSettings(prev => {
           const updated = { ...prev };
-          const before = alarms.find(a => a.id === 'alarm_before_salah');
-          if (before) {
-            updated.prayerPreAlert = before.enabled;
-            if (before.offsetMinutes !== undefined) updated.preAlertMinutes = before.offsetMinutes;
-          }
-          const after = alarms.find(a => a.id === 'alarm_after_salah');
-          if (after) {
-            updated.prayerPostAlert = after.enabled;
-            if (after.offsetMinutes !== undefined) updated.postAlertMinutes = after.offsetMinutes;
-          }
           const morning = alarms.find(a => a.id === 'alarm_morning_adhkar');
           if (morning) {
             updated.adhkarMorning = morning.enabled;
@@ -220,56 +199,6 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
       } catch (err) {
         console.warn('[PushNotificationManager] Failed to sync toggle with custom alarms:', err);
       }
-    }
-  };
-
-  // Synchronize pre-alert minutes and toggle with actual salah_custom_alarms
-  const handlePreAlertChange = (mins: number, enabled: boolean) => {
-    const updated = { ...settings, preAlertMinutes: mins, prayerPreAlert: enabled };
-    setSettings(updated);
-    savePushSettings(updated);
-
-    try {
-      const currentAlarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null) || DEFAULT_WORSHIP_ALARMS;
-      const updatedAlarms = currentAlarms.map(alarm => {
-        if (alarm.id === 'alarm_before_salah') {
-          return {
-            ...alarm,
-            enabled,
-            offsetMinutes: mins
-          };
-        }
-        return alarm;
-      });
-      safeSetJSON('salah_custom_alarms', updatedAlarms);
-      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updatedAlarms }));
-    } catch (err) {
-      console.warn('[PushNotificationManager] Failed to sync pre-alert with custom alarms:', err);
-    }
-  };
-
-  // Synchronize post-alert (worship reminder) minutes and toggle with actual salah_custom_alarms
-  const handlePostAlertChange = (mins: number, enabled: boolean) => {
-    const updated = { ...settings, postAlertMinutes: mins, prayerPostAlert: enabled };
-    setSettings(updated);
-    savePushSettings(updated);
-
-    try {
-      const currentAlarms = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null) || DEFAULT_WORSHIP_ALARMS;
-      const updatedAlarms = currentAlarms.map(alarm => {
-        if (alarm.id === 'alarm_after_salah') {
-          return {
-            ...alarm,
-            enabled,
-            offsetMinutes: mins
-          };
-        }
-        return alarm;
-      });
-      safeSetJSON('salah_custom_alarms', updatedAlarms);
-      window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updatedAlarms }));
-    } catch (err) {
-      console.warn('[PushNotificationManager] Failed to sync post-alert with custom alarms:', err);
     }
   };
 
@@ -506,67 +435,6 @@ export default function PushNotificationManager({ isOpen = true, onClose }: Push
                   onChange={(checked) => handleSettingToggle('prayerAthan', checked)}
                   activeColor="bg-emerald-600"
                 />
-              </div>
-
-              {/* Pre-prayer alert */}
-              <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 min-w-0">
-                  <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span className="truncate">تنبيه الاستعداد قبل الأذان:</span>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <select
-                    id="pre_alert_minutes_select"
-                    value={settings.preAlertMinutes}
-                    onChange={(e) => handlePreAlertChange(Number(e.target.value), settings.prayerPreAlert)}
-                    aria-label="تحديد وقت تنبيه الاستعداد قبل الأذان بالدقائق"
-                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-800 dark:text-white focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                  >
-                    <option value={5}>قبل ٥ دقائق</option>
-                    <option value={10}>قبل ١٠ دقائق</option>
-                    <option value={15}>قبل ١٥ دقيقة</option>
-                    <option value={20}>قبل ٢٠ دقيقة</option>
-                  </select>
-
-                  <ToggleSwitch
-                    checked={settings.prayerPreAlert}
-                    onChange={(checked) => handlePreAlertChange(settings.preAlertMinutes, checked)}
-                    activeColor="bg-amber-600"
-                    size="sm"
-                  />
-                </div>
-              </div>
-
-              {/* Post-prayer worship alert */}
-              <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 min-w-0">
-                  <span className="text-sm shrink-0">📿</span>
-                  <span className="truncate">تذكير العبادة والأذكار بعد الصلاة:</span>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <select
-                    id="post_alert_minutes_select"
-                    value={settings.postAlertMinutes}
-                    onChange={(e) => handlePostAlertChange(Number(e.target.value), settings.prayerPostAlert)}
-                    aria-label="تحديد وقت تذكير العبادة بعد الأذان بالدقائق"
-                    className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-800 dark:text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value={5}>بعد ٥ دقائق</option>
-                    <option value={10}>بعد ١٠ دقائق</option>
-                    <option value={15}>بعد ١٥ دقيقة</option>
-                    <option value={20}>بعد ٢٠ دقيقة</option>
-                    <option value={30}>بعد ٣٠ دقيقة</option>
-                  </select>
-
-                  <ToggleSwitch
-                    checked={settings.prayerPostAlert}
-                    onChange={(checked) => handlePostAlertChange(settings.postAlertMinutes, checked)}
-                    activeColor="bg-emerald-600"
-                    size="sm"
-                  />
-                </div>
               </div>
             </div>
 
