@@ -19,6 +19,10 @@ class AthanBootReceiver : BroadcastReceiver() {
         val action = intent.action
         Log.d(TAG, "Received boot/package intent: $action")
 
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            AthanAlarmPlugin.logNativeEvent(context, "package_replaced", "action=$action")
+        }
+
         if (action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
             action == "android.intent.action.QUICKBOOT_POWERON") {

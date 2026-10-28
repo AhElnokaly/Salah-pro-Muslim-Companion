@@ -10,6 +10,7 @@ import {
   DailyPrayerTimesEntry,
   groupScheduledAlarmsByType,
   getNativeEventLog,
+  reconcileNativeAthanAlarms,
 } from './athanAlarmPlugin';
 import { safeSetItem, safeRemoveItem } from '../utils/storage';
 
@@ -755,6 +756,102 @@ describe('Native Event Log (Ring Buffer) diagnostics', () => {
     const result = await getNativeEventLog(50);
     assert.equal(result.length, 1);
     assert.equal(result[0].error, 'SecurityException: Not allowed to change DND interruption filter');
+  });
+
+  test('parses os_verified correctly from reconcile event details', async () => {
+    const reconcileEvent = {
+      timestampMs: 1729000000000,
+      event: 'reconcile',
+      details: 'scheduled=0, cancelled=0, retained=70, os_verified=15/15, total=70',
+    };
+
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async () => ({
+        events: [reconcileEvent],
+        total: 1,
+      }),
+    } as any);
+
+    const result = await getNativeEventLog(10);
+    assert.equal(result.length, 1);
+    const match = result[0].details.match(/os_verified=([^, ]+)/);
+    assert.ok(match, 'os_verified must be present in details');
+    assert.equal(match![1], '15/15');
+  });
+
+  test('handles os_verified=unknown when OS verification is unavailable', async () => {
+    const unknownReconcileEvent = {
+      timestampMs: 1729000000000,
+      event: 'reconcile',
+      details: 'scheduled=0, cancelled=0, retained=70, os_verified=unknown, total=70',
+    };
+
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async () => ({
+        events: [unknownReconcileEvent],
+        total: 1,
+      }),
+    } as any);
+
+    const result = await getNativeEventLog(10);
+    const match = result[0].details.match(/os_verified=([^, ]+)/);
+    assert.ok(match);
+    assert.equal(match![1], 'unknown');
+  });
+
+  test('supports new native event types: alarm_cancel, package_replaced, schedule_failed', async () => {
+    const events = [
+      {
+        timestampMs: 1729000000000,
+        event: 'alarm_cancel',
+        details: 'requestCode=5012, reason=cancel_by_requestCode',
+      },
+      {
+        timestampMs: 1729000001000,
+        event: 'alarm_cancel',
+        details: 'count=10, reason=reconcile_obsolete',
+      },
+      {
+        timestampMs: 1729000002000,
+        event: 'package_replaced',
+        details: 'action=android.intent.action.MY_PACKAGE_REPLACED',
+      },
+      {
+        timestampMs: 1729000003000,
+        event: 'schedule_failed',
+        details: 'requestCode=5013, prayerKey=fajr, timeMs=1729000000000',
+        error: 'SecurityException: Caller not allowed to schedule exact alarms',
+      },
+    ];
+
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async () => ({
+        events,
+        total: events.length,
+      }),
+    } as any);
+
+    const result = await getNativeEventLog(10);
+    assert.equal(result.length, 4);
+    assert.equal(result[0].event, 'alarm_cancel');
+    assert.ok(result[0].details.includes('requestCode=5012'));
+    assert.equal(result[1].event, 'alarm_cancel');
+    assert.ok(result[1].details.includes('count=10'));
+    assert.equal(result[2].event, 'package_replaced');
+    assert.ok(result[2].details.includes('MY_PACKAGE_REPLACED'));
+    assert.equal(result[3].event, 'schedule_failed');
+    assert.ok(result[3].error?.includes('SecurityException'));
+  });
+
+  test('reconcileNativeAthanAlarms includes os_verified in return result on web fallback', async () => {
+    const mockAlarms = [
+      { prayerKey: 'fajr', prayerName: 'الفجر', timeMs: Date.now() + 10000 },
+      { prayerKey: 'dhuhr', prayerName: 'الظهر', timeMs: Date.now() + 20000 },
+    ];
+    const res = await reconcileNativeAthanAlarms({ times: mockAlarms as any });
+    assert.ok(res !== null);
+    assert.ok(res?.os_verified !== undefined, 'os_verified must be defined in result');
+    assert.equal(res?.os_verified, '2/2');
   });
 });
 

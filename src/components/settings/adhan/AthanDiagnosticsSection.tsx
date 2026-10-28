@@ -221,6 +221,12 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
       case 'khushu_result':
         return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+      case 'alarm_cancel':
+        return 'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800';
+      case 'package_replaced':
+        return 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800';
+      case 'schedule_failed':
+        return 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800';
       default:
         return 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800';
     }
@@ -340,6 +346,12 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     const list = (diagnostics?.nativeEvents && diagnostics.nativeEvents.length > 0)
       ? diagnostics.nativeEvents
       : nativeLogs;
+
+    const latestReconcile = list.find((e) => e.event === 'reconcile');
+    const osVerifiedMatch = latestReconcile?.details?.match(/os_verified=([^, ]+)/);
+    if (osVerifiedMatch) {
+      lines.push(`• مطابقة منبهات النظام (OS Verified): ${osVerifiedMatch[1]}`);
+    }
 
     if (list.length > 0) {
       list.forEach((evt, idx) => {
@@ -484,6 +496,29 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                 {diagnostics.nextAlarmClockMs > 0 ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}
               </span>
             </div>
+            {(() => {
+              const list = diagnostics.nativeEvents || nativeLogs;
+              const latestReconcile = list.find((e) => e.event === 'reconcile');
+              const osMatch = latestReconcile?.details?.match(/os_verified=([^, ]+)/);
+              if (!osMatch) return null;
+              const val = osMatch[1];
+              return (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 sm:col-span-2">
+                  <span className="text-slate-500 dark:text-slate-400 font-bold">
+                    مطابقة منبهات النظام (OS Verified):
+                  </span>
+                  <span
+                    className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] ${
+                      val === 'unknown'
+                        ? 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
+                        : 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-950/40'
+                    }`}
+                  >
+                    {val === 'unknown' ? 'غير مؤكد (unknown)' : `${val} منبه مؤكد بالنظام ✓`}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -681,9 +716,28 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                   className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 space-y-1 text-xs"
                 >
                   <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border ${getEventBadgeClass(evt.event)}`}>
-                      {evt.event}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border ${getEventBadgeClass(evt.event)}`}>
+                        {evt.event}
+                      </span>
+                      {evt.event === 'reconcile' && (() => {
+                        const m = evt.details?.match(/os_verified=([^, ]+)/);
+                        if (!m) return null;
+                        const val = m[1];
+                        return (
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                              val === 'unknown'
+                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300/60 dark:border-amber-800/60'
+                                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-300/60 dark:border-emerald-800/60'
+                            }`}
+                            title="مطابقة المنبهات مع نظام التشغيل OS عبر PendingIntent"
+                          >
+                            OS: {val}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
                       {formatTimestamp(evt.timestampMs)}
                     </span>

@@ -32,6 +32,7 @@ export interface ReconcileAthanResult {
   removedCount: number;
   retainedCount: number;
   exactAlarmPermissionMissing?: boolean;
+  os_verified?: string;
 }
 
 export interface ScheduledAlarmItem extends PrayerTimeAlarm {
@@ -236,7 +237,13 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     },
     reconcileAthanAlarms: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback simulation for reconciling native alarms:', options.times.length);
-      return { scheduledCount: options.times.length, addedCount: options.times.length, removedCount: 0, retainedCount: 0 };
+      return {
+        scheduledCount: options.times.length,
+        addedCount: options.times.length,
+        removedCount: 0,
+        retainedCount: 0,
+        os_verified: `${Math.min(options.times.length, 20)}/${Math.min(options.times.length, 20)}`,
+      };
     },
     getScheduledAlarms: async () => {
       console.log('[AthanAlarm Plugin]: Web fallback getScheduledAlarms');
@@ -897,6 +904,19 @@ export async function scheduleNativeAthanAlarms(
   } catch (err) {
     console.warn('[AthanAlarm]: Error scheduling native athan alarms:', err);
     return 0;
+  }
+}
+
+export async function reconcileNativeAthanAlarms(options: {
+  times: PrayerTimeAlarm[];
+}): Promise<ReconcileAthanResult | null> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!plugin.reconcileAthanAlarms) return null;
+  try {
+    return await plugin.reconcileAthanAlarms(options);
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=RECONCILE [AthanAlarmPlugin] reconcileAthanAlarms error:', err);
+    return null;
   }
 }
 
