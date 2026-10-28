@@ -176,10 +176,12 @@ export function usePrayerManagerLogic({
 
   const dayLogs = prayerLogs[dateStr] || {};
 
-  // Clear success message after 3 seconds
+  // Clear success message: 6 seconds for default fallback preview, 3 seconds otherwise
   useEffect(() => {
     if (logSuccessMessage) {
-      const timer = setTimeout(() => setLogSuccessMessage(''), 3000);
+      const isDefaultFallback = logSuccessMessage.includes('الصوت الافتراضي لأن المؤذن المختار غير متاح');
+      const duration = isDefaultFallback ? 6000 : 3000;
+      const timer = setTimeout(() => setLogSuccessMessage(''), duration);
       return () => clearTimeout(timer);
     }
   }, [logSuccessMessage]);

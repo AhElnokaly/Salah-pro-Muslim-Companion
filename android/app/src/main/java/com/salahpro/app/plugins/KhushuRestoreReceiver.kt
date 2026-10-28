@@ -104,6 +104,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
         }
 
         fun activateKhushuDirectly(context: Context, mode: String = "silent", durationMinutes: Int = 30): Boolean {
+            AthanAlarmPlugin.logNativeEvent(context, "khushu_attempt", "mode=$mode, durationMinutes=$durationMinutes")
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -141,11 +142,13 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 }
             }
 
+            var ringerError: Throwable? = null
             // Always silence ringer, falling back to Vibrate if Android throws SecurityException
             try {
                 audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
                 Log.d(TAG, "Ringer mode set to RINGER_MODE_SILENT")
             } catch (se: SecurityException) {
+                ringerError = se
                 Log.w(TAG, "RINGER_MODE_SILENT requires DND access. Falling back to RINGER_MODE_VIBRATE", se)
                 try {
                     audioManager?.ringerMode = AudioManager.RINGER_MODE_VIBRATE
@@ -153,6 +156,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                     Log.e(TAG, "Failed setting ringer mode to vibrate", ve)
                 }
             } catch (e: Exception) {
+                ringerError = e
                 Log.e(TAG, "Error setting silent ringer mode", e)
             }
 
@@ -170,6 +174,13 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
 
             // 5. Update Widgets
             SalahWidgetProvider.updateAllWidgets(context)
+
+            if (ringerError != null) {
+                AthanAlarmPlugin.logNativeEvent(context, "khushu_result", "mode=$mode, fallback_vibrate=true", ringerError)
+            } else {
+                AthanAlarmPlugin.logNativeEvent(context, "khushu_result", "mode=$mode, durationMinutes=$durationMinutes, status=success")
+            }
+
             return true
         }
 

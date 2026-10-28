@@ -111,7 +111,20 @@ export interface AthanAlarmPlugin {
   listAthanCache?(): Promise<Record<string, { exists: boolean; sizeBytes: number }>>;
   getLastAthanPlay?(): Promise<LastAthanPlayRecord>;
   getAlarmDiagnostics?(): Promise<AlarmDiagnosticsResult>;
+  getNativeEventLog?(options?: { limit?: number }): Promise<NativeEventLogResult>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
+}
+
+export interface NativeLogEvent {
+  timestampMs: number;
+  event: string;
+  details: string;
+  error?: string;
+}
+
+export interface NativeEventLogResult {
+  events: NativeLogEvent[];
+  total: number;
 }
 
 export interface SavedNativeAlarmItem {
@@ -141,6 +154,55 @@ export interface AlarmDiagnosticsResult {
   isIgnoringBatteryOptimizations: boolean;
   canScheduleExactAlarms: boolean;
   standbyBucket: number;
+  nativeEvents?: NativeLogEvent[];
+}
+
+export interface ScheduledAlarmCountsByType {
+  athan: number;
+  prealert: number;
+  postalert: number;
+  khushu: number;
+  custom: number;
+  other: number;
+  total: number;
+}
+
+export function groupScheduledAlarmsByType(
+  alarms?: Array<{ alarmType?: string }> | null
+): ScheduledAlarmCountsByType {
+  const counts: ScheduledAlarmCountsByType = {
+    athan: 0,
+    prealert: 0,
+    postalert: 0,
+    khushu: 0,
+    custom: 0,
+    other: 0,
+    total: 0,
+  };
+
+  if (!alarms || !Array.isArray(alarms)) {
+    return counts;
+  }
+
+  for (const alarm of alarms) {
+    counts.total++;
+    const type = (alarm?.alarmType || '').toLowerCase().trim();
+    if (type === 'athan') {
+      counts.athan++;
+    } else if (type === 'prealert') {
+      counts.prealert++;
+    } else if (type === 'postalert') {
+      counts.postalert++;
+    } else if (type === 'khushu') {
+      counts.khushu++;
+    } else if (type === 'custom') {
+      counts.custom++;
+    } else {
+      counts.other++;
+    }
+  }
+
+  return counts;
 }
 
 export interface LastAthanPlayRecord {
@@ -228,7 +290,11 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
         isIgnoringBatteryOptimizations: true,
         canScheduleExactAlarms: true,
         standbyBucket: 10,
+        nativeEvents: [],
       };
+    },
+    getNativeEventLog: async () => {
+      return { events: [], total: 0 };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -1168,6 +1234,19 @@ export async function getAlarmDiagnostics(): Promise<AlarmDiagnosticsResult | nu
   } catch (err) {
     console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getAlarmDiagnostics error:', err);
     return null;
+  }
+}
+
+export async function getNativeEventLog(limit: number = 100): Promise<NativeLogEvent[]> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return [];
+  if (!plugin.getNativeEventLog) return [];
+  try {
+    const res = await plugin.getNativeEventLog({ limit });
+    return res?.events || [];
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getNativeEventLog error:', err);
+    return [];
   }
 }
 

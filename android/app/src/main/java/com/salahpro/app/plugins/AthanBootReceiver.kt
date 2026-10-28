@@ -50,11 +50,13 @@ class AthanBootReceiver : BroadcastReceiver() {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
             if (alarmManager == null) {
                 Log.w(TAG, "AlarmManager service not available on boot")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_alarm_manager_null")
                 return
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 Log.w(TAG, "Exact alarm permission missing on boot. Alarms will be scheduled when user opens app.")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_permission_not_granted")
                 return
             }
 
@@ -63,14 +65,20 @@ class AthanBootReceiver : BroadcastReceiver() {
             // Do NOT trust the stored scheduled IDs ledger: clear it so all alarms are freshly re-registered.
             prefs.edit().remove(AthanAlarmPlugin.KEY_SCHEDULED_IDS).apply()
 
-            val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null) ?: return
+            val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null)
+            if (jsonString == null) {
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=no_saved_alarms")
+                return
+            }
 
             val jsonArray = JSONArray(jsonString)
             val restoredCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, jsonArray)
 
             Log.d(TAG, "Restored $restoredCount exact athan alarms after boot (forced re-registration)")
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=success, restoredCount=$restoredCount")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore athan alarms on boot", e)
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=failed", e)
         }
     }
 }

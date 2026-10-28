@@ -8,6 +8,8 @@ import {
   NativeAthanPathsMap,
   buildNativePrayerTimeAlarms,
   DailyPrayerTimesEntry,
+  groupScheduledAlarmsByType,
+  getNativeEventLog,
 } from './athanAlarmPlugin';
 import { safeSetItem, safeRemoveItem } from '../utils/storage';
 
@@ -567,3 +569,192 @@ describe('TASK 7: System pre/post prayer alerts sound selection and deduplicatio
     assert.equal(customPostAlerts[0].soundType, 'salawat');
   });
 });
+
+describe('diag D1: groupScheduledAlarmsByType', () => {
+  test('correctly groups alarms by alarmType and calculates total', () => {
+    const alarms = [
+      { alarmType: 'athan' },
+      { alarmType: 'athan' },
+      { alarmType: 'khushu' },
+      { alarmType: 'custom' },
+      { alarmType: 'custom' },
+      { alarmType: 'custom' },
+    ];
+    const counts = groupScheduledAlarmsByType(alarms);
+    assert.equal(counts.athan, 2);
+    assert.equal(counts.prealert, 0);
+    assert.equal(counts.postalert, 0);
+    assert.equal(counts.khushu, 1);
+    assert.equal(counts.custom, 3);
+    assert.equal(counts.other, 0);
+    assert.equal(counts.total, 6);
+  });
+
+  test('handles empty list, null, and undefined gracefully', () => {
+    const emptyResult = groupScheduledAlarmsByType([]);
+    assert.deepEqual(emptyResult, {
+      athan: 0,
+      prealert: 0,
+      postalert: 0,
+      khushu: 0,
+      custom: 0,
+      other: 0,
+      total: 0,
+    });
+
+    const nullResult = groupScheduledAlarmsByType(null);
+    assert.deepEqual(nullResult, {
+      athan: 0,
+      prealert: 0,
+      postalert: 0,
+      khushu: 0,
+      custom: 0,
+      other: 0,
+      total: 0,
+    });
+
+    const undefinedResult = groupScheduledAlarmsByType(undefined);
+    assert.deepEqual(undefinedResult, {
+      athan: 0,
+      prealert: 0,
+      postalert: 0,
+      khushu: 0,
+      custom: 0,
+      other: 0,
+      total: 0,
+    });
+  });
+
+  test('classifies unknown or missing alarmType into "other"', () => {
+    const alarms = [
+      { alarmType: 'athan' },
+      { alarmType: 'unknown_type' },
+      { alarmType: 'test_alarm' },
+      { alarmType: '' },
+      { alarmType: undefined },
+    ];
+    const counts = groupScheduledAlarmsByType(alarms as any);
+    assert.equal(counts.athan, 1);
+    assert.equal(counts.other, 4);
+    assert.equal(counts.total, 5);
+  });
+
+  test('after B6 upgrade, prealert and postalert must read 0 for scheduled alarms', () => {
+    const alarmsAfterUpgrade = [
+      { alarmType: 'athan' },
+      { alarmType: 'athan' },
+      { alarmType: 'khushu' },
+      { alarmType: 'custom' },
+    ];
+    const counts = groupScheduledAlarmsByType(alarmsAfterUpgrade);
+    assert.equal(counts.prealert, 0, 'prealert count must be 0');
+    assert.equal(counts.postalert, 0, 'postalert count must be 0');
+  });
+});
+
+describe('Native Event Log (Ring Buffer) diagnostics', () => {
+  beforeEach(() => {
+    setAthanPluginBridgeForTesting(null);
+  });
+
+  afterEach(() => {
+    setAthanPluginBridgeForTesting(null);
+  });
+
+  test('returns empty array when bridge is not set or returns no events', async () => {
+    const logs = await getNativeEventLog();
+    assert.deepEqual(logs, []);
+  });
+
+  test('fetches last N events from native plugin bridge (newest first)', async () => {
+    const mockEvents = [
+      {
+        timestampMs: 1729000000000,
+        event: 'reconcile',
+        details: 'scheduled=10, cancelled=0, retained=100, total=110',
+      },
+      {
+        timestampMs: 1729000010000,
+        event: 'fire_received',
+        details: 'prayerKey=fajr, alarmType=athan, requestCode=1001, soundType=makkah, notifyMode=both, autoKhushu=false',
+      },
+      {
+        timestampMs: 1729000020000,
+        event: 'khushu_attempt',
+        details: 'mode=silent, durationMinutes=30',
+      },
+      {
+        timestampMs: 1729000021000,
+        event: 'khushu_result',
+        details: 'mode=silent, durationMinutes=30, status=success',
+      },
+      {
+        timestampMs: 1729000030000,
+        event: 'service_start',
+        details: 'prayerName=الفجر, prayerKey=fajr, isFajr=true',
+      },
+      {
+        timestampMs: 1729000090000,
+        event: 'service_stop',
+        details: 'reason=stop_or_completed',
+      },
+      {
+        timestampMs: 1729000100000,
+        event: 'boot_restore',
+        details: 'result=success, restoredCount=110',
+      },
+    ];
+
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async (options) => {
+        const limit = options?.limit || 100;
+        return {
+          events: mockEvents.slice(0, limit),
+          total: mockEvents.length,
+        };
+      },
+    } as any);
+
+    const result = await getNativeEventLog(100);
+    assert.equal(result.length, 7);
+    assert.equal(result[0].event, 'reconcile');
+    assert.equal(result[1].event, 'fire_received');
+    assert.equal(result[2].event, 'khushu_attempt');
+    assert.equal(result[3].event, 'khushu_result');
+    assert.equal(result[4].event, 'service_start');
+    assert.equal(result[5].event, 'service_stop');
+    assert.equal(result[6].event, 'boot_restore');
+  });
+
+  test('does not throw into caller if native plugin throws error', async () => {
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async () => {
+        throw new Error('Native IPC bridge disconnected');
+      },
+    } as any);
+
+    const result = await getNativeEventLog(100);
+    assert.deepEqual(result, []);
+  });
+
+  test('preserves error details when native log item contains an error string', async () => {
+    const errorEvent = {
+      timestampMs: 1729000000000,
+      event: 'khushu_result',
+      details: 'mode=dnd, fallback_vibrate=true',
+      error: 'SecurityException: Not allowed to change DND interruption filter',
+    };
+
+    setAthanPluginBridgeForTesting({
+      getNativeEventLog: async () => ({
+        events: [errorEvent],
+        total: 1,
+      }),
+    } as any);
+
+    const result = await getNativeEventLog(50);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].error, 'SecurityException: Not allowed to change DND interruption filter');
+  });
+});
+

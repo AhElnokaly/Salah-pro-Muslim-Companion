@@ -71,6 +71,11 @@ class AthanForegroundService : Service() {
         val rawPrayerKey = intent?.getStringExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY) ?: ""
 
         Log.d(TAG, "Starting AthanForegroundService for $prayerName (prayerKey: $rawPrayerKey, isFajr: $isFajr)")
+        AthanAlarmPlugin.logNativeEvent(
+            applicationContext,
+            "service_start",
+            "prayerName=$prayerName, prayerKey=$rawPrayerKey, isFajr=$isFajr"
+        )
 
         acquireWakeLock()
         createNotificationChannel()
@@ -313,6 +318,13 @@ class AthanForegroundService : Service() {
     }
 
     private fun stopAthanAndSelf() {
+        if (isServiceRunning) {
+            AthanAlarmPlugin.logNativeEvent(
+                applicationContext,
+                "service_stop",
+                "reason=stop_or_completed"
+            )
+        }
         isServiceRunning = false
         handler.removeCallbacks(stopRunnable)
         try {

@@ -19,15 +19,19 @@ import {
   ListOrdered,
   Copy,
   Check,
-  FileText
+  FileText,
+  ScrollText,
 } from 'lucide-react';
 import { resolveMuezzinId } from '../../../utils/muezzinResolver';
 import {
   getNativeAthanFiles,
   getLastAthanPlay,
   getAlarmDiagnostics,
+  getNativeEventLog,
   LastAthanPlayRecord,
   AlarmDiagnosticsResult,
+  NativeLogEvent,
+  groupScheduledAlarmsByType,
 } from '../../../services/athanAlarmPlugin';
 import { toArabicNumbers } from '../../../utils/hijri';
 
@@ -55,15 +59,17 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   const [nativeFiles, setNativeFiles] = useState<Record<string, NativeFileInfo>>({});
   const [lastPlay, setLastPlay] = useState<LastAthanPlayRecord | null>(null);
   const [diagnostics, setDiagnostics] = useState<AlarmDiagnosticsResult | null>(null);
-  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events'>('none');
+  const [nativeLogs, setNativeLogs] = useState<NativeLogEvent[]>([]);
+  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs'>('none');
 
   const fetchDiagnostics = useCallback(async () => {
     setLoading(true);
     try {
-      const [files, playRecord, diag] = await Promise.all([
+      const [files, playRecord, diag, logs] = await Promise.all([
         getNativeAthanFiles(),
         getLastAthanPlay(),
         getAlarmDiagnostics(),
+        getNativeEventLog(100),
       ]);
       if (files) {
         setNativeFiles(files);
@@ -71,6 +77,13 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       setLastPlay(playRecord);
       if (diag) {
         setDiagnostics(diag);
+        if (diag.nativeEvents && diag.nativeEvents.length > 0) {
+          setNativeLogs(diag.nativeEvents);
+        } else if (logs) {
+          setNativeLogs(logs);
+        }
+      } else if (logs) {
+        setNativeLogs(logs);
       }
     } catch (err) {
       console.warn('[AthanDiagnostics] Error fetching diagnostics:', err);
@@ -149,7 +162,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     (!diagnostics.isIgnoringBatteryOptimizations || !diagnostics.canScheduleExactAlarms)
   );
 
-  const copyToClipboard = async (text: string, type: 'all' | 'events') => {
+  const copyToClipboard = async (text: string, type: 'all' | 'events' | 'nativeLogs') => {
     let success = false;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -180,10 +193,64 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     if (success) {
       setCopiedType(type);
       if (setToastMessage) {
-        setToastMessage(type === 'all' ? 'تم نسخ تقرير التشخيص الشامل بنجاح ✓' : 'تم نسخ سجل إطلاق التنبيهات بنجاح ✓');
+        setToastMessage(
+          type === 'all'
+            ? 'تم نسخ تقرير التشخيص الشامل بنجاح ✓'
+            : type === 'events'
+            ? 'تم نسخ سجل إطلاق التنبيهات بنجاح ✓'
+            : 'تم نسخ سجل الأحداث الأصلية بنجاح ✓'
+        );
       }
       setTimeout(() => setCopiedType('none'), 3000);
     }
+  };
+
+  const getEventBadgeClass = (eventName: string): string => {
+    switch (eventName) {
+      case 'reconcile':
+        return 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800';
+      case 'fire_received':
+        return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+      case 'service_start':
+        return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+      case 'service_stop':
+        return 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800';
+      case 'boot_restore':
+        return 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800';
+      case 'khushu_attempt':
+        return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+      case 'khushu_result':
+        return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+      default:
+        return 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800';
+    }
+  };
+
+  const generateNativeLogsText = (): string => {
+    const list = (diagnostics?.nativeEvents && diagnostics.nativeEvents.length > 0)
+      ? diagnostics.nativeEvents
+      : nativeLogs;
+    if (!list || list.length === 0) {
+      return 'سجل الأحداث الأصلية للنظام (Native Event Log): لا توجد أحداث مسجلة بعد.';
+    }
+    const lines = [
+      `=== سجل الأحداث الأصلية للنظام (Native Event Log - Ring Buffer) ===`,
+      `تاريخ الاستخراج: ${new Date().toLocaleString('ar-EG')}`,
+      `إجمالي الأحداث المسجلة: ${list.length}`,
+      `--------------------------------------------------`,
+    ];
+    list.forEach((evt, idx) => {
+      const timeStr = formatTimestamp(evt.timestampMs);
+      lines.push(
+        `[${idx + 1}] ${timeStr} | الحدث: ${evt.event}`,
+        `   التفاصيل: ${evt.details || '—'}`
+      );
+      if (evt.error) {
+        lines.push(`   الخطأ: ${evt.error}`);
+      }
+      lines.push(`--------------------------------------------------`);
+    });
+    return lines.join('\n');
   };
 
   const generateEventsText = (): string => {
@@ -235,9 +302,18 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       lines.push(`  (لم يتم تسجيل أي حدث إطلاق بعد)`);
     }
 
+    const alarmCounts = groupScheduledAlarmsByType(diagnostics?.savedAlarms);
     lines.push(
       ``,
-      `[3] التنبيهات المجدولة حالياً بالنظام (${diagnostics?.savedAlarms?.length || 0} منبه):`
+      `[3] المسجل في التطبيق (ليس بالضرورة مسجلًا في النظام) - الإجمالي: ${alarmCounts.total} منبه:`,
+      `• أذان (athan): ${alarmCounts.athan}`,
+      `• تنبيه مسبق (prealert): ${alarmCounts.prealert}`,
+      `• تنبيه بعدي (postalert): ${alarmCounts.postalert}`,
+      `• خشوع (khushu): ${alarmCounts.khushu}`,
+      `• منبه مخصص (custom): ${alarmCounts.custom}`,
+      `• أخرى (other): ${alarmCounts.other}`,
+      ``,
+      `تفاصيل التنبيهات المسجلة في التطبيق (عينة من أول 15 منبه):`
     );
 
     if (diagnostics?.savedAlarms && diagnostics.savedAlarms.length > 0) {
@@ -258,7 +334,26 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       `• المقطع: ${lastPlay?.track || 'غير متوفر'}`,
       `• الوقت: ${formatTimestamp(lastPlay?.timestampMs)}`,
       ``,
-      `[5] حالة ملفات المؤذنين المخزنة لكل صلاة:`
+      `[5] سجل الأحداث الأصلية للنظام (Native Event Log - Ring Buffer):`
+    );
+
+    const list = (diagnostics?.nativeEvents && diagnostics.nativeEvents.length > 0)
+      ? diagnostics.nativeEvents
+      : nativeLogs;
+
+    if (list.length > 0) {
+      list.forEach((evt, idx) => {
+        lines.push(
+          `  ${idx + 1}. [${formatTimestamp(evt.timestampMs)}] ${evt.event} - ${evt.details}${evt.error ? ` - الخطأ: ${evt.error}` : ''}`
+        );
+      });
+    } else {
+      lines.push(`  (لم يتم تسجيل أي حدث أصلي بعد)`);
+    }
+
+    lines.push(
+      ``,
+      `[6] حالة ملفات المؤذنين المخزنة لكل صلاة:`
     );
 
     PRAYERS_LIST.forEach(({ key, label, prayerName }) => {
@@ -393,18 +488,54 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         </div>
       )}
 
-      {/* 2. Registered Alarms Currently in System (saved_alarms_json) */}
+      {/* 2. Registered Alarms Grouped by Type - المسجل في التطبيق (ليس بالضرورة مسجلًا في النظام) */}
       {diagnostics && diagnostics.savedAlarms && (
-        <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+        <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <ListOrdered className="w-4 h-4 text-indigo-500" />
-              <span>التنبيهات المجدولة حالياً بالنظام ({toArabicNumbers(diagnostics.savedAlarms.length)}):</span>
+              <span>المسجل في التطبيق (ليس بالضرورة مسجلًا في النظام)</span>
             </h4>
+            <span className="text-[11px] font-bold text-slate-400">
+              الإجمالي: {toArabicNumbers(groupScheduledAlarmsByType(diagnostics.savedAlarms).total)}
+            </span>
           </div>
 
+          {(() => {
+            const counts = groupScheduledAlarmsByType(diagnostics.savedAlarms);
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">أذان (athan)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.athan)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">مسبق (prealert)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.prealert)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">بعدي (postalert)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.postalert)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">خشوع (khushu)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.khushu)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">مخصص (custom)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.custom)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">أخرى (other)</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-white">{toArabicNumbers(counts.other)}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           {diagnostics.savedAlarms.length > 0 ? (
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-[10px] font-bold text-slate-400 pb-0.5">عينة من التنبيهات المجدولة بالتطبيق:</div>
               {diagnostics.savedAlarms.slice(0, 10).map((alarm, idx) => (
                 <div
                   key={`${alarm.requestCode}_${idx}`}
@@ -512,7 +643,76 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         </div>
       )}
 
-      {/* 4. Per-Prayer Native Files Status */}
+      {/* 4. Native Event Log (Ring Buffer - last 100 events) */}
+      <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <ScrollText className="w-4 h-4 text-emerald-500" />
+            <span>
+              سجل أحداث النظام الأصلي (Native Event Log - Ring Buffer):
+            </span>
+          </h4>
+          <button
+            type="button"
+            onClick={() => copyToClipboard(generateNativeLogsText(), 'nativeLogs')}
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-all cursor-pointer"
+            title="نسخ سجل أحداث النظام الأصلي"
+          >
+            {copiedType === 'nativeLogs' ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400">تم النسخ ✓</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" />
+                <span>نسخ السجل 📋</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {((diagnostics?.nativeEvents && diagnostics.nativeEvents.length > 0) || nativeLogs.length > 0) ? (
+          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            {((diagnostics?.nativeEvents && diagnostics.nativeEvents.length > 0) ? diagnostics.nativeEvents : nativeLogs).map((evt, idx) => {
+              return (
+                <div
+                  key={`${evt.timestampMs}_${idx}`}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 space-y-1 text-xs"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border ${getEventBadgeClass(evt.event)}`}>
+                      {evt.event}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                      {formatTimestamp(evt.timestampMs)}
+                    </span>
+                  </div>
+
+                  {evt.details && (
+                    <div className="text-[11px] font-mono text-slate-700 dark:text-slate-300 break-all bg-white/70 dark:bg-slate-800/50 p-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
+                      {evt.details}
+                    </div>
+                  )}
+
+                  {evt.error && (
+                    <div className="text-[10px] font-mono text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-1.5 rounded-lg border border-rose-200 dark:border-rose-800/60 break-all flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0 text-rose-500" />
+                      <span>{evt.error}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl text-slate-400 text-xs">
+            لم يتم تسجيل أي حدث في السجل الأصلي حتى الآن (يتم التسجيل تلقائياً عند المطابقة وإطلاق التنبيهات والخدمة والاستعادة).
+          </div>
+        )}
+      </div>
+
+      {/* 5. Per-Prayer Native Files Status */}
       <div className="space-y-3">
         <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
           <FileAudio className="w-4 h-4 text-indigo-500" />

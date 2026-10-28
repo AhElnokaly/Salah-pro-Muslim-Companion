@@ -57,6 +57,67 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_SCHEDULED_COUNT = "scheduled_count"
         const val KEY_SCHEDULED_IDS = "scheduled_ids_set"
         const val KEY_SAVED_ALARMS = "saved_alarms_json"
+        const val KEY_NATIVE_EVENT_LOG = "native_event_log_json"
+
+        @JvmStatic
+        @Synchronized
+        fun logNativeEvent(
+            context: Context,
+            event: String,
+            details: String = "",
+            error: String? = null
+        ) {
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_NATIVE_EVENT_LOG, "[]") ?: "[]"
+                val array = JSONArray(raw)
+                val item = JSONObject().apply {
+                    put("timestampMs", System.currentTimeMillis())
+                    put("event", event)
+                    put("details", details)
+                    if (!error.isNullOrEmpty()) {
+                        put("error", error)
+                    }
+                }
+                array.put(item)
+                val trimmedArray = if (array.length() > 300) {
+                    val startIdx = array.length() - 300
+                    val sub = JSONArray()
+                    for (i in startIdx until array.length()) {
+                        sub.put(array.get(i))
+                    }
+                    sub
+                } else {
+                    array
+                }
+                prefs.edit().putString(KEY_NATIVE_EVENT_LOG, trimmedArray.toString()).apply()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to log native event: $event", e)
+            }
+        }
+
+        @JvmStatic
+        fun logNativeEvent(
+            context: Context,
+            event: String,
+            details: String = "",
+            throwable: Throwable
+        ) {
+            val errStr = "${throwable.javaClass.simpleName}: ${throwable.message ?: "no message"}"
+            logNativeEvent(context, event, details, errStr)
+        }
+
+        @JvmStatic
+        fun getNativeEventLogStatic(context: Context): JSONArray {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_NATIVE_EVENT_LOG, "[]") ?: "[]"
+                JSONArray(raw)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed reading native event log", e)
+                JSONArray()
+            }
+        }
 
         @JvmStatic
         fun getDeterministicRequestCode(prayerKey: String, timeMs: Long): Int {
@@ -241,7 +302,8 @@ class AthanAlarmPlugin : Plugin() {
                         khushuMode = khushuMode,
                         soundType = soundType,
                         notifyMode = notifyMode,
-                        autoKhushu = autoKhushu
+                        autoKhushu = autoKhushu,
+                        requestCode = reqCode
                     )
                     val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -257,7 +319,6 @@ class AthanAlarmPlugin : Plugin() {
                             pendingIntent
                         )
                     }
-
                     if (currentScheduledIds.contains(reqCode.toString())) {
                         retainedCount++
                     } else {
@@ -276,6 +337,11 @@ class AthanAlarmPlugin : Plugin() {
                 .apply()
 
             Log.d(TAG, "Reconcile completed: 14-day active total=${newScheduledIds.size}, added=$addedCount, removed=$removedCount, reasserted/retained=$retainedCount")
+            logNativeEvent(
+                context,
+                "reconcile",
+                "scheduled=$addedCount, cancelled=$removedCount, retained=$retainedCount, total=${newScheduledIds.size}"
+            )
             return mapOf(
                 "added" to addedCount,
                 "removed" to removedCount,
@@ -1338,6 +1404,29 @@ class AthanAlarmPlugin : Plugin() {
         } else -1
         ret.put("standbyBucket", standbyBucket)
 
+        // 7. Native event log (last 100 events, newest first)
+        val nativeEventsArray = JSArray()
+        try {
+            val events = getNativeEventLogStatic(context)
+            val total = events.length()
+            val count = Math.min(total, 100)
+            for (i in 0 until count) {
+                val idx = total - 1 - i
+                val obj = events.getJSONObject(idx)
+                val jsObj = JSObject()
+                jsObj.put("timestampMs", obj.optLong("timestampMs", 0L))
+                jsObj.put("event", obj.optString("event", ""))
+                jsObj.put("details", obj.optString("details", ""))
+                if (obj.has("error") && !obj.isNull("error")) {
+                    jsObj.put("error", obj.optString("error", ""))
+                }
+                nativeEventsArray.put(jsObj)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getAlarmDiagnostics reading native events", e)
+        }
+        ret.put("nativeEvents", nativeEventsArray)
+
         call.resolve(ret)
     }
 
@@ -1602,6 +1691,39 @@ class AthanAlarmPlugin : Plugin() {
             }
             notifyListeners("apkDownloadError", errorData)
             call.reject("Failed to start download: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun getNativeEventLog(call: PluginCall) {
+        try {
+            val eventsArray = getNativeEventLogStatic(context)
+            val limit = call.getInt("limit", 100) ?: 100
+            val ret = JSObject()
+            val list = com.getcapacitor.JSArray()
+            val total = eventsArray.length()
+            val count = Math.min(total, limit)
+            for (i in 0 until count) {
+                val idx = total - 1 - i
+                val obj = eventsArray.getJSONObject(idx)
+                val jsObj = JSObject()
+                jsObj.put("timestampMs", obj.optLong("timestampMs", 0L))
+                jsObj.put("event", obj.optString("event", ""))
+                jsObj.put("details", obj.optString("details", ""))
+                if (obj.has("error") && !obj.isNull("error")) {
+                    jsObj.put("error", obj.optString("error", ""))
+                }
+                list.put(jsObj)
+            }
+            ret.put("events", list)
+            ret.put("total", total)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get native event log", e)
+            val ret = JSObject()
+            ret.put("events", com.getcapacitor.JSArray())
+            ret.put("total", 0)
+            call.resolve(ret)
         }
     }
 

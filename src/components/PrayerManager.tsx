@@ -200,6 +200,19 @@ export default function PrayerManager({
         setVoluntaryPrayerLogs={setVoluntaryPrayerLogs}
         onSuccess={(msg) => setLogSuccessMessage(msg)}
       />
+
+      {/* Noticeable bottom/center notification when falling back to default athan preview */}
+      {logSuccessMessage && logSuccessMessage.includes('الصوت الافتراضي لأن المؤذن المختار غير متاح') && (
+        <div
+          id="athan-preview-fallback-banner"
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] sm:max-w-md bg-amber-950/95 dark:bg-amber-900/95 text-amber-100 border border-amber-500/60 px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-md flex items-center justify-center gap-2.5 text-xs sm:text-sm font-black text-center animate-fade-in pointer-events-none"
+        >
+          <span className="shrink-0 text-base">⚠️</span>
+          <span>{logSuccessMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

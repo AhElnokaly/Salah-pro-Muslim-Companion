@@ -136,6 +136,16 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val isFajr = intent.getBooleanExtra(EXTRA_IS_FAJR, false)
         val prayerKey = intent.getStringExtra(EXTRA_PRAYER_KEY) ?: ""
         val alarmType = intent.getStringExtra(EXTRA_ALARM_TYPE) ?: if (prayerKey.startsWith("custom_")) "custom" else if (prayerKey.contains("prealert")) "prealert" else if (prayerKey.contains("postalert") || prayerKey.contains("worship")) "postalert" else if (prayerKey.contains("khushu")) "khushu" else "athan"
+        val requestCode = intent.getIntExtra("requestCode", -1)
+        val soundType = intent.getStringExtra("soundType") ?: "reminder"
+        val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
+        val autoKhushu = intent.getBooleanExtra("autoKhushu", false)
+
+        AthanAlarmPlugin.logNativeEvent(
+            context,
+            "fire_received",
+            "prayerKey=$prayerKey, alarmType=$alarmType, requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, autoKhushu=$autoKhushu"
+        )
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
