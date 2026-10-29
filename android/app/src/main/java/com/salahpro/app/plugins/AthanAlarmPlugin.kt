@@ -242,7 +242,7 @@ class AthanAlarmPlugin : Plugin() {
             context: Context,
             alarmManager: AlarmManager,
             desiredTimesArray: JSONArray
-        ): Map<String, Int> {
+        ): Map<String, Any> {
             val now = System.currentTimeMillis()
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val currentScheduledIds = (prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet()) ?: emptySet()).toMutableSet()
@@ -310,8 +310,7 @@ class AthanAlarmPlugin : Plugin() {
                         khushuMode = khushuMode,
                         soundType = soundType,
                         notifyMode = notifyMode,
-                        autoKhushu = autoKhushu,
-                        requestCode = reqCode
+                        autoKhushu = autoKhushu
                     )
                     val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -403,7 +402,7 @@ class AthanAlarmPlugin : Plugin() {
                 ?: return 0
 
             val result = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
-            return result["total"] ?: 0
+            return (result["total"] as? Number)?.toInt() ?: 0
         }
 
         @JvmStatic
@@ -857,7 +856,7 @@ class AthanAlarmPlugin : Plugin() {
 
         // True State Reconciliation: Diff desired vs current scheduled
         val reconcileResult = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
-        val scheduledCount = reconcileResult["total"] ?: 0
+        val scheduledCount = (reconcileResult["total"] as? Number)?.toInt() ?: 0
 
         // Save calculation parameters for offline renewal
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -985,11 +984,11 @@ class AthanAlarmPlugin : Plugin() {
 
         val result = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
         val ret = JSObject()
-        ret.put("scheduledCount", result["total"] ?: 0)
-        ret.put("addedCount", result["added"] ?: 0)
-        ret.put("removedCount", result["removed"] ?: 0)
-        ret.put("retainedCount", result["retained"] ?: 0)
-        ret.put("os_verified", result["os_verified"] ?: "unknown")
+        ret.put("scheduledCount", (result["total"] as? Number)?.toInt() ?: 0)
+        ret.put("addedCount", (result["added"] as? Number)?.toInt() ?: 0)
+        ret.put("removedCount", (result["removed"] as? Number)?.toInt() ?: 0)
+        ret.put("retainedCount", (result["retained"] as? Number)?.toInt() ?: 0)
+        ret.put("os_verified", result["os_verified"] as? String ?: "unknown")
         ret.put("exactAlarmPermissionMissing", false)
         call.resolve(ret)
     }
