@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RotateCcw, ShieldCheck } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import type { AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
@@ -38,6 +38,16 @@ import { AlarmDeleteConfirmModal, AlarmRestoreConfirmModal } from './alarms/Alar
 import { AlarmDiagnosticsModal } from './AlarmDiagnosticsModal';
 import SystemAlarmCard from './alarms/SystemAlarmCard';
 import SystemAlarmEditModal, { SystemAlarmItemKey } from './alarms/SystemAlarmEditModal';
+import { isDiagAlarmId } from '../diagnostics/tests/diagTypes';
+
+/**
+ * Pure filter for user-visible custom alarms.
+ * Hides internal diagnostic synthetic alarms (prefixed with 'diag_') at render-time only.
+ */
+export function filterUserVisibleAlarms(alarms: AlarmConfig[]): AlarmConfig[] {
+  if (!Array.isArray(alarms)) return [];
+  return alarms.filter(a => !isDiagAlarmId(a?.id));
+}
 
 interface WorshipAlarmsProps {
   settings: AppSettings;
@@ -66,6 +76,7 @@ export default function WorshipAlarms({
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmConfig | null>(null);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const visibleAlarms = useMemo(() => filterUserVisibleAlarms(customAlarms), [customAlarms]);
 
   // System Push & Smart Notifications State
   const [pushSettings, setPushSettings] = useState<PushNotificationSettings>(() => getPushSettings());
@@ -373,12 +384,12 @@ export default function WorshipAlarms({
             المنبهات المخصصة والعبادات
           </h3>
           <span className="text-[11px] font-bold text-slate-400">
-            {customAlarms.length} منبه
+            {visibleAlarms.length} منبه
           </span>
         </div>
 
-        {customAlarms.length > 0 ? (
-          customAlarms.map(alarm => (
+        {visibleAlarms.length > 0 ? (
+          visibleAlarms.map(alarm => (
             <AlarmCard
               key={alarm.id}
               alarm={alarm}
@@ -396,7 +407,7 @@ export default function WorshipAlarms({
       </div>
 
       {/* Footer / Reset Defaults Helper for Custom Alarms */}
-      {customAlarms.length > 0 && (
+      {visibleAlarms.length > 0 && (
         <div className="flex items-center justify-between pt-1 px-1 text-xs font-bold text-slate-400 flex-wrap gap-2">
           <span>انقر على أي منبه لتعديل موعده، نغمته، أو الصلوات المرتبطة به.</span>
           <button

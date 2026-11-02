@@ -21,6 +21,12 @@ import {
   Check,
   FileText,
   ScrollText,
+  FlaskConical,
+  Play,
+  Square,
+  CheckSquare,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { resolveMuezzinId } from '../../../utils/muezzinResolver';
 import {
@@ -34,6 +40,12 @@ import {
   groupScheduledAlarmsByType,
 } from '../../../services/athanAlarmPlugin';
 import { toArabicNumbers } from '../../../utils/hijri';
+import { diagRunnerInstance } from '../../../diagnostics/tests/diagRunner';
+import { TEST_A_SPEC } from '../../../diagnostics/tests/specs/testA_previewSource';
+import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustomAlarm';
+import { DiagRunState, DiagResult } from '../../../diagnostics/tests/diagTypes';
+import { safeGetJSON } from '../../../utils/storage';
+import { AlarmConfig } from '../../../types';
 
 interface NativeFileInfo {
   path: string;
@@ -95,6 +107,131 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   useEffect(() => {
     fetchDiagnostics();
   }, [fetchDiagnostics]);
+
+  const [testsDevMode, setTestsDevMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('salah_diag_tests_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [runnerState, setRunnerState] = useState<DiagRunState | null>(() => diagRunnerInstance.getCurrentState());
+  const [hearingAnswers, setHearingAnswers] = useState<{ controlHeard: boolean | null; testHeard: boolean | null }>({
+    controlHeard: null,
+    testHeard: null,
+  });
+  const [isActionBusy, setIsActionBusy] = useState(false);
+  const [guardError, setGuardError] = useState<string | null>(null);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    diagRunnerInstance.registerSpec(TEST_A_SPEC);
+    diagRunnerInstance.registerSpec(TEST_B_SPEC);
+    diagRunnerInstance.checkAndResumeOnAppStartup();
+
+    const unsubscribe = diagRunnerInstance.subscribe((st) => {
+      setRunnerState(st ? { ...st } : null);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (runnerState?.phase !== 'waiting' || !runnerState.collectAt) {
+      setSecondsRemaining(null);
+      return;
+    }
+
+    const tick = () => {
+      const rem = Math.max(0, Math.ceil((runnerState.collectAt! - Date.now()) / 1000));
+      setSecondsRemaining(rem);
+      if (rem === 0) {
+        diagRunnerInstance.checkAndResumeOnAppStartup();
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [runnerState?.phase, runnerState?.collectAt]);
+
+  const toggleDevMode = () => {
+    const next = !testsDevMode;
+    setTestsDevMode(next);
+    try {
+      localStorage.setItem('salah_diag_tests_enabled', String(next));
+    } catch (_e) {}
+  };
+
+  const handleStartTest = async (specId: string) => {
+    setGuardError(null);
+    setHearingAnswers({ controlHeard: null, testHeard: null });
+    setIsActionBusy(true);
+    try {
+      const spec = diagRunnerInstance.getSpec(specId);
+      if (!spec) {
+        setGuardError('الاختبار غير مسجل في النظام.');
+        return;
+      }
+
+      const scheduled = diagnostics?.scheduledAlarms || [];
+      const athanTimes = scheduled.map((a) => ({
+        name: a.prayerName,
+        timeMs: a.timeMs,
+      }));
+      const customAlarms = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
+
+      const res = await diagRunnerInstance.startTest(spec, {
+        athanTimes,
+        customAlarms,
+      });
+
+      if (!res.success) {
+        setGuardError(res.error || 'فشل بدء الاختبار بسبب حماية الصلاة أو خطأ في التهيئة.');
+      }
+    } catch (err: any) {
+      setGuardError(err?.message || 'حدث خطأ غير متوقع أثناء تشغيل الاختبار.');
+    } finally {
+      setIsActionBusy(false);
+    }
+  };
+
+  const handleSubmitHearing = async () => {
+    if (hearingAnswers.controlHeard === null || hearingAnswers.testHeard === null) {
+      setGuardError('يرجى تحديد إجابة السماع لكلا المنبهين قبل الاعتماد.');
+      return;
+    }
+    setIsActionBusy(true);
+    try {
+      await diagRunnerInstance.submitUserAction({
+        hearing_check: {
+          controlHeard: hearingAnswers.controlHeard,
+          testHeard: hearingAnswers.testHeard,
+        },
+      });
+      fetchDiagnostics();
+    } catch (err: any) {
+      setGuardError(err?.message || 'فشل إرسال نتائج السماع.');
+    } finally {
+      setIsActionBusy(false);
+    }
+  };
+
+  const handleCancelTest = async () => {
+    setIsActionBusy(true);
+    try {
+      await diagRunnerInstance.cancelTest('إلغاء يدوي من واجهة المستخدم');
+      setHearingAnswers({ controlHeard: null, testHeard: null });
+      fetchDiagnostics();
+    } finally {
+      setIsActionBusy(false);
+    }
+  };
+
+  const handleResetTest = async () => {
+    setHearingAnswers({ controlHeard: null, testHeard: null });
+    await diagRunnerInstance.resetState();
+    fetchDiagnostics();
+  };
 
   const formatSize = (bytes: number): string => {
     if (!bytes || bytes <= 0) return '٠ بايت';
@@ -416,6 +553,20 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
 
           <button
             type="button"
+            onClick={toggleDevMode}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              testsDevMode
+                ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40'
+                : 'bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+            title="تفعيل أو إخفاء أدوات فحص التشخيص الميداني"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            <span>{testsDevMode ? 'وضع الفحص نشط' : 'أدوات الفحص'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={fetchDiagnostics}
             disabled={loading}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
@@ -426,6 +577,325 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
           </button>
         </div>
       </div>
+
+      {/* Active Diagnostic Test Running Banner */}
+      {runnerState && (runnerState.phase === 'waiting' || runnerState.phase === 'running' || runnerState.phase === 'collectable') && (
+        <div className="p-4 bg-rose-500/15 border-2 border-rose-500/40 rounded-2xl space-y-3 text-rose-900 dark:text-rose-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-black text-sm">
+              <FlaskConical className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 animate-bounce" />
+              <span>فحص تشخيصي قيد التشغيل: {diagRunnerInstance.getSpec(runnerState.testId)?.title || runnerState.testId}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelTest}
+              disabled={isActionBusy}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+            >
+              إلغاء الاختبار وفك الحجز
+            </button>
+          </div>
+          <div className="text-xs space-y-1">
+            {runnerState.phase === 'waiting' && (
+              <p className="font-bold flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+                <Clock className="w-4 h-4 animate-spin shrink-0" />
+                <span>متبقي على إطلاق المنبهات وسؤال السماع: {secondsRemaining !== null ? `${toArabicNumbers(secondsRemaining)} ثانية` : '...'}</span>
+              </p>
+            )}
+            {runnerState.phase === 'running' && (
+              <p className="font-bold flex items-center gap-1.5 text-rose-700 dark:text-rose-300">
+                <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                <span>جاري معالجة خطوات الفحص وتهيئة البيئة...</span>
+              </p>
+            )}
+            {runnerState.phase === 'collectable' && (
+              <p className="font-black text-emerald-600 dark:text-emerald-400">
+                ✓ تم إطلاق المنبهات! يرجى الإجابة على سؤال السماع في بطاقة الفحص أدناه.
+              </p>
+            )}
+            <p className="text-[11px] text-rose-800/80 dark:text-rose-300/80">
+              ملاحظة: المنبهات الأصلية وإعدادات الخشوع محفوظة في نسخة احتياطية آمنة (Snapshot) وستتم استعادتها تلقائياً عند انتهاء الفحص أو إلغائه.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {guardError && (
+        <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-2xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{guardError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGuardError(null)}
+            className="text-amber-700 dark:text-amber-300 hover:underline font-bold text-[11px] cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
+
+      {/* 0.5 In-App Diagnostics Test Framework (Dev Mode) */}
+      {(testsDevMode || runnerState) && (
+        <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border-2 border-indigo-500/30 dark:border-indigo-500/20 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-white">
+                  إطار الاختبارات التشخيصية الميدانية (Diagnostics Test Framework)
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  فحص دقيق ومباشر على الجهاز للتأكد من سلوك المنبهات والخشوع وعزل التخزين المؤقت.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md">
+              Dev Mode
+            </span>
+          </div>
+
+          {/* Test Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Test A Card */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                  Test A: عزل مصدر المعاينة (Fix 1a)
+                </span>
+                <span className="text-[10px] text-slate-400">فوري (Instant)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                يتحقق من مسارات الصوت (محلي / بعيد / افتراضي) عبر مسارين مستقلين للتأكد من عدم تلويث التخزين المؤقت للأذان.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleStartTest('fix1a-preview-source')}
+                disabled={isActionBusy || (!!runnerState && runnerState.phase !== 'reported' && runnerState.phase !== 'cancelled')}
+                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>تشغيل Test A (فحص المعاينة)</span>
+              </button>
+            </div>
+
+            {/* Test B Card */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                  Test B: منبهات الخشوع المخصصة (B3)
+                </span>
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">مجدول (~24 دقيقة)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                يجدول منبهين متتاليين (عادي بعد 3د، وأثناء الخشوع بعد 6د)، ويتحقق من كتم الثاني وسجلات النظام عند د24.
+              </p>
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
+                تنبيه للمستخدم: استمع للمنبهين وتذكّر بدقة ما سمعته للإجابة على سؤالي التحقق عند فتح الاستبيان بعد انتهاء فترة الفحص (~24 دقيقة).
+              </p>
+              <button
+                type="button"
+                onClick={() => handleStartTest('b3-khushu-custom-alarm')}
+                disabled={isActionBusy || (!!runnerState && runnerState.phase !== 'reported' && runnerState.phase !== 'cancelled')}
+                className="w-full py-1.5 px-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>تشغيل Test B (فحص الخشوع - ~24 دقيقة)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive UI for Test A (Offline Fallback Step) */}
+          {runnerState?.phase === 'collectable' && runnerState.testId === 'fix1a-preview-source' && (
+            <div className="p-4 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 rounded-xl space-y-3">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <h5 className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                  فحص التراجع بدون اتصال (Test A: Offline Fallback Verification):
+                </h5>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                اكتملت المرحلة الأولى (فحص الصوت المدمج والصوت عبر الإنترنت أثناء الاتصال). الآن يرجى قطع اتصال الإنترنت على الهاتف (إيقاف الواي فاي وبيانات الهاتف)، ثم الضغط على الزر أدناه لإجراء المرحلة الثانية (فحص التراجع للصوت الافتراضي ومسار التخزين المحلي بدون اتصال).
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsActionBusy(true);
+                  try {
+                    await diagRunnerInstance.submitUserAction({
+                      step_offline: { confirmed: true },
+                    });
+                    fetchDiagnostics();
+                  } catch (err: any) {
+                    setGuardError(err?.message || 'فشل إرسال تأكيد عدم الاتصال.');
+                  } finally {
+                    setIsActionBusy(false);
+                  }
+                }}
+                disabled={isActionBusy}
+                className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer"
+              >
+                تأكيد إيقاف الاتصال وإتمام الفحص
+              </button>
+            </div>
+          )}
+
+          {/* Interactive Hearing Questionnaire for Test B */}
+          {runnerState?.phase === 'collectable' && runnerState.testId === 'b3-khushu-custom-alarm' && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl space-y-3">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <h5 className="text-xs font-black text-amber-900 dark:text-amber-200">
+                  سؤال التحقق الميداني من السماع (User Hearing Verification):
+                </h5>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="bg-white dark:bg-[#161d26] p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                    1. هل سمعت صوت المنبه الأول (المنبه العادي - Control Alarm)؟
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="controlHeard"
+                        checked={hearingAnswers.controlHeard === true}
+                        onChange={() => setHearingAnswers((prev) => ({ ...prev, controlHeard: true }))}
+                        className="text-indigo-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">نعم (سمعت الصوت)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="controlHeard"
+                        checked={hearingAnswers.controlHeard === false}
+                        onChange={() => setHearingAnswers((prev) => ({ ...prev, controlHeard: false }))}
+                        className="text-indigo-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">لا (لم يصدر صوت)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-[#161d26] p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                    2. هل سمعت صوت المنبه الثاني (المنبه أثناء الخشوع - Test Alarm)؟
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="testHeard"
+                        checked={hearingAnswers.testHeard === false}
+                        onChange={() => setHearingAnswers((prev) => ({ ...prev, testHeard: false }))}
+                        className="text-indigo-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">لا (تم كتم الصوت بنجاح ✓)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="testHeard"
+                        checked={hearingAnswers.testHeard === true}
+                        onChange={() => setHearingAnswers((prev) => ({ ...prev, testHeard: true }))}
+                        className="text-indigo-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">نعم (رن المنبه أثناء الخشوع ✕)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {(hearingAnswers.controlHeard === null || hearingAnswers.testHeard === null) && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold text-center">
+                  يرجى تحديد الإجابة لكلا السؤالين أعلاه لتفعيل زر الاعتماد.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSubmitHearing}
+                disabled={isActionBusy || hearingAnswers.controlHeard === null || hearingAnswers.testHeard === null}
+                className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer"
+              >
+                اعتماد الملاحظات وتوليد التقرير النهائي
+              </button>
+            </div>
+          )}
+
+          {/* Report Presentation */}
+          {runnerState?.phase === 'reported' && runnerState.result && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-black text-xs ${
+                      runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS'
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                        : runnerState.result.verdict === 'REFUTED'
+                        ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700'
+                        : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                    }`}
+                  >
+                    {runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {runnerState.result.verdict === 'REFUTED' && <XCircle className="w-3.5 h-3.5" />}
+                    {runnerState.result.verdict === 'INCONCLUSIVE' && <AlertTriangle className="w-3.5 h-3.5" />}
+                    <span>{runnerState.result.verdict}</span>
+                  </span>
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {runnerState.result.reason}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      copyToClipboard(runnerState.result?.markdownReport || '', 'all');
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ التقرير</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetTest}
+                    className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition cursor-pointer"
+                  >
+                    إغلاق
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-900 text-slate-100 rounded-lg text-[11px] font-mono whitespace-pre-wrap max-h-60 overflow-y-auto dir-ltr text-left">
+                {runnerState.result.markdownReport}
+              </div>
+            </div>
+          )}
+
+          {/* Cancelled Banner */}
+          {runnerState?.phase === 'cancelled' && (
+            <div className="p-3 bg-slate-100 dark:bg-slate-800/80 rounded-xl flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-slate-500 shrink-0" />
+                <span>
+                  {runnerState.result?.reason || 'تم إلغاء الاختبار واستعادة الإعدادات الأصلية بنجاح.'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetTest}
+                className="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-bold rounded-lg transition cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 0. Visible Warning for Battery Optimization & Exact Alarms */}
       {hasBatteryOrExactAlarmIssue && (

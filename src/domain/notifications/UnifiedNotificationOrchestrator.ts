@@ -16,6 +16,7 @@ import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { AppSettings, PrayerTimes, AlarmConfig } from '../../types';
 import { safeGetJSON } from '../../utils/storage';
 import { KhushuStorage } from '../khushu/khushuStorage';
+import { computeKhushuStartMs, resolveKhushuIqamaOffset } from '../khushu/khushuFlowUtils';
 import AthanAlarm, {
   PrayerTimeAlarm,
   DailyPrayerTimesEntry,
@@ -220,13 +221,12 @@ export class UnifiedNotificationOrchestrator {
         if (khushuSettings.autoWithIqama && key !== 'Sunrise') {
           const lowerKey = key.toLowerCase();
           const isFriday = triggerDate.getDay() === 5;
-          let iqamaOffset = (khushuSettings.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          const iqamaOffset = resolveKhushuIqamaOffset(khushuSettings, lowerKey, isFriday);
           let duration = (khushuSettings.prayerDurations as any)?.[lowerKey] ?? 15;
           if (isFriday && lowerKey === 'dhuhr' && khushuSettings.enableFridaySpecial) {
-            iqamaOffset = khushuSettings.iqamaOffsets.friday || 25;
             duration = khushuSettings.prayerDurations.friday || 45;
           }
-          const iqamaTimeMs = triggerDate.getTime() + iqamaOffset * 60000;
+          const iqamaTimeMs = computeKhushuStartMs(triggerDate.getTime(), iqamaOffset);
           if (iqamaTimeMs > Date.now()) {
             nativeAlarmsToSchedule.push({
               prayerKey: `${key}_khushu`,

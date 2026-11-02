@@ -34,7 +34,9 @@ export async function resolvePreviewSource(
   isFajr: boolean,
   resolver: PreviewUrlResolver,
   fallbacks: PreviewFallbacks,
-  isOnline: boolean = true
+  isOnline: boolean = typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+    ? navigator.onLine
+    : true
 ): Promise<PreviewSource> {
   const fallback = isFajr ? fallbacks.fajr : fallbacks.general;
   const url = track?.url;

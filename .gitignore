@@ -12,3 +12,17 @@ keystore.properties
 android/keystore.properties
 android/app/keystore.properties
 .agent-state/
+
+# TEMPORARY - review export only, do NOT merge into the real repo
+public/audio/
+src/assets/images/
+android/app/src/main/res/drawable*/
+android/app/src/main/res/mipmap*/
+android/app/src/main/res/raw/
+android/app/src/main/assets/
+.aistudio/
+.gradle/
+android/.gradle/
+*.apk
+*.aab
+.github/

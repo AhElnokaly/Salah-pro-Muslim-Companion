@@ -57,8 +57,16 @@ import { getUnreadVersionStatus } from './data/changelog';
 import { checkForAppUpdates, AppReleaseInfo, compareSemver } from './services/updateChecker';
 import { CURRENT_RELEASE } from './data/changelog';
 import UpdateNotificationModal from './components/common/UpdateNotificationModal';
+import { diagRunnerInstance } from './diagnostics/tests/diagRunner';
 
 export default function App() {
+  // Early diagnostics startup check (F6/R5): detects reboot/restarts before scheduler triggers
+  useEffect(() => {
+    diagRunnerInstance.checkAndResumeOnAppStartup().catch((err) => {
+      console.warn('[App] Diagnostics startup check error:', err);
+    });
+  }, []);
+
   const [activeTab, setActiveTab] = useState<TabId>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isQuickSettingsOpen, setIsQuickSettingsOpen] = useState(false);

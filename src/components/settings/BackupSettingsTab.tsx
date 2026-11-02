@@ -7,6 +7,7 @@ import { getDashboardSectionsConfig } from '../dashboard/dashboardSections';
 import { checkForAppUpdates, UpdateCheckResult, compareSemver } from '../../services/updateChecker';
 import { CURRENT_RELEASE } from '../../data/changelog';
 import { downloadAndInstallAppUpdate } from '../../services/athanAlarmPlugin';
+import { sanitizeAlarmsForExport, sanitizeAlarmsForRestore } from '../../utils/backupAlarmUtils';
 
 interface BackupSettingsTabProps {
   settings: AppSettings;
@@ -131,7 +132,7 @@ export default function BackupSettingsTab({
         quranJuzProgress: safeGetJSON('quran_juz_progress', []),
         quranRoutines: safeGetJSON('quran_routines', []),
         qiyamJournalHistory: safeGetJSON('qiyam_journal_history', []),
-        customAlarms: safeGetJSON('salah_custom_alarms', []),
+        customAlarms: sanitizeAlarmsForExport(safeGetJSON<any[]>('salah_custom_alarms', [])),
         spiritualAlerts: safeGetJSON('salah_alerts', null),
         soundModes: safeGetJSON('salah_sound_modes', null),
         audioPreferences: {
@@ -270,10 +271,11 @@ export default function BackupSettingsTab({
         restoredCount++;
       }
 
-      if (data.customAlarms) {
-        safeSetItem('salah_custom_alarms', JSON.stringify(data.customAlarms));
+      if (data.customAlarms && Array.isArray(data.customAlarms)) {
+        const sanitizedAlarms = sanitizeAlarmsForRestore(data.customAlarms);
+        safeSetItem('salah_custom_alarms', JSON.stringify(sanitizedAlarms));
         try {
-          window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: data.customAlarms }));
+          window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: sanitizedAlarms }));
         } catch (_e) {}
         restoredCount++;
       }

@@ -103,11 +103,27 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
         }
 
-        fun activateKhushuDirectly(context: Context, mode: String = "silent", durationMinutes: Int = 30): Boolean {
-            AthanAlarmPlugin.logNativeEvent(context, "khushu_attempt", "mode=$mode, durationMinutes=$durationMinutes")
+        fun activateKhushuDirectly(context: Context, mode: String = "silent", durationMinutes: Int = 30, sourceKey: String = ""): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+            val initialRinger = audioManager?.ringerMode ?: -1
+            val initialFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.currentInterruptionFilter ?: -1
+            } else -1
+
+            val hasDndPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.isNotificationPolicyAccessGranted == true
+            } else {
+                true
+            }
+
+            AthanAlarmPlugin.logNativeEvent(
+                context,
+                "khushu_attempt",
+                "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, initialRinger=$initialRinger, initialFilter=$initialFilter, hasDndPermission=$hasDndPermission"
+            )
 
             // 1. Snapshot current state if not already active
             if (!prefs.getBoolean(KEY_IS_ACTIVE, false)) {
@@ -117,7 +133,6 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                     NotificationManager.INTERRUPTION_FILTER_ALL
                 }
                 val currentRinger = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
-
                 prefs.edit()
                     .putInt(KEY_ORIGINAL_FILTER, currentFilter)
                     .putInt(KEY_ORIGINAL_RINGER, currentRinger)
@@ -125,12 +140,6 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
 
             // 2. Apply silence / DND with graceful fallbacks
-            val hasDndPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                notificationManager?.isNotificationPolicyAccessGranted == true
-            } else {
-                true
-            }
-
             if (mode == "dnd" && hasDndPermission) {
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -175,12 +184,25 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             // 5. Update Widgets
             SalahWidgetProvider.updateAllWidgets(context)
 
-            if (ringerError != null) {
-                AthanAlarmPlugin.logNativeEvent(context, "khushu_result", "mode=$mode, fallback_vibrate=true", ringerError)
-            } else {
-                AthanAlarmPlugin.logNativeEvent(context, "khushu_result", "mode=$mode, durationMinutes=$durationMinutes, status=success")
-            }
+            val appliedRinger = audioManager?.ringerMode ?: -1
+            val appliedFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.currentInterruptionFilter ?: -1
+            } else -1
 
+            if (ringerError != null) {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "khushu_result",
+                    "mode=$mode, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, fallback_vibrate=true",
+                    ringerError
+                )
+            } else {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "khushu_result",
+                    "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, status=success"
+                )
+            }
             return true
         }
 

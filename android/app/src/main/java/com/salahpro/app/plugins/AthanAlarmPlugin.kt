@@ -1500,6 +1500,8 @@ class AthanAlarmPlugin : Plugin() {
         } catch (e: Exception) {
             Log.e(TAG, "Error in getAlarmDiagnostics reading native events", e)
         }
+        val lastBootTimestamp = prefs.getLong("last_device_boot_timestamp", 0L)
+        ret.put("lastDeviceBootTimestamp", lastBootTimestamp)
         ret.put("nativeEvents", nativeEventsArray)
 
         call.resolve(ret)

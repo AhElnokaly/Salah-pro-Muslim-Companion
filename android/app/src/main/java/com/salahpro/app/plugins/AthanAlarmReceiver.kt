@@ -157,7 +157,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode)
 
             if (autoKhushu) {
-                KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes)
+                KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             }
             logFireEvent(context, prayerName, prayerKey, "custom", "played", "custom_alarm_notification (sound: $soundType)")
@@ -183,7 +183,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         if (alarmType == "khushu" || prayerKey.contains("khushu")) {
             val durationMinutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
             val khushuMode = intent.getStringExtra(EXTRA_KHUSHU_MODE) ?: "silent"
-            KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes)
+            KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
             showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             logFireEvent(context, prayerName, prayerKey, "khushu", "played", "khushu_activated (mode: $khushuMode, duration: ${durationMinutes}m)")
             return

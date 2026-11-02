@@ -3,6 +3,9 @@ import { parseTimeToMinutes } from '../utils/prayerCalc';
 import { PrayerTimes, AlarmConfig } from '../types';
 import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
 import { KhushuSettings } from '../domain/khushu/khushuTypes';
+import { computeKhushuStartMs, resolveKhushuIqamaOffset } from '../domain/khushu/khushuFlowUtils';
+import { isDiagAlarmId } from '../diagnostics/tests/diagTypes';
+import { safeGetJSON } from '../utils/storage';
 
 export interface PrayerTimeAlarm {
   prayerKey: string;
@@ -156,6 +159,7 @@ export interface AlarmDiagnosticsResult {
   canScheduleExactAlarms: boolean;
   standbyBucket: number;
   nativeEvents?: NativeLogEvent[];
+  lastDeviceBootTimestamp?: number;
 }
 
 export interface ScheduledAlarmCountsByType {
@@ -514,8 +518,26 @@ export function buildNativePrayerTimeAlarms(
       customList.forEach((alarm) => {
         if (!alarm.enabled) return;
 
-        // If oneShot is set, it must ONLY be scheduled for its specific fireDate (never weekly via days[])
-        if (alarm.oneShot) {
+        // If oneShot is set or it is a diagnostic alarm, it must ONLY be scheduled for its specific fireDate (never weekly via days[])
+        const isDiag = isDiagAlarmId(alarm.id);
+        if (isDiag) {
+          // F6: Skip diag alarm unless diag_run_state exists, has phase === 'waiting', and alarm.id is in createdAlarmIds
+          const diagState = safeGetJSON<any>('diag_run_state', null);
+          if (
+            !diagState ||
+            diagState.phase !== 'waiting' ||
+            !Array.isArray(diagState.createdAlarmIds) ||
+            !diagState.createdAlarmIds.includes(alarm.id)
+          ) {
+            return;
+          }
+          if (!alarm.fireDate) return;
+          const dayDateYear = dayDate.getFullYear();
+          const dayDateMonth = (dayDate.getMonth() + 1).toString().padStart(2, '0');
+          const dayDateDay = dayDate.getDate().toString().padStart(2, '0');
+          const dayDateStr = `${dayDateYear}-${dayDateMonth}-${dayDateDay}`;
+          if (dayDateStr !== alarm.fireDate) return;
+        } else if (alarm.oneShot) {
           if (!alarm.fireDate) return;
           const dayDateYear = dayDate.getFullYear();
           const dayDateMonth = (dayDate.getMonth() + 1).toString().padStart(2, '0');
@@ -580,16 +602,15 @@ export function buildNativePrayerTimeAlarms(
             // Task 6: Khushu collision check for custom post-prayer alarms
             if (khushuEnabled && lowerTarget !== 'sunrise' && alarm.relation === 'after') {
               const isFriday = dayDate.getDay() === 5;
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerTarget] ?? 15;
+              const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerTarget, isFriday);
               let duration = (ks?.prayerDurations as any)?.[lowerTarget] ?? 15;
               if (isFriday && lowerTarget === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
                 duration = ks.prayerDurations.friday || 45;
               }
               const pBaseDate = new Date(dayDate);
               pBaseDate.setHours(0, 0, 0, 0);
               const prayerTimeMs = pBaseDate.getTime() + basePrayerMins * 60000;
-              const iqamaTimeMs = prayerTimeMs + iqamaOffset * 60000;
+              const iqamaTimeMs = computeKhushuStartMs(prayerTimeMs, iqamaOffset);
               const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
 
               if (timeMs >= iqamaTimeMs && timeMs < khushuEndTimeMs) {
@@ -662,13 +683,12 @@ export function buildNativePrayerTimeAlarms(
           // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isFriday);
             let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
             if (isFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
               duration = ks.prayerDurations.friday || 45;
             }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
             if (iqamaTimeMs > now) {
               times.push({
                 prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
@@ -720,13 +740,12 @@ export function buildNativePrayerTimeAlarms(
         // User-created prayer_relative custom alarms continue to be generated below.
 
         if (khushuEnabled && lowerKey !== 'sunrise') {
-          let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isTodayFriday);
           let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
           if (isTodayFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-            iqamaOffset = ks.iqamaOffsets.friday || 25;
             duration = ks.prayerDurations.friday || 45;
           }
-          const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+          const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
           if (iqamaTimeMs > now) {
             times.push({
               prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
@@ -778,13 +797,12 @@ export function buildNativePrayerTimeAlarms(
           // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isTomorrowFriday);
             let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
             if (isTomorrowFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
               duration = ks.prayerDurations.friday || 45;
             }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
             if (iqamaTimeMs > now) {
               times.push({
                 prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
