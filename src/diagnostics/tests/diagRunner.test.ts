@@ -884,6 +884,149 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
         delete (globalThis as any).indexedDB;
       }
     });
+
+    test('evaluate records offlineProbeTrack id into cacheCleanupPending if deletion verification fails', async () => {
+      let state: DiagRunState = {
+        runId: 'offline_cleanup_fail',
+        testId: 'fix1a-preview-source',
+        startedAt: Date.now(),
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+        partialResults: {
+          phase1Done: true,
+          bundledItem: { parameter: 'bundled', expected: 'bundled', actual: 'bundled', status: 'MATCH' },
+          onlineItem: { parameter: 'online', expected: 'remote', actual: 'remote', status: 'MATCH' },
+          wasOnlineCachedBefore: true,
+          wasOfflineCachedBefore: false,
+          onlineProbeTrack: { id: 'online_test_id', url: 'https://example.com/audio1.mp3' },
+          offlineProbeTrack: { id: 'offline_stubborn_track', url: 'https://example.com/audio2.mp3' },
+        },
+      };
+
+      const ctx: DiagContext = {
+        runId: state.runId,
+        state,
+        logAction: () => {},
+        updateState: (updater) => {
+          state = updater(state);
+          ctx.state = state;
+        },
+      };
+
+      (globalThis as any).indexedDB = {
+        open: () => {
+          const req: any = {};
+          setTimeout(() => {
+            req.result = {
+              transaction: () => ({
+                objectStore: () => ({
+                  get: () => {
+                    const r: any = {};
+                    setTimeout(() => {
+                      r.result = { blob: new Blob(['data']) };
+                      if (r.onsuccess) r.onsuccess();
+                    }, 0);
+                    return r;
+                  },
+                  delete: () => {
+                    const r: any = {};
+                    setTimeout(() => { if (r.onsuccess) r.onsuccess(); }, 0);
+                    return r;
+                  },
+                }),
+              }),
+            };
+            if (req.onsuccess) req.onsuccess();
+          }, 0);
+          return req;
+        },
+      };
+
+      try {
+        await TEST_A_SPEC.evaluate(ctx, { step_offline: { confirmed: true } });
+        assert.equal(state.cacheCleanupPending.includes('offline_stubborn_track'), true);
+      } finally {
+        delete (globalThis as any).indexedDB;
+      }
+    });
+
+    test('evaluate never deletes or adds offlineProbeTrack to cacheCleanupPending if it was cached before the test', async () => {
+      let state: DiagRunState = {
+        runId: 'offline_cached_before_safe',
+        testId: 'fix1a-preview-source',
+        startedAt: Date.now(),
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+        partialResults: {
+          phase1Done: true,
+          bundledItem: { parameter: 'bundled', expected: 'bundled', actual: 'bundled', status: 'MATCH' },
+          onlineItem: { parameter: 'online', expected: 'remote', actual: 'remote', status: 'MATCH' },
+          wasOnlineCachedBefore: true,
+          wasOfflineCachedBefore: true,
+          onlineProbeTrack: { id: 'online_test_id', url: 'https://example.com/audio1.mp3' },
+          offlineProbeTrack: { id: 'pre_existing_offline_track', url: 'https://example.com/audio2.mp3' },
+        },
+      };
+
+      let deleteAttempted = false;
+      const ctx: DiagContext = {
+        runId: state.runId,
+        state,
+        logAction: () => {},
+        updateState: (updater) => {
+          state = updater(state);
+          ctx.state = state;
+        },
+      };
+
+      (globalThis as any).indexedDB = {
+        open: () => {
+          const req: any = {};
+          setTimeout(() => {
+            req.result = {
+              transaction: () => ({
+                objectStore: () => ({
+                  get: () => {
+                    const r: any = {};
+                    setTimeout(() => {
+                      r.result = { blob: new Blob(['data']) };
+                      if (r.onsuccess) r.onsuccess();
+                    }, 0);
+                    return r;
+                  },
+                  delete: () => {
+                    deleteAttempted = true;
+                    const r: any = {};
+                    setTimeout(() => { if (r.onsuccess) r.onsuccess(); }, 0);
+                    return r;
+                  },
+                }),
+              }),
+            };
+            if (req.onsuccess) req.onsuccess();
+          }, 0);
+          return req;
+        },
+      };
+
+      try {
+        await TEST_A_SPEC.evaluate(ctx, { step_offline: { confirmed: true } });
+        assert.equal(deleteAttempted, false, 'deleteDownloadedAudio must NOT be called for pre-cached offline track');
+        assert.equal(state.cacheCleanupPending.includes('pre_existing_offline_track'), false);
+      } finally {
+        delete (globalThis as any).indexedDB;
+      }
+    });
   });
 
   describe('8. Reconcile Retains Diag Alarms During Waiting', () => {

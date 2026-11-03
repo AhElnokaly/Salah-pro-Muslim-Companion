@@ -151,7 +151,48 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 }
             }
 
+        private fun captureAudioStateLog(
+            audioManager: AudioManager?,
+            notificationManager: NotificationManager?
+        ): String {
+            val ringerMode = audioManager?.ringerMode ?: -1
+            val alarmVol = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: -1
+            val notifVol = audioManager?.getStreamVolume(AudioManager.STREAM_NOTIFICATION) ?: -1
+            val ringVol = audioManager?.getStreamVolume(AudioManager.STREAM_RING) ?: -1
+
+            val alarmMuted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                audioManager?.isStreamMute(AudioManager.STREAM_ALARM) ?: false
+            } else false
+            val notifMuted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                audioManager?.isStreamMute(AudioManager.STREAM_NOTIFICATION) ?: false
+            } else false
+            val ringMuted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                audioManager?.isStreamMute(AudioManager.STREAM_RING) ?: false
+            } else false
+
+            val dndGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.isNotificationPolicyAccessGranted ?: false
+            } else true
+
+            val filter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                notificationManager?.currentInterruptionFilter ?: -1
+            } else -1
+
+            val customChannelUsage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = notificationManager?.getNotificationChannel("salah_custom_alarms")
+                channel?.audioAttributes?.usage ?: -1
+            } else -1
+
+            return "ringerMode=$ringerMode, volAlarm=$alarmVol, muteAlarm=$alarmMuted, volNotif=$notifVol, muteNotif=$notifMuted, volRing=$ringVol, muteRing=$ringMuted, dndGranted=$dndGranted, filter=$filter, customChannelUsage=$customChannelUsage"
+        }
+
             var ringerError: Throwable? = null
+            AthanAlarmPlugin.logNativeEvent(
+                context,
+                "khushu_audio_state_before",
+                "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
+            )
+
             // Always silence ringer, falling back to Vibrate if Android throws SecurityException
             try {
                 audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
@@ -168,6 +209,12 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 ringerError = e
                 Log.e(TAG, "Error setting silent ringer mode", e)
             }
+
+            AthanAlarmPlugin.logNativeEvent(
+                context,
+                "khushu_audio_state_after",
+                "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
+            )
 
             // 3. Save active state
             val now = System.currentTimeMillis()

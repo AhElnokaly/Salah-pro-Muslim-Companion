@@ -266,6 +266,18 @@ export const TEST_A_SPEC: DiagTestSpec = {
 
     if (!wasOfflineCachedBefore) {
       await deleteDownloadedAudio(offlineProbeTrack.id).catch(() => {});
+      const stillDownloaded = await isAudioDownloaded(offlineProbeTrack.id).catch(() => false);
+      if (stillDownloaded) {
+        ctx.updateState((s) => ({
+          ...s,
+          cacheCleanupPending: Array.from(new Set([...s.cacheCleanupPending, offlineProbeTrack.id])),
+        }));
+      } else {
+        ctx.updateState((s) => ({
+          ...s,
+          cacheCleanupPending: s.cacheCleanupPending.filter((id) => id !== offlineProbeTrack.id),
+        }));
+      }
     }
 
     const hasMismatch = expectedVsActual.some((item) => item.status === 'MISMATCH');

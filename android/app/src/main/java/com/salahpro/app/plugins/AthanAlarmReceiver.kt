@@ -154,9 +154,18 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             val durationMinutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
             val khushuMode = intent.getStringExtra(EXTRA_KHUSHU_MODE) ?: "silent"
 
+            val notifPostStart = System.currentTimeMillis()
             showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode)
+            val notifPostDone = System.currentTimeMillis()
 
             if (autoKhushu) {
+                val khushuTriggerStart = System.currentTimeMillis()
+                val deltaMs = khushuTriggerStart - notifPostDone
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "custom_alarm_khushu_timing",
+                    "prayerKey=$prayerKey, notifToKhushuDeltaMs=$deltaMs, notifPostDurationMs=${notifPostDone - notifPostStart}"
+                )
                 KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             }

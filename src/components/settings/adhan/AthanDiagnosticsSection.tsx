@@ -46,6 +46,7 @@ import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustom
 import { DiagRunState, DiagResult } from '../../../diagnostics/tests/diagTypes';
 import { safeGetJSON } from '../../../utils/storage';
 import { AlarmConfig } from '../../../types';
+import { KhushuMode } from '../../../services/khushuModePlugin';
 
 interface NativeFileInfo {
   path: string;
@@ -72,21 +73,24 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   const [lastPlay, setLastPlay] = useState<LastAthanPlayRecord | null>(null);
   const [diagnostics, setDiagnostics] = useState<AlarmDiagnosticsResult | null>(null);
   const [nativeLogs, setNativeLogs] = useState<NativeLogEvent[]>([]);
+  const [isDndGranted, setIsDndGranted] = useState<boolean | null>(null);
   const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs'>('none');
 
   const fetchDiagnostics = useCallback(async () => {
     setLoading(true);
     try {
-      const [files, playRecord, diag, logs] = await Promise.all([
+      const [files, playRecord, diag, logs, dndPerm] = await Promise.all([
         getNativeAthanFiles(),
         getLastAthanPlay(),
         getAlarmDiagnostics(),
         getNativeEventLog(100),
+        KhushuMode.checkPermission().catch(() => ({ granted: false })),
       ]);
       if (files) {
         setNativeFiles(files);
       }
       setLastPlay(playRecord);
+      setIsDndGranted(Boolean(dndPerm?.granted));
       if (diag) {
         setDiagnostics(diag);
         if (diag.nativeEvents && diag.nativeEvents.length > 0) {
@@ -429,6 +433,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       `[1] حالة النظام والبطارية (Device & Battery Health):`,
       `• استثناء تحسين استهلاك البطارية: ${diagnostics?.isIgnoringBatteryOptimizations ? 'مستثنى (آمن - Unrestricted)' : 'غير مستثنى (معرض للتجميد والسكون - Optimized)'}`,
       `• إذن المنبهات الدقيقة: ${diagnostics?.canScheduleExactAlarms ? 'ممنوح (Granted)' : 'مفقود (Denied)'}`,
+      `• صلاحية عدم الإزعاج (DND): ${isDndGranted ? 'ممنوحة' : 'غير ممنوحة'}`,
       `• فئة الاستعداد للتطبيق: ${formatStandbyBucket(diagnostics?.standbyBucket)}`,
       `• أقرب منبه AlarmClock مسجل بالنظام: ${diagnostics?.nextAlarmClockMs ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}`,
       ``,
@@ -950,6 +955,17 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                   : 'text-rose-700 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-950/40'
               }`}>
                 {diagnostics.canScheduleExactAlarms ? 'ممنوح ✓' : 'مفقود ✕'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+              <span className="text-slate-500 dark:text-slate-400 font-bold">صلاحية عدم الإزعاج (DND):</span>
+              <span className={`font-black px-2 py-0.5 rounded-md text-[11px] ${
+                isDndGranted
+                  ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-950/40'
+                  : 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
+              }`}>
+                {isDndGranted ? 'ممنوحة ✓' : 'غير ممنوحة ⚠️'}
               </span>
             </div>
 
