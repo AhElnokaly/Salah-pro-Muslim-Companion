@@ -141,11 +141,15 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
         val autoKhushu = intent.getBooleanExtra("autoKhushu", false)
 
-        AthanAlarmPlugin.logNativeEvent(
-            context,
-            "fire_received",
-            "prayerKey=$prayerKey, alarmType=$alarmType, requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, autoKhushu=$autoKhushu"
-        )
+        try {
+            AthanAlarmPlugin.logNativeEvent(
+                context,
+                "fire_received",
+                "prayerKey=$prayerKey, alarmType=$alarmType, requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, autoKhushu=$autoKhushu"
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed logging fire_received", e)
+        }
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
@@ -161,11 +165,15 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             if (autoKhushu) {
                 val khushuTriggerStart = System.currentTimeMillis()
                 val deltaMs = khushuTriggerStart - notifPostDone
-                AthanAlarmPlugin.logNativeEvent(
-                    context,
-                    "custom_alarm_khushu_timing",
-                    "prayerKey=$prayerKey, notifToKhushuDeltaMs=$deltaMs, notifPostDurationMs=${notifPostDone - notifPostStart}"
-                )
+                try {
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "custom_alarm_khushu_timing",
+                        "prayerKey=$prayerKey, notifToKhushuDeltaMs=$deltaMs, notifPostDurationMs=${notifPostDone - notifPostStart}"
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed logging custom_alarm_khushu_timing", e)
+                }
                 KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             }

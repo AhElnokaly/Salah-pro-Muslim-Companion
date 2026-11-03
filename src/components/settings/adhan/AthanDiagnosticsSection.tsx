@@ -84,13 +84,16 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         getLastAthanPlay(),
         getAlarmDiagnostics(),
         getNativeEventLog(100),
-        KhushuMode.checkPermission().catch(() => ({ granted: false })),
+        KhushuMode.checkPermission().catch(() => null),
       ]);
+
+      const dndStatus = (dndPerm && typeof dndPerm.granted === 'boolean') ? dndPerm.granted : null;
+
       if (files) {
         setNativeFiles(files);
       }
       setLastPlay(playRecord);
-      setIsDndGranted(Boolean(dndPerm?.granted));
+      setIsDndGranted(dndStatus);
       if (diag) {
         setDiagnostics(diag);
         if (diag.nativeEvents && diag.nativeEvents.length > 0) {
@@ -433,7 +436,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       `[1] حالة النظام والبطارية (Device & Battery Health):`,
       `• استثناء تحسين استهلاك البطارية: ${diagnostics?.isIgnoringBatteryOptimizations ? 'مستثنى (آمن - Unrestricted)' : 'غير مستثنى (معرض للتجميد والسكون - Optimized)'}`,
       `• إذن المنبهات الدقيقة: ${diagnostics?.canScheduleExactAlarms ? 'ممنوح (Granted)' : 'مفقود (Denied)'}`,
-      `• صلاحية عدم الإزعاج (DND): ${isDndGranted ? 'ممنوحة' : 'غير ممنوحة'}`,
+      `• صلاحية عدم الإزعاج (DND): ${isDndGranted === true ? 'ممنوحة' : isDndGranted === false ? 'غير ممنوحة' : 'غير معروف'}`,
       `• فئة الاستعداد للتطبيق: ${formatStandbyBucket(diagnostics?.standbyBucket)}`,
       `• أقرب منبه AlarmClock مسجل بالنظام: ${diagnostics?.nextAlarmClockMs ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}`,
       ``,
@@ -961,11 +964,13 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
               <span className="text-slate-500 dark:text-slate-400 font-bold">صلاحية عدم الإزعاج (DND):</span>
               <span className={`font-black px-2 py-0.5 rounded-md text-[11px] ${
-                isDndGranted
+                isDndGranted === true
                   ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-950/40'
-                  : 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
+                  : isDndGranted === false
+                  ? 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
+                  : 'text-slate-700 dark:text-slate-300 bg-slate-200/60 dark:bg-slate-800/60'
               }`}>
-                {isDndGranted ? 'ممنوحة ✓' : 'غير ممنوحة ⚠️'}
+                {isDndGranted === true ? 'ممنوحة ✓' : isDndGranted === false ? 'غير ممنوحة ⚠️' : 'غير معروف ❓'}
               </span>
             </div>
 
