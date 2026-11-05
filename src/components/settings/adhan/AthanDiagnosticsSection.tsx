@@ -45,8 +45,10 @@ import { TEST_A_SPEC } from '../../../diagnostics/tests/specs/testA_previewSourc
 import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustomAlarm';
 import { DiagRunState, DiagResult } from '../../../diagnostics/tests/diagTypes';
 import { safeGetJSON } from '../../../utils/storage';
-import { AlarmConfig } from '../../../types';
+import { AlarmConfig, AppSettings } from '../../../types';
 import { KhushuMode } from '../../../services/khushuModePlugin';
+import { StorageFacade } from '../../../domain/storage/StorageFacade';
+import { resolveAthanTimes } from '../../../diagnostics/resolveAthanTimes';
 
 interface NativeFileInfo {
   path: string;
@@ -180,11 +182,8 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         return;
       }
 
-      const scheduled = diagnostics?.scheduledAlarms || [];
-      const athanTimes = scheduled.map((a) => ({
-        name: a.prayerName,
-        timeMs: a.timeMs,
-      }));
+      const storedSettings = StorageFacade.getSettings<AppSettings | null>(null);
+      const athanTimes = resolveAthanTimes(diagnostics, storedSettings, new Date());
       const customAlarms = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
 
       const res = await diagRunnerInstance.startTest(spec, {
@@ -589,16 +588,16 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       {/* Active Diagnostic Test Running Banner */}
       {runnerState && (runnerState.phase === 'waiting' || runnerState.phase === 'running' || runnerState.phase === 'collectable') && (
         <div className="p-4 bg-rose-500/15 border-2 border-rose-500/40 rounded-2xl space-y-3 text-rose-900 dark:text-rose-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-black text-sm">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 font-black text-sm flex-1 min-w-[200px]">
               <FlaskConical className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 animate-bounce" />
-              <span>فحص تشخيصي قيد التشغيل: {diagRunnerInstance.getSpec(runnerState.testId)?.title || runnerState.testId}</span>
+              <span className="leading-snug">فحص تشخيصي قيد التشغيل: {diagRunnerInstance.getSpec(runnerState.testId)?.title || runnerState.testId}</span>
             </div>
             <button
               type="button"
               onClick={handleCancelTest}
               disabled={isActionBusy}
-              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+              className="shrink-0 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
             >
               إلغاء الاختبار وفك الحجز
             </button>
@@ -629,15 +628,15 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       )}
 
       {guardError && (
-        <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-2xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
-          <div className="flex items-center gap-2 font-bold">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>{guardError}</span>
+        <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-2xl flex items-start justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-start gap-2 font-bold flex-1 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">{guardError}</span>
           </div>
           <button
             type="button"
             onClick={() => setGuardError(null)}
-            className="text-amber-700 dark:text-amber-300 hover:underline font-bold text-[11px] cursor-pointer"
+            className="shrink-0 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 rounded-lg font-bold text-[11px] cursor-pointer transition"
           >
             إغلاق
           </button>
@@ -764,7 +763,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                   <span className="font-bold text-slate-800 dark:text-slate-200 block">
                     1. هل سمعت صوت المنبه الأول (المنبه العادي - Control Alarm)؟
                   </span>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
@@ -792,7 +791,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                   <span className="font-bold text-slate-800 dark:text-slate-200 block">
                     2. هل سمعت صوت المنبه الثاني (المنبه أثناء الخشوع - Test Alarm)؟
                   </span>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
@@ -837,33 +836,29 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
           {/* Report Presentation */}
           {runnerState?.phase === 'reported' && runnerState.result && (
             <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-black text-xs ${
-                      runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS'
-                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                        : runnerState.result.verdict === 'REFUTED'
-                        ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700'
-                        : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
-                    }`}
-                  >
-                    {runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS' && <CheckCircle2 className="w-3.5 h-3.5" />}
-                    {runnerState.result.verdict === 'REFUTED' && <XCircle className="w-3.5 h-3.5" />}
-                    {runnerState.result.verdict === 'INCONCLUSIVE' && <AlertTriangle className="w-3.5 h-3.5" />}
-                    <span>{runnerState.result.verdict}</span>
-                  </span>
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    {runnerState.result.reason}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-xs shrink-0 ${
+                    runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS'
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                      : runnerState.result.verdict === 'REFUTED'
+                      ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700'
+                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                  }`}
+                >
+                  {runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                  {runnerState.result.verdict === 'REFUTED' && <XCircle className="w-4 h-4 shrink-0" />}
+                  {runnerState.result.verdict === 'INCONCLUSIVE' && <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  <span>{runnerState.result.verdict}</span>
+                </span>
+
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
                       copyToClipboard(runnerState.result?.markdownReport || '', 'all');
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     <span>نسخ التقرير</span>
@@ -871,12 +866,20 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                   <button
                     type="button"
                     onClick={handleResetTest}
-                    className="px-2.5 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition cursor-pointer"
                   >
                     إغلاق
                   </button>
                 </div>
               </div>
+
+              {runnerState.result.reason && (
+                <div className="p-3 bg-white dark:bg-[#161d26] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-relaxed text-right">
+                    {runnerState.result.reason}
+                  </p>
+                </div>
+              )}
 
               <div className="p-3 bg-slate-900 text-slate-100 rounded-lg text-[11px] font-mono whitespace-pre-wrap max-h-60 overflow-y-auto dir-ltr text-left">
                 {runnerState.result.markdownReport}
@@ -886,17 +889,17 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
 
           {/* Cancelled Banner */}
           {runnerState?.phase === 'cancelled' && (
-            <div className="p-3 bg-slate-100 dark:bg-slate-800/80 rounded-xl flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>
+            <div className="p-3 bg-slate-100 dark:bg-slate-800/80 rounded-xl flex items-start justify-between gap-3 text-xs text-slate-700 dark:text-slate-300">
+              <div className="flex items-start gap-2 flex-1 min-w-0">
+                <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
                   {runnerState.result?.reason || 'تم إلغاء الاختبار واستعادة الإعدادات الأصلية بنجاح.'}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleResetTest}
-                className="px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-bold rounded-lg transition cursor-pointer"
+                className="shrink-0 px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-bold rounded-lg transition cursor-pointer"
               >
                 إغلاق
               </button>
@@ -974,16 +977,16 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">فئة الاستعداد (Standby Bucket):</span>
-              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-[11px]">
+            <div className="flex items-center justify-between flex-wrap sm:flex-nowrap gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+              <span className="text-slate-500 dark:text-slate-400 font-bold text-[11px] sm:text-xs">فئة الاستعداد (Standby Bucket):</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-[11px] shrink-0">
                 {formatStandbyBucket(diagnostics.standbyBucket)}
               </span>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">أقرب منبه مسجل بالنظام (AlarmClock):</span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-[11px]">
+            <div className="flex items-center justify-between flex-wrap sm:flex-nowrap gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+              <span className="text-slate-500 dark:text-slate-400 font-bold text-[11px] sm:text-xs">أقرب منبه مسجل بالنظام (AlarmClock):</span>
+              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-[11px] shrink-0">
                 {diagnostics.nextAlarmClockMs > 0 ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}
               </span>
             </div>
@@ -994,12 +997,12 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               if (!osMatch) return null;
               const val = osMatch[1];
               return (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 sm:col-span-2">
-                  <span className="text-slate-500 dark:text-slate-400 font-bold">
+                <div className="flex items-center justify-between flex-wrap sm:flex-nowrap gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 sm:col-span-2">
+                  <span className="text-slate-500 dark:text-slate-400 font-bold text-[11px] sm:text-xs">
                     مطابقة منبهات النظام (OS Verified):
                   </span>
                   <span
-                    className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] ${
+                    className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] shrink-0 ${
                       val === 'unknown'
                         ? 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
                         : 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-950/40'

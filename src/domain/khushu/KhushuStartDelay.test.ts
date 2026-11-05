@@ -215,9 +215,12 @@ describe('Phase 2 - Khushu Start Delay Subsystem Tests', () => {
   });
 
   describe('4. buildNativePrayerTimeAlarms across all 3 paths', () => {
-    // Construct local target date tomorrow morning at 00:00 local time
+    // Construct local target date in future, deterministically skipping Friday (Jumu'ah)
     const testDay = new Date();
-    testDay.setDate(testDay.getDate() + 2); // 2 days in the future to avoid any daylight/midnight edge
+    testDay.setDate(testDay.getDate() + 1);
+    if (testDay.getDay() === 5) {
+      testDay.setDate(testDay.getDate() + 1);
+    }
     testDay.setHours(0, 0, 0, 0);
 
     const fixedNow = testDay.getTime() - 2 * 3600000; // 2 hours before the start of testDay
@@ -519,7 +522,10 @@ describe('Phase 2 - Khushu Start Delay Subsystem Tests', () => {
 
       // Verify that calling buildNativePrayerTimeAlarms with updated settings produces the new Fajr khushu time
       const testDay = new Date();
-      testDay.setDate(testDay.getDate() + 2);
+      testDay.setDate(testDay.getDate() + 1);
+      if (testDay.getDay() === 5) {
+        testDay.setDate(testDay.getDate() + 1);
+      }
       testDay.setHours(0, 0, 0, 0);
 
       const daysList: DailyPrayerTimesEntry[] = [

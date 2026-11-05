@@ -16,7 +16,9 @@ import { filterUserVisibleAlarms } from '../../components/WorshipAlarms';
 import { deleteDownloadedAudio } from '../../utils/audioStorage';
 import { sanitizeAlarmsForExport, sanitizeAlarmsForRestore } from '../../utils/backupAlarmUtils';
 import { KhushuMode } from '../../services/khushuModePlugin';
-import { AlarmConfig } from '../../types';
+import { AlarmConfig, AppSettings } from '../../types';
+import { generatePrayerSchedule } from '../../utils/prayerScheduleSync';
+import { resolveAthanTimes, normalizePrayerKey } from '../resolveAthanTimes';
 
 // MockStorage for node environment
 class MockStorage implements Storage {
@@ -1494,6 +1496,203 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
       const finalAlarms = safeGetJSON<any[]>('salah_custom_alarms', []);
       assert.equal(finalAlarms.some((a) => isDiagAlarmId(a.id)), false);
       assert.equal(runner.getCurrentState(), null);
+    });
+  });
+
+  describe('17. Prayer Proximity Guard Athans and Fallback Schedule (R8)', () => {
+    const fixedNow = new Date(2026, 5, 10, 12, 0, 0).getTime(); // 12:00:00
+
+    test('Guard condition 1: قائمة فاضية أو غير متوفرة = حظر (fail-closed)', () => {
+      // Empty array
+      const emptyResult = checkPrayerProximityGuard({
+        athanTimes: [],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(emptyResult.allowed, false);
+      assert.match(emptyResult.reason || '', /تعذر التحقق من مواقيت الصلاة/);
+
+      // Undefined / missing
+      const undefinedResult = checkPrayerProximityGuard({
+        athanTimes: undefined,
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(undefinedResult.allowed, false);
+      assert.match(undefinedResult.reason || '', /تعذر التحقق من مواقيت الصلاة/);
+    });
+
+    test('Guard condition 2: صلاة خلال نافذة الحظر (30 دقيقة قبل أو أثناء الاختبار أو 30 دقيقة بعده) = حظر', () => {
+      // 1) Athan 15 minutes before now (within 30m prior buffer)
+      const pastWithin30m = checkPrayerProximityGuard({
+        athanTimes: [{ name: 'Dhuhr', timeMs: fixedNow - 15 * 60 * 1000 }],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(pastWithin30m.allowed, false);
+      assert.match(pastWithin30m.reason || '', /Dhuhr/);
+
+      // 2) Athan 10 minutes from now (during test duration)
+      const duringTest = checkPrayerProximityGuard({
+        athanTimes: [{ name: 'Dhuhr', timeMs: fixedNow + 10 * 60 * 1000 }],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(duringTest.allowed, false);
+      assert.match(duringTest.reason || '', /Dhuhr/);
+
+      // 3) Athan 35 minutes from now (within the 30m post-test buffer: 25m test + 30m buffer = 55m window)
+      const postBuffer = checkPrayerProximityGuard({
+        athanTimes: [{ name: 'Asr', timeMs: fixedNow + 35 * 60 * 1000 }],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(postBuffer.allowed, false);
+      assert.match(postBuffer.reason || '', /Asr/);
+    });
+
+    test('Guard condition 3: صلاة بعيدة عن نافذة الحظر = مرور', () => {
+      // Previous prayer was 45 minutes ago (> 30m buffer) and next prayer is 90 minutes away (> 25m + 30m = 55m window)
+      const safeAthans = [
+        { name: 'Dhuhr', timeMs: fixedNow - 45 * 60 * 1000 },
+        { name: 'Asr', timeMs: fixedNow + 90 * 60 * 1000 },
+      ];
+      const result = checkPrayerProximityGuard({
+        athanTimes: safeAthans,
+        customAlarms: [],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+      assert.equal(result.allowed, true);
+      assert.equal(result.reason, undefined);
+      assert.equal(result.conflictingEvent, undefined);
+    });
+
+    test('Fallback generatePrayerSchedule: covers today and tomorrow using actual settings', () => {
+      const alexandriaSettings: Partial<AppSettings> = {
+        latitude: 31.2001,
+        longitude: 29.9187,
+        cityName: 'الإسكندرية',
+        calcMethod: 'Egypt',
+        madhab: 'standard',
+        prayerOffsets: { Fajr: 0, Sunrise: 0, Dhuhr: 0, Asr: 0, Maghrib: 0, Isha: 0 },
+      };
+
+      const schedule = generatePrayerSchedule(alexandriaSettings, new Date(fixedNow), 2);
+      // 5 prayers per day * 2 days = 10 prayer items
+      assert.equal(schedule.length, 10);
+      const prayerNames = schedule.map((p) => p.name);
+      assert.ok(prayerNames.includes('Fajr'));
+      assert.ok(prayerNames.includes('Dhuhr'));
+      assert.ok(prayerNames.includes('Asr'));
+      assert.ok(prayerNames.includes('Maghrib'));
+      assert.ok(prayerNames.includes('Isha'));
+
+      // All timestamps must be valid numbers
+      for (const item of schedule) {
+        assert.equal(typeof item.timeMs, 'number');
+        assert.ok(!isNaN(item.timeMs));
+      }
+    });
+
+    test('Fallback generatePrayerSchedule: returns empty array (fail-closed) when settings are missing or invalid', () => {
+      assert.deepEqual(generatePrayerSchedule(null), []);
+      assert.deepEqual(generatePrayerSchedule(undefined), []);
+      assert.deepEqual(generatePrayerSchedule({} as any), []);
+      assert.deepEqual(generatePrayerSchedule({ latitude: NaN, longitude: 29.9187 }), []);
+    });
+
+    test('resolveAthanTimes: filters only alarmType === athan (ignores khushu, prealert, custom)', () => {
+      const rawAlarms: any = {
+        savedAlarms: [
+          { requestCode: 1, prayerName: 'Fajr', timeMs: fixedNow + 1000, alarmType: 'athan' },
+          { requestCode: 2, prayerName: 'Dhuhr', timeMs: fixedNow + 2000, alarmType: 'athan' },
+          { requestCode: 3, prayerName: 'Khushu', timeMs: fixedNow + 3000, alarmType: 'khushu' },
+          { requestCode: 4, prayerName: 'Prealert', timeMs: fixedNow + 4000, alarmType: 'prealert' },
+          { requestCode: 5, prayerName: 'Custom', timeMs: fixedNow + 5000, alarmType: 'custom' },
+        ],
+      };
+
+      const result = resolveAthanTimes(rawAlarms, null, new Date(fixedNow));
+      assert.equal(result.length, 2);
+      assert.deepEqual(result.map((r) => r.name), ['Fajr', 'Dhuhr']);
+    });
+
+    test('resolveAthanTimes: unions partial savedAlarms with fallback generatePrayerSchedule', () => {
+      const alexandriaSettings: Partial<AppSettings> = {
+        latitude: 31.2001,
+        longitude: 29.9187,
+        cityName: 'الإسكندرية',
+        calcMethod: 'Egypt',
+        madhab: 'standard',
+        prayerOffsets: { Fajr: 0, Sunrise: 0, Dhuhr: 0, Asr: 0, Maghrib: 0, Isha: 0 },
+      };
+      const fallback = generatePrayerSchedule(alexandriaSettings, new Date(fixedNow), 2);
+      assert.equal(fallback.length, 10);
+
+      const mockDiag: any = {
+        savedAlarms: [
+          { requestCode: 1, prayerName: 'الفجر', prayerKey: 'fajr', timeMs: fallback[0].timeMs, alarmType: 'athan' },
+          { requestCode: 2, prayerName: 'الظهر', prayerKey: 'dhuhr', timeMs: fallback[1].timeMs, alarmType: 'athan' },
+        ],
+      };
+
+      const result = resolveAthanTimes(mockDiag, alexandriaSettings, new Date(fixedNow));
+      assert.equal(result.length, 10);
+      assert.equal(result[0].name, 'الفجر');
+      assert.equal(result[1].name, 'الظهر');
+      assert.equal(result[2].name, fallback[2].name);
+    });
+
+    test('resolveAthanTimes: deduplicates identical prayers across savedAlarms and fallback', () => {
+      const alexandriaSettings: Partial<AppSettings> = {
+        latitude: 31.2001,
+        longitude: 29.9187,
+        cityName: 'الإسكندرية',
+        calcMethod: 'Egypt',
+        madhab: 'standard',
+        prayerOffsets: { Fajr: 0, Sunrise: 0, Dhuhr: 0, Asr: 0, Maghrib: 0, Isha: 0 },
+      };
+      const fallback = generatePrayerSchedule(alexandriaSettings, new Date(fixedNow), 2);
+      const targetAsr = fallback.find((f) => f.name === 'Asr');
+      assert.ok(targetAsr);
+
+      const mockDiag: any = {
+        savedAlarms: [
+          {
+            requestCode: 10,
+            prayerName: 'العصر',
+            prayerKey: 'asr',
+            timeMs: targetAsr.timeMs + 2000, // same minute (+2s)
+            alarmType: 'athan',
+          },
+        ],
+      };
+
+      const result = resolveAthanTimes(mockDiag, alexandriaSettings, new Date(fixedNow));
+      // Total 10 prayers across 2 days, no duplicated prayer for day 1 Asr
+      assert.equal(result.length, 10);
+      const asrList = result.filter((r) => normalizePrayerKey(r.name) === 'asr');
+      assert.equal(asrList.length, 2); // 1 for today, 1 for tomorrow
+      assert.equal(asrList[0].name, 'العصر'); // Prioritized from savedAlarms
+    });
+
+    test('resolveAthanTimes: returns [] (fail-closed) when both sources are empty', () => {
+      const emptyResult = resolveAthanTimes(null, null, new Date(fixedNow));
+      assert.deepEqual(emptyResult, []);
+
+      const emptyDiag = resolveAthanTimes({ savedAlarms: [] } as any, {}, new Date(fixedNow));
+      assert.deepEqual(emptyDiag, []);
+
+      const guardRes = checkPrayerProximityGuard({
+        athanTimes: emptyResult,
+        customAlarms: [],
+        now: fixedNow,
+        testDurationMinutes: 25,
+      });
+
+      assert.equal(guardRes.allowed, false);
+      assert.match(guardRes.reason || '', /تعذر التحقق من مواقيت الصلاة/);
     });
   });
 });
