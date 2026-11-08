@@ -21,6 +21,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
     companion object {
         const val TAG = "KhushuRestoreReceiver"
         const val ACTION_RESTORE_KHUSHU = "com.salahpro.app.ACTION_RESTORE_KHUSHU"
+        const val ACTION_ACTIVATE_KHUSHU_DEFERRED = "com.salahpro.app.ACTION_ACTIVATE_KHUSHU_DEFERRED"
         const val PREFS_NAME = "KhushuModePrefs"
         const val KEY_IS_ACTIVE = "khushu_is_active"
         const val KEY_ORIGINAL_FILTER = "khushu_original_filter"
@@ -29,7 +30,137 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
         const val KEY_DURATION_MINUTES = "khushu_duration_minutes"
         const val KEY_MODE = "khushu_mode"
         const val KHUSHU_RESTORE_REQUEST_CODE = 998877 // Constant, deterministic request code (No index collision)
+        const val CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE = 998878 // Dedicated request code for deferred custom alarm Khushu
         const val KHUSHU_NOTIFICATION_ID = 8888 // Fixed notification ID for Khushu status
+
+        const val EXTRA_DEFERRED_KHUSHU_MODE = "extra_deferred_khushu_mode"
+        const val EXTRA_DEFERRED_DURATION_MINUTES = "extra_deferred_duration_minutes"
+        const val EXTRA_DEFERRED_PRAYER_NAME = "extra_deferred_prayer_name"
+        const val EXTRA_DEFERRED_PRAYER_KEY = "extra_deferred_prayer_key"
+        const val EXTRA_DEFERRED_DELAY_MS = "extra_deferred_delay_ms"
+        const val EXTRA_DEFERRED_IS_ESTIMATED = "extra_deferred_is_estimated"
+
+        const val KEY_HAS_PENDING_DEFERRED = "khushu_has_pending_deferred"
+        const val KEY_PENDING_DEFERRED_KEY = "khushu_pending_deferred_key"
+        const val KEY_PENDING_DEFERRED_TRIGGER_AT = "khushu_pending_deferred_trigger_at"
+
+        fun hasPendingDeferredKhushu(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val hasPending = prefs.getBoolean(KEY_HAS_PENDING_DEFERRED, false)
+            if (!hasPending) return false
+
+            // Cross-verify with AlarmManager token using FLAG_NO_CREATE (returns null if cancelled or device rebooted)
+            val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
+                action = ACTION_ACTIVATE_KHUSHU_DEFERRED
+            }
+            val flags = PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE,
+                intent,
+                flags
+            )
+            if (pendingIntent == null) {
+                markDeferredKhushuInactive(context)
+                return false
+            }
+
+            val triggerAt = prefs.getLong(KEY_PENDING_DEFERRED_TRIGGER_AT, 0L)
+            // If triggerAt passed by more than 30 seconds without receiver trigger, treat as expired
+            if (triggerAt > 0L && System.currentTimeMillis() > triggerAt + 30_000L) {
+                markDeferredKhushuInactive(context)
+                return false
+            }
+            return true
+        }
+
+        fun markDeferredKhushuInactive(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean(KEY_HAS_PENDING_DEFERRED, false)
+                .remove(KEY_PENDING_DEFERRED_KEY)
+                .remove(KEY_PENDING_DEFERRED_TRIGGER_AT)
+                .apply()
+        }
+
+        fun scheduleDeferredKhushu(
+            context: Context,
+            delayMs: Long,
+            mode: String,
+            durationMinutes: Int,
+            prayerName: String,
+            prayerKey: String,
+            isEstimated: Boolean = true
+        ): Boolean {
+            return try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
+                val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
+                    action = ACTION_ACTIVATE_KHUSHU_DEFERRED
+                    putExtra(EXTRA_DEFERRED_KHUSHU_MODE, mode)
+                    putExtra(EXTRA_DEFERRED_DURATION_MINUTES, durationMinutes)
+                    putExtra(EXTRA_DEFERRED_PRAYER_NAME, prayerName)
+                    putExtra(EXTRA_DEFERRED_PRAYER_KEY, prayerKey)
+                    putExtra(EXTRA_DEFERRED_DELAY_MS, delayMs)
+                    putExtra(EXTRA_DEFERRED_IS_ESTIMATED, isEstimated)
+                }
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                val pendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE,
+                    intent,
+                    flags
+                ) ?: return false
+
+                val triggerAt = System.currentTimeMillis() + delayMs
+
+                // API 31+ exact alarm permission check
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                    } else {
+                        // setAndAllowWhileIdle fallback when exact alarm permission is absent (note: may experience system Doze batching delays)
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                    }
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                } else {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                }
+
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putBoolean(KEY_HAS_PENDING_DEFERRED, true)
+                    .putString(KEY_PENDING_DEFERRED_KEY, prayerKey)
+                    .putLong(KEY_PENDING_DEFERRED_TRIGGER_AT, triggerAt)
+                    .apply()
+
+                Log.d(TAG, "Scheduled deferred Khushu in ${delayMs}ms with requestCode $CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to schedule deferred Khushu", e)
+                false
+            }
+        }
+
+        fun cancelDeferredKhushu(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
+                action = ACTION_ACTIVATE_KHUSHU_DEFERRED
+            }
+            val flags = PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE,
+                intent,
+                flags
+            )
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+                Log.d(TAG, "Cancelled deferred Khushu alarm")
+            }
+            markDeferredKhushuInactive(context)
+        }
 
         fun isKhushuActive(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -335,8 +466,39 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent?) {
-        Log.d(TAG, "KhushuRestoreReceiver triggered - restoring original device state")
+        val action = intent?.action
+        Log.d(TAG, "KhushuRestoreReceiver triggered: action=$action")
+
+        if (action == ACTION_ACTIVATE_KHUSHU_DEFERRED) {
+            val mode = intent.getStringExtra(EXTRA_DEFERRED_KHUSHU_MODE) ?: "silent"
+            val durationMinutes = intent.getIntExtra(EXTRA_DEFERRED_DURATION_MINUTES, 15)
+            val prayerName = intent.getStringExtra(EXTRA_DEFERRED_PRAYER_NAME) ?: "منبه العبادة"
+            val prayerKey = intent.getStringExtra(EXTRA_DEFERRED_PRAYER_KEY) ?: ""
+
+            markDeferredKhushuInactive(context)
+
+            // Idempotency guard: If Khushu is already active, ignore duplicate without resetting timer
+            if (isKhushuActive(context)) {
+                Log.d(TAG, "Khushu is already active, ignoring duplicate deferred activation")
+                return
+            }
+
+            activateKhushuDirectly(context, mode, durationMinutes, prayerKey)
+            AthanAlarmReceiver.showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+
+            try {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "KHUSHU_ACTIVATED",
+                    "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, source=deferred_custom_alarm"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
+            }
+            return
+        }
+
+        // Default or ACTION_RESTORE_KHUSHU: restore original device state
         restoreOriginalState(context)
     }
 }
-

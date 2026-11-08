@@ -1,5 +1,6 @@
 package com.salahpro.app.plugins
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,7 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
-import android.media.MediaPlayer
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -90,41 +91,170 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             return if (resId != 0) resId else com.salahpro.app.R.raw.reminder
         }
 
-        @Volatile
-        private var lastSoundTriggerTimeMs: Long = 0L
-
-        fun playAlarmAudio(context: Context, soundType: String) {
+        fun getSoundDurationMs(context: Context, soundType: String): Long? {
             val clean = soundType.lowercase().trim()
-            if (clean == "silent" || clean == "vibrate") return
-
-            val now = System.currentTimeMillis()
-            // Strict anti-overlap debouncing: Prevent multiple simultaneous audible alarms within 15 seconds
-            synchronized(this) {
-                if (now - lastSoundTriggerTimeMs < 15000L) {
-                    Log.d(TAG, "Skipping overlapping audible alarm for $soundType — another alarm is already sounding")
-                    return
-                }
-                lastSoundTriggerTimeMs = now
-            }
-
-            try {
-                val resId = getSoundResId(context, soundType)
-                val mp = MediaPlayer.create(context, resId)
-                mp?.apply {
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .setUsage(AudioAttributes.USAGE_ALARM)
-                            .build()
-                    )
-                    isLooping = false
-                    setOnCompletionListener {
-                        try { it.release() } catch (_: Exception) {}
-                    }
-                    start()
+            if (clean == "silent" || clean == "vibrate") return 0L
+            return try {
+                val rawName = getRawName(soundType)
+                val resId = context.resources.getIdentifier(rawName, "raw", context.packageName)
+                if (resId == 0) return null
+                val afd = context.resources.openRawResourceFd(resId) ?: return null
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    durationStr?.toLongOrNull()
+                } finally {
+                    try { retriever.release() } catch (_: Exception) {}
+                    try { afd.close() } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to play custom alarm audio: $soundType", e)
+                Log.w(TAG, "Failed to measure raw audio duration for $soundType", e)
+                null
+            }
+        }
+
+        fun showKhushuActivatedNotification(context: Context, prayerName: String, durationMinutes: Int, prayerKey: String) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    KHUSHU_CHANNEL_ID,
+                    "وضع الخشوع التلقائي",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "إشعارات تفعيل وإلغاء كتم الأصوات أثناء إقامة الصلاة"
+                    setShowBadge(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            val pIntent = if (launchIntent != null) {
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+                PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
+            } else null
+
+            val title = "تم تفعيل وضع الخشوع — صلاة $prayerName 🕌"
+            val body = "تم كتم أصوات وإشعارات الجهاز لمدة $durationMinutes دقيقة لأداء الصلاة بسكينة."
+
+            val restoreIntent = Intent(context, KhushuRestoreReceiver::class.java).apply {
+                action = KhushuRestoreReceiver.ACTION_RESTORE_KHUSHU
+            }
+            val restorePendingIntent = PendingIntent.getBroadcast(
+                context,
+                KhushuRestoreReceiver.KHUSHU_RESTORE_REQUEST_CODE,
+                restoreIntent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+
+            val notifBuilder = NotificationCompat.Builder(context, KHUSHU_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setAutoCancel(true)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إلغاء الكتم واستعادة الصوت", restorePendingIntent)
+
+            if (pIntent != null) {
+                notifBuilder.setContentIntent(pIntent)
+            }
+
+            val notifId = KhushuRestoreReceiver.KHUSHU_NOTIFICATION_ID
+            notificationManager.notify(notifId, notifBuilder.build())
+            Log.d(TAG, "Khushu notification displayed for $prayerName (id=$notifId)")
+        }
+
+        fun showCustomAlarmNotification(
+            context: Context,
+            alarmTitle: String,
+            alarmKey: String,
+            soundType: String,
+            notifyMode: String
+        ): Boolean {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
+
+            val isSilent = soundType == "silent" || notifyMode == "notification"
+            val rawName = getRawName(soundType)
+            val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
+            val cleanSound = soundType.lowercase().trim().replace("-", "_")
+            val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2")
+                    notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2_$cleanSound")
+                    notificationManager.deleteNotificationChannel("athan_custom_silent_channel_v2")
+                } catch (_: Exception) {}
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+
+                val channel = NotificationChannel(
+                    channelId,
+                    if (isSilent) "تنبيهات المنبهات المخصصة (صامت)" else "تنبيهات المنبهات المخصصة ($cleanSound)",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "إشعارات ومنبهات العبادات المخصصة مثل قيام الليل والسنن"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 500, 300, 500)
+                    if (soundUri != null) {
+                        setSound(soundUri, audioAttributes)
+                    } else {
+                        setSound(null, null)
+                    }
+                    setShowBadge(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            val pIntent = if (launchIntent != null) {
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+                PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
+            } else null
+
+            val notifBuilder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("⏰ $alarmTitle")
+                .setContentText("تذكير منبه العبادة: $alarmTitle")
+                .setStyle(NotificationCompat.BigTextStyle().bigText("حان الآن موعد: $alarmTitle"))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true)
+
+            if (soundUri != null) {
+                notifBuilder.setSound(soundUri)
+                notifBuilder.setVibrate(longArrayOf(0, 500, 300, 500))
+            }
+
+            if (pIntent != null) {
+                notifBuilder.setContentIntent(pIntent)
+            }
+
+            val notifId = (alarmKey.hashCode() and 0x7FFFFFFF) % 10000 + 7000
+            return try {
+                notificationManager.notify(notifId, notifBuilder.build())
+                Log.d(TAG, "Custom alarm notification displayed for $alarmTitle (id=$notifId)")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to display custom alarm notification for $alarmTitle", e)
+                false
             }
         }
     }
@@ -158,25 +288,192 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             val durationMinutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
             val khushuMode = intent.getStringExtra(EXTRA_KHUSHU_MODE) ?: "silent"
 
-            val notifPostStart = System.currentTimeMillis()
-            showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode)
-            val notifPostDone = System.currentTimeMillis()
+            val isKhushuActive = KhushuRestoreReceiver.isKhushuActive(context)
+            val hasPendingDeferredA = KhushuRestoreReceiver.hasPendingDeferredKhushu(context)
+            val durationMs = getSoundDurationMs(context, soundType)
 
-            if (autoKhushu) {
-                val khushuTriggerStart = System.currentTimeMillis()
-                val deltaMs = khushuTriggerStart - notifPostDone
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                alarmManager?.canScheduleExactAlarms() ?: false
+            } else true
+
+            val decisionInput = CustomAlarmKhushuDecision.DecisionInput(
+                autoKhushu = autoKhushu,
+                soundType = soundType,
+                notifyMode = notifyMode,
+                measuredDurationMs = durationMs,
+                isKhushuAlreadyActive = isKhushuActive,
+                alarmManagerExactAllowed = canScheduleExact
+            )
+
+            // Overlap resolution with pending deferred Alarm A if present
+            val overlapResolution = CustomAlarmKhushuDecision.resolveOverlap(
+                hasPendingDeferredA = hasPendingDeferredA,
+                incomingAlarmB = decisionInput
+            )
+
+            var cancelledPendingA = false
+            when (overlapResolution) {
+                CustomAlarmKhushuDecision.OverlapResolution.MAINTAIN_PENDING_A -> {
+                    // Maintain pending deferred alarm A
+                }
+                CustomAlarmKhushuDecision.OverlapResolution.PREEMPT_IMMEDIATE_B -> {
+                    KhushuRestoreReceiver.cancelDeferredKhushu(context)
+                    cancelledPendingA = true
+                }
+                CustomAlarmKhushuDecision.OverlapResolution.RESCHEDULE_FOR_B -> {
+                    KhushuRestoreReceiver.cancelDeferredKhushu(context)
+                    cancelledPendingA = true
+                }
+                CustomAlarmKhushuDecision.OverlapResolution.PROCEED_NORMAL -> {
+                    // Normal single alarm flow
+                }
+            }
+
+            // Pure decision logic evaluation
+            val decisionResult = CustomAlarmKhushuDecision.evaluate(decisionInput)
+
+            // Post notification for Custom Alarm
+            try {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "AUDIO_START_REQUESTED",
+                    "prayerKey=$prayerKey, soundType=$soundType, notifyMode=$notifyMode, overlap=${overlapResolution.name}, cancelledPendingA=$cancelledPendingA, khushuDecision=${decisionResult.reason}"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed logging AUDIO_START_REQUESTED", e)
+            }
+
+            val cleanSound = soundType.lowercase().trim().replace("-", "_")
+            val isSilent = soundType == "silent" || notifyMode == "notification"
+            val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
+
+            val notifPosted = showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode)
+            if (notifPosted) {
                 try {
                     AthanAlarmPlugin.logNativeEvent(
                         context,
-                        "custom_alarm_khushu_timing",
-                        "prayerKey=$prayerKey, notifToKhushuDeltaMs=$deltaMs, notifPostDurationMs=${notifPostDone - notifPostStart}"
+                        "NOTIFICATION_POSTED",
+                        "prayerKey=$prayerKey, soundType=$soundType, channelId=$channelId"
                     )
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed logging custom_alarm_khushu_timing", e)
+                    Log.w(TAG, "Failed logging NOTIFICATION_POSTED", e)
                 }
+            } else {
+                try {
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "AUDIO_ERROR",
+                        "prayerKey=$prayerKey, soundType=$soundType, error=notify_failed"
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed logging AUDIO_ERROR", e)
+                }
+
+                // If notification posting failed and autoKhushu was requested, activate immediately as safe fallback
+                if (autoKhushu && !isKhushuActive) {
+                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+                    showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_ACTIVATED",
+                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, reason=fallback_immediate_notify_failed"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
+                    }
+                }
+                logFireEvent(context, prayerName, prayerKey, "custom", "failed", "custom_alarm_notification_failed (sound: $soundType)")
+                return
+            }
+
+            // Execute decision on Khushu activation / deferral
+            if (!decisionResult.shouldScheduleKhushu) {
+                Log.d(TAG, "No khushu scheduled for $prayerKey: ${decisionResult.reason}")
+            } else if (decisionResult.isImmediate) {
+                // Immediate activation (silent, vibrate, or notification-only mode)
                 KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+                try {
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "KHUSHU_ACTIVATED",
+                        "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, immediate=true, reason=${decisionResult.reason}"
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
+                }
+            } else {
+                // Deferred activation: schedule AlarmManager intent after estimated audio delay
+                if (decisionResult.logEvent == "AUDIO_ERROR") {
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "AUDIO_ERROR",
+                            "prayerKey=$prayerKey, soundType=$soundType, error=duration_unavailable_fallback_${decisionResult.delayMs}ms"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging AUDIO_ERROR", e)
+                    }
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_DEFERRED",
+                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, estimated=true, reason=${decisionResult.reason}"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_DEFERRED", e)
+                    }
+                } else {
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_DEFERRED",
+                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, estimated=${decisionResult.isEstimated}, reason=${decisionResult.reason}"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_DEFERRED", e)
+                    }
+                }
+
+                val scheduled = KhushuRestoreReceiver.scheduleDeferredKhushu(
+                    context = context,
+                    delayMs = decisionResult.delayMs,
+                    mode = khushuMode,
+                    durationMinutes = durationMinutes,
+                    prayerName = prayerName,
+                    prayerKey = prayerKey,
+                    isEstimated = decisionResult.isEstimated
+                )
+
+                if (!scheduled) {
+                    // Fallback to immediate activation if scheduling threw an exception or returned null
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "AUDIO_ERROR",
+                            "prayerKey=$prayerKey, error=deferred_scheduling_failed"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging AUDIO_ERROR", e)
+                    }
+
+                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+                    showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_ACTIVATED",
+                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, reason=fallback_immediate"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_ACTIVATED fallback", e)
+                    }
+                }
             }
+
             logFireEvent(context, prayerName, prayerKey, "custom", "played", "custom_alarm_notification (sound: $soundType)")
             return
         }
@@ -253,25 +550,25 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val rawName = getRawName(soundType)
         val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
-        val channelId = if (isSilent) "${PREALERT_CHANNEL_ID}_silent" else "${PREALERT_CHANNEL_ID}_$cleanSound"
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .build()
+        val channelId = if (isSilent) "athan_prealert_silent_channel_v3" else "${PREALERT_CHANNEL_ID}_$cleanSound"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 notificationManager.deleteNotificationChannel("athan_prealert_channel_v2")
                 notificationManager.deleteNotificationChannel("athan_prealert_channel_v2_$cleanSound")
-                notificationManager.deleteNotificationChannel("athan_prealert_channel_v2_silent")
+                notificationManager.deleteNotificationChannel("athan_prealert_silent_channel_v2")
             } catch (_: Exception) {}
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .build()
+
             val channel = NotificationChannel(
                 channelId,
-                if (isSilent) "تنبيهات ما قبل الأذان (صامت)" else "تنبيهات ما قبل الأذان ($cleanSound)",
+                if (isSilent) "تنبيهات اقتراب وقت الصلاة (صامت)" else "تنبيهات اقتراب وقت الصلاة ($cleanSound)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات الاستعداد للصلاة والوضوء قبل حلول وقت الأذان"
+                description = "تنبيهات تذكيرية بقرب دخول وقت الصلاة"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 300, 200, 300)
                 if (soundUri != null) {
@@ -294,8 +591,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
         } else null
 
-        val title = "اقتربت صلاة $prayerName ⏳"
-        val body = "حان وقت الاستعداد لصلاة $prayerName والوضوء، اقترب موعد الأذان."
+        val title = "اقتراب موعد صلاة $prayerName ⏳"
+        val body = "استعد للوضوء وأداء فريضة $prayerName"
 
         val notifBuilder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
@@ -333,25 +630,25 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val rawName = getRawName(soundType)
         val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
-        val channelId = if (isSilent) "${POSTALERT_CHANNEL_ID}_silent" else "${POSTALERT_CHANNEL_ID}_$cleanSound"
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .build()
+        val channelId = if (isSilent) "athan_postalert_silent_channel_v3" else "${POSTALERT_CHANNEL_ID}_$cleanSound"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 notificationManager.deleteNotificationChannel("athan_postalert_channel_v2")
                 notificationManager.deleteNotificationChannel("athan_postalert_channel_v2_$cleanSound")
-                notificationManager.deleteNotificationChannel("athan_postalert_channel_v2_silent")
+                notificationManager.deleteNotificationChannel("athan_postalert_silent_channel_v2")
             } catch (_: Exception) {}
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .build()
+
             val channel = NotificationChannel(
                 channelId,
-                if (isSilent) "تنبيهات ما بعد الصلاة (صامت)" else "تنبيهات ما بعد الصلاة ($cleanSound)",
+                if (isSilent) "تنبيهات بعد دخول الوقت والسنن (صامت)" else "تنبيهات بعد دخول الوقت والسنن ($cleanSound)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "إشعارات التذكير بأذكار ما بعد الصلاة والنوافل والسنن الرواتب"
+                description = "تنبيهات تذكيرية بالسنن البعدية وأذكار الصلاة"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 300, 200, 300)
                 if (soundUri != null) {
@@ -374,8 +671,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
         } else null
 
-        val title = "أذكار وسنن صلاة $prayerName 📿"
-        val body = "تقبل الله طاعتكم! لا تنسَ أذكار ما بعد صلاة $prayerName والسنن الرواتب."
+        val title = "تذكير بسنن وأذكار صلاة $prayerName 📿"
+        val body = "حافظ على السنن الرواتب وأذكار بعد الصلاة لتمام الأجر"
 
         val notifBuilder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
@@ -398,144 +695,6 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifId = (prayerKey.hashCode() and 0x7FFFFFFF) % 10000 + 6000
         notificationManager.notify(notifId, notifBuilder.build())
         Log.d(TAG, "Post-alert notification displayed for $prayerName (id=$notifId)")
-    }
-
-    private fun showKhushuActivatedNotification(context: Context, prayerName: String, durationMinutes: Int, prayerKey: String) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                KHUSHU_CHANNEL_ID,
-                "وضع الخشوع التلقائي",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "إشعارات تفعيل وإلغاء كتم الأصوات أثناء إقامة الصلاة"
-                setShowBadge(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        val pIntent = if (launchIntent != null) {
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-            PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
-        } else null
-
-        val title = "تم تفعيل وضع الخشوع — صلاة $prayerName 🕌"
-        val body = "تم كتم أصوات وإشعارات الجهاز لمدة $durationMinutes دقيقة لأداء الصلاة بسكينة."
-
-        val restoreIntent = Intent(context, KhushuRestoreReceiver::class.java).apply {
-            action = KhushuRestoreReceiver.ACTION_RESTORE_KHUSHU
-        }
-        val restorePendingIntent = PendingIntent.getBroadcast(
-            context,
-            KhushuRestoreReceiver.KHUSHU_RESTORE_REQUEST_CODE,
-            restoreIntent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-        )
-
-        val notifBuilder = NotificationCompat.Builder(context, KHUSHU_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setAutoCancel(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إلغاء الكتم واستعادة الصوت", restorePendingIntent)
-
-        if (pIntent != null) {
-            notifBuilder.setContentIntent(pIntent)
-        }
-
-        val notifId = KhushuRestoreReceiver.KHUSHU_NOTIFICATION_ID
-        notificationManager.notify(notifId, notifBuilder.build())
-        Log.d(TAG, "Khushu notification displayed for $prayerName (id=$notifId)")
-    }
-
-    private fun showCustomAlarmNotification(
-        context: Context,
-        alarmTitle: String,
-        alarmKey: String,
-        soundType: String,
-        notifyMode: String
-    ) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-
-        val isSilent = soundType == "silent" || notifyMode == "notification"
-        val rawName = getRawName(soundType)
-        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
-        val cleanSound = soundType.lowercase().trim().replace("-", "_")
-        val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2")
-                notificationManager.deleteNotificationChannel("athan_custom_alarm_channel_v2_$cleanSound")
-                notificationManager.deleteNotificationChannel("athan_custom_silent_channel_v2")
-            } catch (_: Exception) {}
-            val audioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .build()
-
-            val channel = NotificationChannel(
-                channelId,
-                if (isSilent) "تنبيهات المنبهات المخصصة (صامت)" else "تنبيهات المنبهات المخصصة ($cleanSound)",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "إشعارات ومنبهات العبادات المخصصة مثل قيام الليل والسنن"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 300, 500)
-                if (soundUri != null) {
-                    setSound(soundUri, audioAttributes)
-                } else {
-                    setSound(null, null)
-                }
-                setShowBadge(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        val pIntent = if (launchIntent != null) {
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-            PendingIntent.getActivity(context, (System.currentTimeMillis() % 10000).toInt(), launchIntent, flags)
-        } else null
-
-        val notifBuilder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("⏰ $alarmTitle")
-            .setContentText("تذكير منبه العبادة: $alarmTitle")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("حان الآن موعد: $alarmTitle"))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-
-        if (soundUri != null) {
-            notifBuilder.setSound(soundUri)
-            notifBuilder.setVibrate(longArrayOf(0, 500, 300, 500))
-        }
-
-        if (pIntent != null) {
-            notifBuilder.setContentIntent(pIntent)
-        }
-
-        val notifId = (alarmKey.hashCode() and 0x7FFFFFFF) % 10000 + 7000
-        notificationManager.notify(notifId, notifBuilder.build())
-        Log.d(TAG, "Custom alarm notification displayed for $alarmTitle (id=$notifId)")
     }
 
     private fun updateOngoingPrayerNotificationAtPrayerTime(context: Context, prayerName: String) {
