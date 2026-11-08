@@ -8,9 +8,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -180,15 +184,25 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             alarmTitle: String,
             alarmKey: String,
             soundType: String,
-            notifyMode: String
+            notifyMode: String,
+            isKhushuActive: Boolean = false
         ): Boolean {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return false
 
-            val isSilent = soundType == "silent" || notifyMode == "notification"
+            val policy = AlertDuringKhushuPolicy.evaluate(
+                AlertDuringKhushuPolicy.AlertPolicyInput(
+                    alarmType = "custom",
+                    soundType = soundType,
+                    notifyMode = notifyMode,
+                    isKhushuActive = isKhushuActive
+                )
+            )
+
+            val isSilent = policy.effectiveIsSilent
             val rawName = getRawName(soundType)
-            val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
+            val soundUri = if (policy.soundUriRequired) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
             val cleanSound = soundType.lowercase().trim().replace("-", "_")
-            val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
+            val channelId = policy.channelId
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 try {
@@ -240,8 +254,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
 
             if (soundUri != null) {
                 notifBuilder.setSound(soundUri)
-                notifBuilder.setVibrate(longArrayOf(0, 500, 300, 500))
             }
+            notifBuilder.setVibrate(longArrayOf(0, 500, 300, 500))
 
             if (pIntent != null) {
                 notifBuilder.setContentIntent(pIntent)
@@ -280,6 +294,9 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.w(TAG, "Failed logging fire_received", e)
         }
+
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val currentRingerMode = audioManager?.ringerMode ?: -1
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
@@ -344,11 +361,22 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 Log.w(TAG, "Failed logging AUDIO_START_REQUESTED", e)
             }
 
-            val cleanSound = soundType.lowercase().trim().replace("-", "_")
-            val isSilent = soundType == "silent" || notifyMode == "notification"
-            val channelId = if (isSilent) CUSTOM_ALARM_SILENT_CHANNEL_ID else "${CUSTOM_ALARM_CHANNEL_ID}_$cleanSound"
+            val customPolicy = AlertDuringKhushuPolicy.evaluate(
+                AlertDuringKhushuPolicy.AlertPolicyInput(
+                    alarmType = "custom",
+                    soundType = soundType,
+                    notifyMode = notifyMode,
+                    isKhushuActive = isKhushuActive,
+                    autoKhushu = autoKhushu,
+                    ringerMode = currentRingerMode
+                )
+            )
+            val channelId = customPolicy.channelId
 
-            val notifPosted = showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode)
+            val notifPosted = showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode, isKhushuActive)
+            if (customPolicy.shouldTriggerDirectVibrate) {
+                vibrateDirectlyForKhushu(context)
+            }
             if (notifPosted) {
                 try {
                     AthanAlarmPlugin.logNativeEvent(
@@ -474,7 +502,9 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 }
             }
 
-            logFireEvent(context, prayerName, prayerKey, "custom", "played", "custom_alarm_notification (sound: $soundType)")
+            val customVibDesc = if (customPolicy.shouldTriggerDirectVibrate) ", vibration: direct (khushu + ringer silent)" else ""
+            val customSoundDesc = if (customPolicy.reason == "muted_for_khushu") "sound muted for khushu$customVibDesc" else "sound: $soundType"
+            logFireEvent(context, prayerName, prayerKey, "custom", "played", "custom_alarm_notification ($customSoundDesc)")
             return
         }
 
@@ -489,8 +519,23 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         if (alarmType == "postalert" || prayerKey.contains("postalert") || prayerKey.contains("worship")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
             val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
-            showPostAlertNotification(context, prayerName, prayerKey, soundType, notifyMode)
-            logFireEvent(context, prayerName, prayerKey, "postalert", "played", "postalert_notification (sound: $soundType)")
+            val isKhushuActive = KhushuRestoreReceiver.isKhushuActive(context)
+            val postPolicy = AlertDuringKhushuPolicy.evaluate(
+                AlertDuringKhushuPolicy.AlertPolicyInput(
+                    alarmType = "postalert",
+                    soundType = soundType,
+                    notifyMode = notifyMode,
+                    isKhushuActive = isKhushuActive,
+                    ringerMode = currentRingerMode
+                )
+            )
+            showPostAlertNotification(context, prayerName, prayerKey, soundType, notifyMode, isKhushuActive)
+            if (postPolicy.shouldTriggerDirectVibrate) {
+                vibrateDirectlyForKhushu(context)
+            }
+            val postVibDesc = if (postPolicy.shouldTriggerDirectVibrate) ", vibration: direct (khushu + ringer silent)" else ""
+            val postSoundDesc = if (postPolicy.reason == "muted_for_khushu") "sound muted for khushu$postVibDesc" else "sound: $soundType"
+            logFireEvent(context, prayerName, prayerKey, "postalert", "played", "postalert_notification ($postSoundDesc)")
             return
         }
 
@@ -534,6 +579,39 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start AthanForegroundService", e)
             logFireEvent(context, prayerName, prayerKey, "athan", "skipped", "foreground_service_failed: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun vibrateDirectlyForKhushu(context: Context) {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+            if (vibrator == null || !vibrator.hasVibrator()) {
+                Log.d(TAG, "Device has no vibrator hardware available")
+                return
+            }
+
+            val pattern = longArrayOf(0, 300, 200, 300)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = VibrationEffect.createWaveform(pattern, -1)
+                val attributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                vibrator.vibrate(effect, attributes)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, -1)
+            }
+            Log.d(TAG, "Direct vibration triggered for Khushu under silent ringer")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed triggering direct vibration for Khushu", e)
         }
     }
 
@@ -622,15 +700,25 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         prayerName: String,
         prayerKey: String,
         soundType: String = "reminder",
-        notifyMode: String = "both"
+        notifyMode: String = "both",
+        isKhushuActive: Boolean = false
     ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-        val isSilent = soundType == "silent" || notifyMode == "notification"
+        val policy = AlertDuringKhushuPolicy.evaluate(
+            AlertDuringKhushuPolicy.AlertPolicyInput(
+                alarmType = "postalert",
+                soundType = soundType,
+                notifyMode = notifyMode,
+                isKhushuActive = isKhushuActive
+            )
+        )
+
+        val isSilent = policy.effectiveIsSilent
         val rawName = getRawName(soundType)
-        val soundUri = if (!isSilent) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
+        val soundUri = if (policy.soundUriRequired) Uri.parse("android.resource://${context.packageName}/raw/$rawName") else null
         val cleanSound = soundType.lowercase().trim().replace("-", "_")
-        val channelId = if (isSilent) "athan_postalert_silent_channel_v3" else "${POSTALERT_CHANNEL_ID}_$cleanSound"
+        val channelId = policy.channelId
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
@@ -685,8 +773,8 @@ class AthanAlarmReceiver : BroadcastReceiver() {
 
         if (soundUri != null) {
             notifBuilder.setSound(soundUri)
-            notifBuilder.setVibrate(longArrayOf(0, 300, 200, 300))
         }
+        notifBuilder.setVibrate(longArrayOf(0, 300, 200, 300))
 
         if (pIntent != null) {
             notifBuilder.setContentIntent(pIntent)
