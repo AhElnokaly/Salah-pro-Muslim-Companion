@@ -46,9 +46,13 @@ jobs:
 
       - name: Prepare Android Web Assets & Sync
         run: |
+          export VITE_APP_COMMIT_HASH="${GITHUB_SHA::7}"
           npm run build
           npx cap sync android
           chmod +x android/gradlew
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+
 
       - name: 4. Kotlin Unit Tests (JVM)
         working-directory: android

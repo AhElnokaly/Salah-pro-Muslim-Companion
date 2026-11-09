@@ -4,6 +4,7 @@ import { AppSettings } from '../types';
 import AthanAlarm, { checkExactAlarmPermission, checkNotificationPermission, requestExactAlarmPermission, requestNotificationPermission } from '../services/athanAlarmPlugin';
 import { AlarmReconciliationService, ReconciliationStatus } from '../services/AlarmReconciliationService';
 import { runPrayerCalcGoldenTests } from '../utils/prayerCalc';
+import { APP_VERSION } from '../version';
 
 interface AlarmDiagnosticsModalProps {
   isOpen: boolean;
@@ -78,7 +79,12 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">فحص وتشخيص تنبيهات الصلاة</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold">فحص وتشخيص تنبيهات الصلاة</h3>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-medium">
+                  v{APP_VERSION.version} ({APP_VERSION.commitHash})
+                </span>
+              </div>
               <p className="text-xs text-slate-400">التحقق اللحظي من صلاحيات الجهاز ومواقيت الصلاة</p>
             </div>
           </div>

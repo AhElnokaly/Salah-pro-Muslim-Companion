@@ -49,6 +49,7 @@ import { AlarmConfig, AppSettings } from '../../../types';
 import { KhushuMode } from '../../../services/khushuModePlugin';
 import { StorageFacade } from '../../../domain/storage/StorageFacade';
 import { resolveAthanTimes } from '../../../diagnostics/resolveAthanTimes';
+import { APP_VERSION } from '../../../version';
 
 interface NativeFileInfo {
   path: string;
@@ -429,6 +430,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     const lines = [
       `==================================================`,
       `تقرير تشخيص أذان هِمَّتِي الشامل (Hemmaty Athan Diagnostics)`,
+      `الإصدار: v${APP_VERSION.version} (بناء ${APP_VERSION.buildNumber}) | الـ Commit: ${APP_VERSION.commitHash}`,
       `التاريخ والوقت: ${new Date().toLocaleString('ar-EG')} (${new Date().toISOString()})`,
       `==================================================`,
       ``,
@@ -532,11 +534,14 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   return (
     <div className="bg-slate-50 dark:bg-slate-900/60 rounded-3xl p-5 border border-indigo-500/20 space-y-5 transition-colors duration-300">
       <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
           <h3 className="text-sm font-black text-slate-800 dark:text-white">
             تشخيص ملفات الأذان والنظام الأصلي (Athan Diagnostics)
           </h3>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold font-mono">
+            v{APP_VERSION.version} ({APP_VERSION.commitHash})
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button

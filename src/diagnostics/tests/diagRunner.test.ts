@@ -492,6 +492,51 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
       assert.match(result?.reason || '', /تم تأكيد الفرضية/);
     });
 
+    test('Control Heard + Test NOT Heard but Khushu muted AFTER sound duration (deltaMs = 54,000 ms) => INCONCLUSIVE (R12d-1)', async () => {
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_B_SPEC);
+      const runId = 'test_b_delayed_mute';
+      const id1 = `diag_${runId}_1`;
+      const id2 = `diag_${runId}_2`;
+
+      // Mock native events where Khushu muting occurs 54,000 ms AFTER the test alarm was received
+      const testFireTime = Date.now() - 100000;
+      const khushuMuteTime = testFireTime + 54000; // 54s after alarm, sound (~52.4s) already completed!
+
+      setAthanPluginBridgeForTesting({
+        getNativeEventLog: async () => ({
+          events: [
+            { event: 'fire_received', timestampMs: testFireTime - 180000, details: `prayerKey=${id1} alarmType=custom` },
+            { event: 'fire_received', timestampMs: testFireTime, details: `prayerKey=${id2} alarmType=custom` },
+            { event: 'khushu_result', timestampMs: khushuMuteTime, details: `sourceKey=${id2} appliedRinger=0 appliedFilter=1 hasDndPermission=true` },
+          ],
+          total: 3,
+        }),
+      });
+
+      const state: DiagRunState = {
+        runId,
+        testId: 'b3-khushu-custom-alarm',
+        startedAt: Date.now() - 400000,
+        phase: 'collectable',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {
+          hearing_check: { controlHeard: true, testHeard: false },
+        },
+      };
+      runner.saveState(state);
+
+      const result = await runner.submitUserAction();
+
+      assert.ok(result);
+      assert.equal(result?.verdict, 'INCONCLUSIVE');
+      assert.match(result?.reason || '', /عدم سماع منبه الخشوع لا يمكن عزوه سببياً لوضع الخشوع/);
+    });
+
     test('Control Heard + Test Heard => REFUTED', async () => {
       const runner = new DiagRunner();
       runner.registerSpec(TEST_B_SPEC);

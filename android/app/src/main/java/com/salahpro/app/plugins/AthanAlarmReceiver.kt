@@ -285,18 +285,93 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
         val autoKhushu = intent.getBooleanExtra("autoKhushu", false)
 
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        var currentRingerMode = -1
+
+        var volAlarm = -1
+        var maxAlarm = -1
+        var volNotif = -1
+        var maxNotif = -1
+        var volRing = -1
+        var maxRing = -1
+
+        var interruptionFilter = -1
+        var expectedNotifId = -1
+        var hasDuplicateActive = false
+        var activeTotal = -1
+
+        var targetChannelId = "unknown"
+        var chanImportance = -1
+        var chanSoundUri = "unknown"
+        var canBypassDnd = false
+        var chanExists = false
+
+        try {
+            currentRingerMode = audioManager?.ringerMode ?: -1
+            volAlarm = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: -1
+            maxAlarm = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: -1
+            volNotif = audioManager?.getStreamVolume(AudioManager.STREAM_NOTIFICATION) ?: -1
+            maxNotif = audioManager?.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION) ?: -1
+            volRing = audioManager?.getStreamVolume(AudioManager.STREAM_RING) ?: -1
+            maxRing = audioManager?.getStreamMaxVolume(AudioManager.STREAM_RING) ?: -1
+
+            expectedNotifId = (prayerKey.hashCode() and 0x7FFFFFFF) % 10000 + 7000
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notificationManager != null) {
+                interruptionFilter = notificationManager.currentInterruptionFilter
+                try {
+                    val activeNotifs = notificationManager.activeNotifications ?: emptyArray()
+                    hasDuplicateActive = activeNotifs.any { it.id == expectedNotifId }
+                    activeTotal = activeNotifs.size
+                } catch (ne: Throwable) {
+                    Log.w(TAG, "Failed reading activeNotifications", ne)
+                }
+            }
+
+            val isKhushuActiveEarly = KhushuRestoreReceiver.isKhushuActive(context)
+            val earlyPolicy = AlertDuringKhushuPolicy.evaluate(
+                AlertDuringKhushuPolicy.AlertPolicyInput(
+                    alarmType = if (prayerKey.startsWith("custom_")) "custom" else alarmType,
+                    soundType = soundType,
+                    notifyMode = notifyMode,
+                    isKhushuActive = isKhushuActiveEarly,
+                    autoKhushu = autoKhushu,
+                    ringerMode = currentRingerMode
+                )
+            )
+            targetChannelId = earlyPolicy.channelId
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notificationManager != null) {
+                val ch = notificationManager.getNotificationChannel(targetChannelId)
+                if (ch != null) {
+                    chanExists = true
+                    chanImportance = ch.importance
+                    chanSoundUri = ch.sound?.toString() ?: "silent"
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        canBypassDnd = ch.canBypassDnd()
+                    }
+                } else {
+                    chanExists = false
+                    chanSoundUri = "not_created"
+                }
+            }
+        } catch (te: Throwable) {
+            Log.w(TAG, "Failed gathering telemetry snapshot", te)
+        }
+
         try {
             AthanAlarmPlugin.logNativeEvent(
                 context,
                 "fire_received",
-                "prayerKey=$prayerKey, alarmType=$alarmType, requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, autoKhushu=$autoKhushu"
+                "prayerKey=$prayerKey, alarmType=$alarmType, requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, autoKhushu=$autoKhushu, " +
+                    "volAlarm=$volAlarm/$maxAlarm, volNotif=$volNotif/$maxNotif, volRing=$volRing/$maxRing, ringerMode=$currentRingerMode, " +
+                    "filter=$interruptionFilter, notifId=$expectedNotifId, dupActive=$hasDuplicateActive, activeTotal=$activeTotal, " +
+                    "chanId=$targetChannelId, chanExists=$chanExists, chanImp=$chanImportance, chanSound=$chanSoundUri, bypassDnd=$canBypassDnd"
             )
         } catch (e: Exception) {
             Log.w(TAG, "Failed logging fire_received", e)
         }
-
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        val currentRingerMode = audioManager?.ringerMode ?: -1
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"

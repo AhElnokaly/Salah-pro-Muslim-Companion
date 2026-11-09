@@ -195,9 +195,22 @@ export const TEST_B_SPEC: DiagTestSpec = {
     const controlHeard = hearingCheck?.controlHeard === true;
     const testHeard = hearingCheck?.testHeard === true;
 
+    // Timing constants for causal sound-window analysis (R12d-1)
+    // reminder.mp3 measured audio duration is ~52.4s (52,448 ms).
+    // If Khushu muting occurs after 52,448 ms, the sound had already finished playing,
+    // so inaudibility cannot be causally attributed to Khushu mute.
+    const ESTIMATED_SOUND_DURATION_MS = 52_448;
+    const AUDIO_STARTUP_TOLERANCE_MS = 1_000;
+
     const deltaMs = (testReceivedMs > 0 && correlatedKhushuEvent)
-      ? Math.max(0, correlatedKhushuEvent.timestampMs - testReceivedMs)
+      ? (correlatedKhushuEvent.timestampMs - testReceivedMs)
       : null;
+
+    // Causal relationship:
+    // - deltaMs < ESTIMATED_SOUND_DURATION_MS: Khushu muted system before or during playback.
+    // - deltaMs >= ESTIMATED_SOUND_DURATION_MS: Khushu muted system AFTER sound playback finished.
+    const isMuteDuringPlayback = deltaMs !== null && deltaMs < ESTIMATED_SOUND_DURATION_MS;
+    const isMuteAfterPlayback = deltaMs !== null && deltaMs >= ESTIMATED_SOUND_DURATION_MS;
 
     expectedVsActual.push({
       parameter: 'منبه المقارنة 1 (Control)',
@@ -231,7 +244,16 @@ export const TEST_B_SPEC: DiagTestSpec = {
       status: correlatedKhushuMuteInfo.isMuted ? 'MATCH' : 'UNMEASURED',
     });
 
-    // Apply strict verdict matrix
+    expectedVsActual.push({
+      parameter: 'التزامن السببي بين المنبه وكتم الخشوع (Causal Timing)',
+      expected: `كتم متزامن أو أثناء نافذة الصوت (< ${ESTIMATED_SOUND_DURATION_MS} ms)`,
+      actual: deltaMs !== null
+        ? `${deltaMs} ملي ثانية (${isMuteAfterPlayback ? 'كتم متأخر بعد انتهاء الصوت — ينفي السببية' : isMuteDuringPlayback ? 'كتم متزامن/متداخل أثناء نافذة تشغيل الصوت' : 'غير محدد'})`
+        : 'تعذر حساب فارق التوقيت لغياب أحد الحدثين',
+      status: deltaMs !== null && isMuteDuringPlayback ? 'MATCH' : isMuteAfterPlayback ? 'MISMATCH' : 'UNMEASURED',
+    });
+
+    // Apply strict verdict matrix with causal timing validation (R12d-1)
     let verdict: DiagVerdict = 'INCONCLUSIVE';
     let reason = '';
 
@@ -251,8 +273,15 @@ export const TEST_B_SPEC: DiagTestSpec = {
       verdict = 'INCONCLUSIVE';
       reason = `سجل الخشوع المقترن بالمنبه الثاني لم يحقق حالة الكتم المطلوبة (${correlatedKhushuMuteInfo.description}).`;
     } else if (controlHeard && !testHeard && correlatedKhushuMuteInfo.isMuted) {
-      verdict = 'SUPPORTS_HYPOTHESIS';
-      reason = `تم تأكيد الفرضية (B3): سُمع منبه المقارنة ولم يُسمع منبه الخشوع، مع توثيق كتم الصوت بالنظام المقترن بالمنبه (${correlatedKhushuMuteInfo.description}).`;
+      if (isMuteAfterPlayback) {
+        // Causal failure (R12d-1): Khushu mute happened AFTER audio duration finished!
+        // The lack of audio cannot be caused by Khushu mute.
+        verdict = 'INCONCLUSIVE';
+        reason = `عدم سماع منبه الخشوع لا يمكن عزوه سببياً لوضع الخشوع؛ لأن كتم النظام حدث بعد انتهاء مدة الصوت المقدرة بفارق (${deltaMs} ملي ثانية مقابل مدة الصوت ${ESTIMATED_SOUND_DURATION_MS} ملي ثانية). غياب دليل سببي كافٍ يقتضي فحص تيليمتري قنوات الإشعار ومستويات الصوت.`;
+      } else {
+        verdict = 'SUPPORTS_HYPOTHESIS';
+        reason = `تم تأكيد الفرضية (B3): سُمع منبه المقارنة ولم يُسمع منبه الخشوع، مع توثيق كتم الصوت بالنظام أثناء نافذة تشغيل المنبه (فارق التوقيت: ${deltaMs} ملي ثانية).`;
+      }
     } else if (controlHeard && testHeard && correlatedKhushuMuteInfo.isMuted) {
       verdict = 'REFUTED';
       reason = 'سُمع صوت المنبه المخصص الثاني بوضوح رغم تفعيل وكتم وضع الخشوع المقترن (الفرضية غير صحيحة أو الصوت صدر قبل اكتمال الكتم).';
@@ -267,7 +296,10 @@ export const TEST_B_SPEC: DiagTestSpec = {
 - **السبب:** ${reason}
 - **توقيت البدء:** ${new Date(startedAt).toLocaleString('ar-EG')}
 - **توقيت الجمع:** ${new Date(collectedAt).toLocaleString('ar-EG')}
-- **فارق التوقيت بين وصول المنبه وتفعيل الخشوع (Delta):** ${deltaMs !== null ? `${deltaMs} ملي ثانية` : 'غير متوفر'}
+- **توقيت وصول منبه الاختبار (testReceived):** ${testReceivedMs ? new Date(testReceivedMs).toLocaleTimeString('ar-EG') + ` (${testReceivedMs} ms)` : 'غير متوفر'}
+- **توقيت كتم الخشوع المقترن (khushuMute):** ${correlatedKhushuEvent ? new Date(correlatedKhushuEvent.timestampMs).toLocaleTimeString('ar-EG') + ` (${correlatedKhushuEvent.timestampMs} ms)` : 'غير متوفر'}
+- **فارق التوقيت (Delta):** ${deltaMs !== null ? `${deltaMs} ملي ثانية` : 'غير متوفر'} (مدة الصوت المقدرة: ${ESTIMATED_SOUND_DURATION_MS} ms)
+- **العلاقة السببية:** ${isMuteAfterPlayback ? 'كتم متأخر بعد انتهاء الصوت — ينفي السببية ويستوجب فحص مسار الإشعار ومستويات الصوت' : isMuteDuringPlayback ? 'كتم متزامن/متداخل مع تشغيل الصوت — يدعم الفرضية' : 'غير محدد'}
 
 ## مصفوفة المتوقع مقابل الفعلي
 | البند | المتوقع | الفعلي | النتيجة |
