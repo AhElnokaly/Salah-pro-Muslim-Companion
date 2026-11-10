@@ -76,7 +76,7 @@ class CustomAlarmKhushuDecisionTest {
         assertTrue(res.shouldScheduleKhushu)
         assertFalse(res.isImmediate)
         assertTrue(res.isEstimated)
-        assertEquals(4700L, res.delayMs) // 3200 + 1500
+        assertEquals(7200L, res.delayMs) // 3200 + 4000 (AUDIO_BUFFER_MARGIN_MS)
         assertEquals("KHUSHU_DEFERRED", res.logEvent)
     }
 

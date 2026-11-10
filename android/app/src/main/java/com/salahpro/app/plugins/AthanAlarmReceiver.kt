@@ -475,13 +475,14 @@ class AthanAlarmReceiver : BroadcastReceiver() {
 
                 // If notification posting failed and autoKhushu was requested, activate immediately as safe fallback
                 if (autoKhushu && !isKhushuActive) {
+                    val activatedAtMs = System.currentTimeMillis()
                     KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                     showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
                     try {
                         AthanAlarmPlugin.logNativeEvent(
                             context,
                             "KHUSHU_ACTIVATED",
-                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, reason=fallback_immediate_notify_failed"
+                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, reason=fallback_immediate_notify_failed"
                         )
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
@@ -496,19 +497,25 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 Log.d(TAG, "No khushu scheduled for $prayerKey: ${decisionResult.reason}")
             } else if (decisionResult.isImmediate) {
                 // Immediate activation (silent, vibrate, or notification-only mode)
+                val activatedAtMs = System.currentTimeMillis()
                 KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
                 try {
                     AthanAlarmPlugin.logNativeEvent(
                         context,
                         "KHUSHU_ACTIVATED",
-                        "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, immediate=true, reason=${decisionResult.reason}"
+                        "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, immediate=true, reason=${decisionResult.reason}"
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
                 }
             } else {
                 // Deferred activation: schedule AlarmManager intent after estimated audio delay
+                val scheduledAtMs = System.currentTimeMillis()
+                val fireAtMs = scheduledAtMs + decisionResult.delayMs
+                val soundDurationMs = durationMs ?: 0L
+                val marginMs = CustomAlarmKhushuDecision.AUDIO_BUFFER_MARGIN_MS
+
                 if (decisionResult.logEvent == "AUDIO_ERROR") {
                     try {
                         AthanAlarmPlugin.logNativeEvent(
@@ -523,7 +530,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                         AthanAlarmPlugin.logNativeEvent(
                             context,
                             "KHUSHU_DEFERRED",
-                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, estimated=true, reason=${decisionResult.reason}"
+                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, soundDurationMs=$soundDurationMs, marginMs=$marginMs, scheduledAtMs=$scheduledAtMs, fireAtMs=$fireAtMs, estimated=true, reason=${decisionResult.reason}"
                         )
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed logging KHUSHU_DEFERRED", e)
@@ -533,7 +540,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                         AthanAlarmPlugin.logNativeEvent(
                             context,
                             "KHUSHU_DEFERRED",
-                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, estimated=${decisionResult.isEstimated}, reason=${decisionResult.reason}"
+                            "prayerKey=$prayerKey, delayMs=${decisionResult.delayMs}, soundDurationMs=$soundDurationMs, marginMs=$marginMs, scheduledAtMs=$scheduledAtMs, fireAtMs=$fireAtMs, estimated=${decisionResult.isEstimated}, reason=${decisionResult.reason}"
                         )
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed logging KHUSHU_DEFERRED", e)
@@ -562,6 +569,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                         Log.w(TAG, "Failed logging AUDIO_ERROR", e)
                     }
 
+                    val activatedAtMs = System.currentTimeMillis()
                     KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
                     showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
 
@@ -569,7 +577,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                         AthanAlarmPlugin.logNativeEvent(
                             context,
                             "KHUSHU_ACTIVATED",
-                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, reason=fallback_immediate"
+                            "prayerKey=$prayerKey, mode=$khushuMode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, reason=fallback_immediate"
                         )
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed logging KHUSHU_ACTIVATED fallback", e)
@@ -658,6 +666,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun vibrateDirectlyForKhushu(context: Context) {
+        var vibratorAvailable = false
         try {
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -667,12 +676,21 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             }
 
-            if (vibrator == null || !vibrator.hasVibrator()) {
+            vibratorAvailable = vibrator?.hasVibrator() == true
+            if (!vibratorAvailable || vibrator == null) {
                 Log.d(TAG, "Device has no vibrator hardware available")
+                try {
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "VIBRATE_REQUESTED",
+                        "success=false, hasVibrator=false, error=no_hardware"
+                    )
+                } catch (_: Exception) {}
                 return
             }
 
             val pattern = longArrayOf(0, 300, 200, 300)
+            val path = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) "vibration_effect_alarm" else "legacy_vibrate"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val effect = VibrationEffect.createWaveform(pattern, -1)
                 val attributes = AudioAttributes.Builder()
@@ -684,9 +702,30 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(pattern, -1)
             }
-            Log.d(TAG, "Direct vibration triggered for Khushu under silent ringer")
+
+            // Note: VIBRATE_REQUESTED logs that the Android vibrator API call succeeded without an uncaught exception.
+            // Actual tactile/physical vibration perception must be verified by the user.
+            try {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "VIBRATE_REQUESTED",
+                    "success=true, hasVibrator=true, path=$path, hasPattern=true"
+                )
+            } catch (logErr: Exception) {
+                Log.w(TAG, "Failed logging VIBRATE_REQUESTED", logErr)
+            }
+            Log.d(TAG, "Direct vibration requested for Khushu under silent ringer (path=$path)")
         } catch (e: Exception) {
             Log.w(TAG, "Failed triggering direct vibration for Khushu", e)
+            try {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "VIBRATE_REQUESTED",
+                    "success=false, hasVibrator=$vibratorAvailable, error=${e.javaClass.simpleName}: ${e.message}"
+                )
+            } catch (logErr: Exception) {
+                Log.w(TAG, "Failed logging VIBRATE_REQUESTED failure", logErr)
+            }
         }
     }
 

@@ -32,7 +32,12 @@ export type OverlapResolution =
   | 'RESCHEDULE_FOR_B';
 
 export const FALLBACK_ERROR_DELAY_MS = 5000;
-export const SAFETY_MARGIN_MS = 1500;
+/**
+ * Experimental heuristic: 4000ms buffer assumed to absorb audio focus acquisition
+ * and media pipeline startup latency before Khushu mutes or silences the device.
+ */
+export const AUDIO_BUFFER_MARGIN_MS = 4000;
+export const SAFETY_MARGIN_MS = AUDIO_BUFFER_MARGIN_MS;
 
 export function evaluateCustomAlarmKhushuDecision(input: CustomAlarmKhushuInput): CustomAlarmKhushuResult {
   if (!input.autoKhushu) {
@@ -84,7 +89,7 @@ export function evaluateCustomAlarmKhushuDecision(input: CustomAlarmKhushuInput)
     };
   }
 
-  const delay = duration + SAFETY_MARGIN_MS;
+  const delay = duration + AUDIO_BUFFER_MARGIN_MS;
   return {
     shouldScheduleKhushu: true,
     isImmediate: false,

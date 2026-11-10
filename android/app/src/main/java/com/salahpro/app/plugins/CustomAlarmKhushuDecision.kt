@@ -29,7 +29,12 @@ object CustomAlarmKhushuDecision {
     )
 
     const val FALLBACK_ERROR_DELAY_MS = 5000L
-    const val SAFETY_MARGIN_MS = 1500L
+    /**
+     * Experimental heuristic: 4000ms buffer assumed to absorb audio focus acquisition
+     * and media pipeline startup latency before Khushu mutes or silences the device.
+     */
+    const val AUDIO_BUFFER_MARGIN_MS = 4000L
+    const val SAFETY_MARGIN_MS = AUDIO_BUFFER_MARGIN_MS // backward compatibility alias
 
     fun evaluate(input: DecisionInput): DecisionResult {
         if (!input.autoKhushu) {
@@ -82,7 +87,7 @@ object CustomAlarmKhushuDecision {
             )
         }
 
-        val delay = duration + SAFETY_MARGIN_MS
+        val delay = duration + AUDIO_BUFFER_MARGIN_MS
         return DecisionResult(
             shouldScheduleKhushu = true,
             isImmediate = false,

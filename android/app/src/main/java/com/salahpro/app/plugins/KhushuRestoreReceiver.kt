@@ -483,6 +483,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 return
             }
 
+            val activatedAtMs = System.currentTimeMillis()
             activateKhushuDirectly(context, mode, durationMinutes, prayerKey)
             AthanAlarmReceiver.showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
 
@@ -490,7 +491,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 AthanAlarmPlugin.logNativeEvent(
                     context,
                     "KHUSHU_ACTIVATED",
-                    "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, source=deferred_custom_alarm"
+                    "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, source=deferred_custom_alarm"
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)

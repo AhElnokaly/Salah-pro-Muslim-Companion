@@ -79,7 +79,7 @@ describe('R12a - Custom Alarm Khushu Decision Logic (TS_SPEC_MIRROR)', () => {
   });
 
   describe('3. Audible Sound Path (Estimated Delay with Safety Margin)', () => {
-    it('defers khushu by measured duration + 1500ms safety margin', () => {
+    it('defers khushu by measured duration + 4000ms safety margin', () => {
       const input: CustomAlarmKhushuInput = {
         autoKhushu: true,
         soundType: 'reminder',
@@ -90,7 +90,7 @@ describe('R12a - Custom Alarm Khushu Decision Logic (TS_SPEC_MIRROR)', () => {
       assert.strictEqual(res.shouldScheduleKhushu, true);
       assert.strictEqual(res.isImmediate, false);
       assert.strictEqual(res.isEstimated, true);
-      assert.strictEqual(res.delayMs, 4700); // 3200 + 1500
+      assert.strictEqual(res.delayMs, 7200); // 3200 + 4000 (AUDIO_BUFFER_MARGIN_MS)
       assert.strictEqual(res.logEvent, 'KHUSHU_DEFERRED');
       assert.strictEqual(res.reason, 'awaiting_sound_completion');
     });
@@ -103,7 +103,7 @@ describe('R12a - Custom Alarm Khushu Decision Logic (TS_SPEC_MIRROR)', () => {
         measuredDurationMs: 45000,
       };
       const res = evaluateCustomAlarmKhushuDecision(input);
-      assert.strictEqual(res.delayMs, 46500); // 45000 + 1500, no arbitrary 60s clamp
+      assert.strictEqual(res.delayMs, 49000); // 45000 + 4000, no arbitrary 60s clamp
       assert.strictEqual(res.shouldScheduleKhushu, true);
     });
   });
