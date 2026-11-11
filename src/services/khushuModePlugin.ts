@@ -23,6 +23,7 @@ export interface KhushuModePluginInterface {
     active: boolean;
     mode: KhushuModeType;
     durationMinutes: number;
+    alreadyActive?: boolean;
   }>;
   deactivate(): Promise<{ active: boolean }>;
   getStatus(): Promise<KhushuStatusResult>;

@@ -336,7 +336,10 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 if (isActive) {
                     KhushuRestoreReceiver.restoreOriginalState(context)
                 } else {
-                    KhushuRestoreReceiver.activateKhushuDirectly(context, "silent", 30, sourceKey = "", origin = "widget_ui")
+                    val result = KhushuRestoreReceiver.activateKhushuDirectly(context, "silent", 30, sourceKey = "", origin = "widget_ui")
+                    if (result != KhushuActivationResult.ACTIVATED && result != KhushuActivationResult.ALREADY_ACTIVE) {
+                        Log.e(TAG, "Failed activating Khushu from widget: $result")
+                    }
                 }
                 updateAllWidgets(context)
             }

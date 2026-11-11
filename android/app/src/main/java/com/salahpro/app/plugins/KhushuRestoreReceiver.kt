@@ -175,6 +175,10 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                     restoreOriginalState(context)
                     return false
                 }
+            } else {
+                // If isActive flag is true but activatedAt is 0 or corrupt, heal state to prevent permanent lock
+                restoreOriginalState(context)
+                return false
             }
             return true
         }
@@ -194,8 +198,8 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             return durationMinutes
         }
 
-        fun scheduleRestoreAlarm(context: Context, durationMinutes: Int) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        fun scheduleRestoreAlarmSafely(context: Context, durationMinutes: Int): Boolean {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
             val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
                 action = ACTION_RESTORE_KHUSHU
             }
@@ -205,14 +209,73 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 KHUSHU_RESTORE_REQUEST_CODE,
                 intent,
                 flags
-            )
+            ) ?: return false
+
             val triggerAt = System.currentTimeMillis() + (durationMinutes * 60_000L)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                alarmManager.canScheduleExactAlarms()
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                true
             }
-            Log.d(TAG, "Scheduled restore alarm in $durationMinutes minutes with requestCode $KHUSHU_RESTORE_REQUEST_CODE")
+
+            val decision = KhushuRestoreDecision.decideRestoreMethod(Build.VERSION.SDK_INT, canScheduleExact)
+
+            return try {
+                if (decision.method == RestoreScheduleMethod.EXACT_AND_ALLOW_WHILE_IDLE) {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                        } else {
+                            alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                        }
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_RESTORE_SCHEDULED",
+                            "durationMinutes=$durationMinutes, triggerAtMs=$triggerAt, isExact=true, method=setExactAndAllowWhileIdle"
+                        )
+                        true
+                    } catch (se: SecurityException) {
+                        Log.w(TAG, "Exact alarm threw SecurityException despite capability check; falling back to setAndAllowWhileIdle", se)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                        } else {
+                            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                        }
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_RESTORE_SCHEDULED",
+                            "durationMinutes=$durationMinutes, triggerAtMs=$triggerAt, isExact=false, method=fallback_setAndAllowWhileIdle_after_security_exception"
+                        )
+                        true
+                    }
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                    } else {
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                    }
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "KHUSHU_RESTORE_SCHEDULED",
+                        "durationMinutes=$durationMinutes, triggerAtMs=$triggerAt, isExact=false, method=fallback_setAndAllowWhileIdle"
+                    )
+                    true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Fatal failure scheduling restore alarm", e)
+                try {
+                    AthanAlarmPlugin.logNativeEvent(
+                        context,
+                        "KHUSHU_RESTORE_SCHEDULE_FAILED",
+                        "durationMinutes=$durationMinutes, canScheduleExact=$canScheduleExact, error=${e.javaClass.simpleName}: ${e.message}"
+                    )
+                } catch (_: Exception) {}
+                false
+            }
+        }
+
+        fun scheduleRestoreAlarm(context: Context, durationMinutes: Int) {
+            scheduleRestoreAlarmSafely(context, durationMinutes)
         }
 
         fun cancelRestoreAlarm(context: Context) {
@@ -240,15 +303,15 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             durationMinutes: Int = 30,
             sourceKey: String = "",
             origin: String = "native"
-        ): Boolean {
+        ): KhushuActivationResult {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
-            val initialRinger = audioManager?.ringerMode ?: -1
+            val initialRinger = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
             val initialFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                notificationManager?.currentInterruptionFilter ?: -1
-            } else -1
+                notificationManager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
+            } else NotificationManager.INTERRUPTION_FILTER_ALL
 
             val hasDndPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 notificationManager?.isNotificationPolicyAccessGranted == true
@@ -266,84 +329,93 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 Log.w(TAG, "Failed logging khushu_attempt", e)
             }
 
-            // 1. Snapshot current state if not already active
-            if (!prefs.getBoolean(KEY_IS_ACTIVE, false)) {
-                val currentFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    notificationManager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
-                } else {
-                    NotificationManager.INTERRUPTION_FILTER_ALL
-                }
-                val currentRinger = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
-                prefs.edit()
-                    .putInt(KEY_ORIGINAL_FILTER, currentFilter)
-                    .putInt(KEY_ORIGINAL_RINGER, currentRinger)
-                    .apply()
-            }
-
-            // 2. Apply silence / DND with graceful fallbacks
-            if (mode == "dnd" && hasDndPermission) {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
-                        Log.d(TAG, "DND interruption filter set to NONE")
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error setting DND interruption filter", e)
-                }
-            }
-
             var ringerError: Throwable? = null
-            try {
-                AthanAlarmPlugin.logNativeEvent(
-                    context,
-                    "khushu_audio_state_before",
-                    "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed logging khushu_audio_state_before", e)
-            }
 
-            // Always silence ringer, falling back to Vibrate if Android throws SecurityException
-            try {
-                audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
-                Log.d(TAG, "Ringer mode set to RINGER_MODE_SILENT")
-            } catch (se: SecurityException) {
-                ringerError = se
-                Log.w(TAG, "RINGER_MODE_SILENT requires DND access. Falling back to RINGER_MODE_VIBRATE", se)
-                try {
-                    audioManager?.ringerMode = AudioManager.RINGER_MODE_VIBRATE
-                } catch (ve: Exception) {
-                    Log.e(TAG, "Failed setting ringer mode to vibrate", ve)
+            val coordinator = KhushuActivationCoordinator(
+                isAlreadyActive = { isKhushuActive(context) },
+                scheduleRestore = { duration -> scheduleRestoreAlarmSafely(context, duration) },
+                cancelRestore = { cancelRestoreAlarm(context) },
+                applyMuting = { requestedMode ->
+                    // 1. Snapshot original state before mutating
+                    prefs.edit()
+                        .putInt(KEY_ORIGINAL_FILTER, initialFilter)
+                        .putInt(KEY_ORIGINAL_RINGER, initialRinger)
+                        .commit()
+
+                    // 2. Apply DND if requested
+                    if (requestedMode == "dnd" && hasDndPermission) {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error setting DND interruption filter", e)
+                        }
+                    }
+
+                    // 3. Audio stream logging before
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "khushu_audio_state_before",
+                            "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
+                        )
+                    } catch (_: Exception) {}
+
+                    // 4. Silence ringer with fallback to Vibrate
+                    try {
+                        audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    } catch (se: SecurityException) {
+                        ringerError = se
+                        audioManager?.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                    }
+
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "khushu_audio_state_after",
+                            "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
+                        )
+                    } catch (_: Exception) {}
+                    true
+                },
+                rollbackMuting = {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && hasDndPermission) {
+                            notificationManager?.setInterruptionFilter(initialFilter)
+                        }
+                        audioManager?.ringerMode = initialRinger
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_ROLLBACK_EXECUTED",
+                            "sourceKey=$sourceKey, restoredRinger=$initialRinger, restoredFilter=$initialFilter"
+                        )
+                    } catch (re: Exception) {
+                        Log.e(TAG, "Failed during Khushu rollback", re)
+                    }
+                },
+                persistState = { dur, m ->
+                    val now = System.currentTimeMillis()
+                    prefs.edit()
+                        .putBoolean(KEY_IS_ACTIVE, true)
+                        .putString(KEY_MODE, m)
+                        .putInt(KEY_DURATION_MINUTES, dur)
+                        .putLong(KEY_ACTIVATED_AT, now)
+                        .commit()
+                    SalahWidgetProvider.updateAllWidgets(context)
+                },
+                clearState = {
+                    prefs.edit()
+                        .putBoolean(KEY_IS_ACTIVE, false)
+                        .remove(KEY_MODE)
+                        .remove(KEY_DURATION_MINUTES)
+                        .remove(KEY_ACTIVATED_AT)
+                        .commit()
+                    SalahWidgetProvider.updateAllWidgets(context)
                 }
-            } catch (e: Exception) {
-                ringerError = e
-                Log.e(TAG, "Error setting silent ringer mode", e)
-            }
+            )
 
-            try {
-                AthanAlarmPlugin.logNativeEvent(
-                    context,
-                    "khushu_audio_state_after",
-                    "sourceKey=$sourceKey, " + captureAudioStateLog(audioManager, notificationManager)
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed logging khushu_audio_state_after", e)
-            }
-
-            // 3. Save active state
-            val now = System.currentTimeMillis()
-            prefs.edit()
-                .putBoolean(KEY_IS_ACTIVE, true)
-                .putString(KEY_MODE, mode)
-                .putInt(KEY_DURATION_MINUTES, durationMinutes)
-                .putLong(KEY_ACTIVATED_AT, now)
-                .apply()
-
-            // 4. Schedule Alarm
-            scheduleRestoreAlarm(context, durationMinutes)
-
-            // 5. Update Widgets
-            SalahWidgetProvider.updateAllWidgets(context)
+            val result = coordinator.execute(mode, durationMinutes)
 
             val appliedRinger = audioManager?.ringerMode ?: -1
             val appliedFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -351,24 +423,35 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             } else -1
 
             try {
-                if (ringerError != null) {
-                    AthanAlarmPlugin.logNativeEvent(
-                        context,
-                        "khushu_result",
-                        "mode=$mode, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, fallback_vibrate=true",
-                        ringerError
-                    )
+                if (result == KhushuActivationResult.ACTIVATED) {
+                    if (ringerError != null) {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "khushu_result",
+                            "mode=$mode, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, fallback_vibrate=true",
+                            ringerError
+                        )
+                    } else {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "khushu_result",
+                            "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, status=success"
+                        )
+                    }
+                } else if (result == KhushuActivationResult.ALREADY_ACTIVE) {
+                    Log.d(TAG, "Khushu is already active, returning ALREADY_ACTIVE")
                 } else {
                     AthanAlarmPlugin.logNativeEvent(
                         context,
                         "khushu_result",
-                        "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, hasDndPermission=$hasDndPermission, status=success"
+                        "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, status=failed, result=$result"
                     )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed logging khushu_result", e)
             }
-            return true
+
+            return result
         }
 
         private fun captureAudioStateLog(
@@ -490,17 +573,36 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
 
             val activatedAtMs = System.currentTimeMillis()
-            activateKhushuDirectly(context, mode, durationMinutes, sourceKey = prayerKey, origin = "native_deferred_custom_alarm")
-            AthanAlarmReceiver.showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
-
-            try {
-                AthanAlarmPlugin.logNativeEvent(
-                    context,
-                    "KHUSHU_ACTIVATED",
-                    "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, source=deferred_custom_alarm"
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
+            val result = activateKhushuDirectly(context, mode, durationMinutes, sourceKey = prayerKey, origin = "native_deferred_custom_alarm")
+            when (result) {
+                KhushuActivationResult.ACTIVATED -> {
+                    AthanAlarmReceiver.showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_ACTIVATED",
+                            "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, activatedAtMs=$activatedAtMs, source=deferred_custom_alarm"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_ACTIVATED", e)
+                    }
+                }
+                KhushuActivationResult.ALREADY_ACTIVE -> {
+                    Log.d(TAG, "Deferred Khushu arrived while Khushu is already active, ignoring duplicate")
+                }
+                KhushuActivationResult.SCHEDULE_FAILED,
+                KhushuActivationResult.MUTING_FAILED -> {
+                    Log.w(TAG, "Deferred Khushu activation failed with result $result")
+                    try {
+                        AthanAlarmPlugin.logNativeEvent(
+                            context,
+                            "KHUSHU_ACTIVATION_FAILED",
+                            "prayerKey=$prayerKey, mode=$mode, durationMinutes=$durationMinutes, result=$result, source=deferred_custom_alarm"
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed logging KHUSHU_ACTIVATION_FAILED", e)
+                    }
+                }
             }
             return
         }
