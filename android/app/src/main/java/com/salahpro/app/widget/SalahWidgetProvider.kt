@@ -7,11 +7,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import com.salahpro.app.MainActivity
 import com.salahpro.app.R
 import com.salahpro.app.plugins.AthanAlarmPlugin
+import com.salahpro.app.plugins.KhushuActivationResult
 import com.salahpro.app.plugins.KhushuRestoreReceiver
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -22,6 +24,7 @@ import java.util.Locale
 class SalahWidgetProvider : AppWidgetProvider() {
 
     companion object {
+        private const val TAG = "SalahWidgetProvider"
         const val ACTION_TOGGLE_KHUSHU = "com.salahpro.app.widget.ACTION_TOGGLE_KHUSHU"
         const val ACTION_INCREMENT_TASBEEH = "com.salahpro.app.widget.ACTION_INCREMENT_TASBEEH"
 
