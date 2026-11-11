@@ -476,7 +476,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 // If notification posting failed and autoKhushu was requested, activate immediately as safe fallback
                 if (autoKhushu && !isKhushuActive) {
                     val activatedAtMs = System.currentTimeMillis()
-                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, sourceKey = prayerKey, origin = "native_fallback_notify_failed")
                     showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
                     try {
                         AthanAlarmPlugin.logNativeEvent(
@@ -498,7 +498,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             } else if (decisionResult.isImmediate) {
                 // Immediate activation (silent, vibrate, or notification-only mode)
                 val activatedAtMs = System.currentTimeMillis()
-                KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+                KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, sourceKey = prayerKey, origin = "native_immediate_custom_alarm")
                 showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
                 try {
                     AthanAlarmPlugin.logNativeEvent(
@@ -570,7 +570,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                     }
 
                     val activatedAtMs = System.currentTimeMillis()
-                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+                    KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, sourceKey = prayerKey, origin = "native_fallback_scheduling_failed")
                     showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
 
                     try {
@@ -625,7 +625,7 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         if (alarmType == "khushu" || prayerKey.contains("khushu")) {
             val durationMinutes = intent.getIntExtra(EXTRA_DURATION_MINUTES, 15)
             val khushuMode = intent.getStringExtra(EXTRA_KHUSHU_MODE) ?: "silent"
-            KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, prayerKey)
+            KhushuRestoreReceiver.activateKhushuDirectly(context, khushuMode, durationMinutes, sourceKey = prayerKey, origin = "native_alarm_action")
             showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
             logFireEvent(context, prayerName, prayerKey, "khushu", "played", "khushu_activated (mode: $khushuMode, duration: ${durationMinutes}m)")
             return

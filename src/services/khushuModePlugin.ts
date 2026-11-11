@@ -19,13 +19,18 @@ export interface KhushuStatusResult {
 export interface KhushuModePluginInterface {
   checkPermission(): Promise<{ granted: boolean }>;
   requestPermission(): Promise<{ requested: boolean }>;
-  activate(options: { mode: KhushuModeType; durationMinutes: number }): Promise<{
+  activate(options: { mode: KhushuModeType; durationMinutes: number; origin?: string }): Promise<{
     active: boolean;
     mode: KhushuModeType;
     durationMinutes: number;
   }>;
   deactivate(): Promise<{ active: boolean }>;
   getStatus(): Promise<KhushuStatusResult>;
+}
+
+let khushuPluginBridgeForTesting: Partial<KhushuModePluginInterface> | null = null;
+export function setKhushuPluginBridgeForTesting(bridge: Partial<KhushuModePluginInterface> | null): void {
+  khushuPluginBridgeForTesting = bridge;
 }
 
 // Fallback implementation for web preview environments
@@ -47,18 +52,27 @@ class KhushuModeWebFallback implements KhushuModePluginInterface {
   }
 
   async checkPermission(): Promise<{ granted: boolean }> {
+    if (khushuPluginBridgeForTesting?.checkPermission) {
+      return khushuPluginBridgeForTesting.checkPermission();
+    }
     return { granted: true };
   }
 
   async requestPermission(): Promise<{ requested: boolean }> {
+    if (khushuPluginBridgeForTesting?.requestPermission) {
+      return khushuPluginBridgeForTesting.requestPermission();
+    }
     return { requested: true };
   }
 
-  async activate(options: { mode: KhushuModeType; durationMinutes: number }): Promise<{
+  async activate(options: { mode: KhushuModeType; durationMinutes: number; origin?: string }): Promise<{
     active: boolean;
     mode: KhushuModeType;
     durationMinutes: number;
   }> {
+    if (khushuPluginBridgeForTesting?.activate) {
+      return khushuPluginBridgeForTesting.activate(options);
+    }
     const state = {
       active: true,
       mode: options.mode || 'silent',

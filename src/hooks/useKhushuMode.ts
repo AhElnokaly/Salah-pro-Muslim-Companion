@@ -127,6 +127,7 @@ export function useKhushuMode() {
         const res = await KhushuMode.activate({
           mode,
           durationMinutes: duration,
+          origin: 'manual_ui',
         });
 
         if (res.active) {

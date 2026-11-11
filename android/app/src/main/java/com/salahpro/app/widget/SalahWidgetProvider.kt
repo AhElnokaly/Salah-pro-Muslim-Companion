@@ -336,7 +336,7 @@ class SalahWidgetProvider : AppWidgetProvider() {
                 if (isActive) {
                     KhushuRestoreReceiver.restoreOriginalState(context)
                 } else {
-                    KhushuRestoreReceiver.activateKhushuDirectly(context, "silent", 30)
+                    KhushuRestoreReceiver.activateKhushuDirectly(context, "silent", 30, sourceKey = "", origin = "widget_ui")
                 }
                 updateAllWidgets(context)
             }

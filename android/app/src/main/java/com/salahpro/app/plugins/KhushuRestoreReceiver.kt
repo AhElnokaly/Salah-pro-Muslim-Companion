@@ -234,7 +234,13 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
         }
 
-        fun activateKhushuDirectly(context: Context, mode: String = "silent", durationMinutes: Int = 30, sourceKey: String = ""): Boolean {
+        fun activateKhushuDirectly(
+            context: Context,
+            mode: String = "silent",
+            durationMinutes: Int = 30,
+            sourceKey: String = "",
+            origin: String = "native"
+        ): Boolean {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -254,7 +260,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 AthanAlarmPlugin.logNativeEvent(
                     context,
                     "khushu_attempt",
-                    "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, initialRinger=$initialRinger, initialFilter=$initialFilter, hasDndPermission=$hasDndPermission"
+                    "mode=$mode, durationMinutes=$durationMinutes, sourceKey=$sourceKey, origin=$origin, initialRinger=$initialRinger, initialFilter=$initialFilter, hasDndPermission=$hasDndPermission"
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "Failed logging khushu_attempt", e)
@@ -484,7 +490,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
 
             val activatedAtMs = System.currentTimeMillis()
-            activateKhushuDirectly(context, mode, durationMinutes, prayerKey)
+            activateKhushuDirectly(context, mode, durationMinutes, sourceKey = prayerKey, origin = "native_deferred_custom_alarm")
             AthanAlarmReceiver.showKhushuActivatedNotification(context, prayerName, durationMinutes, prayerKey)
 
             try {

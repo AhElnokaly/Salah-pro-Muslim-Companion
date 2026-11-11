@@ -76,9 +76,10 @@ class KhushuModePlugin : Plugin() {
     fun activate(call: PluginCall) {
         val mode = call.getString("mode") ?: "silent" // "silent" | "dnd"
         val durationMinutes = call.getInt("durationMinutes") ?: 30
+        val origin = call.getString("origin") ?: "manual_ui"
 
         try {
-            KhushuRestoreReceiver.activateKhushuDirectly(context, mode, durationMinutes)
+            KhushuRestoreReceiver.activateKhushuDirectly(context, mode, durationMinutes, sourceKey = "", origin = origin)
 
             val ret = JSObject()
             ret.put("active", true)
