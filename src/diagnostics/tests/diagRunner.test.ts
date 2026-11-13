@@ -8,7 +8,7 @@ import {
   DIAG_RUN_STATE_KEY,
 } from './diagRunner';
 import { TEST_A_SPEC } from './specs/testA_previewSource';
-import { TEST_B_SPEC } from './specs/testB_khushuCustomAlarm';
+import { TEST_B_SPEC, resolveRestoreRowStatus } from './specs/testB_khushuCustomAlarm';
 import { DiagRunState, DiagContext, isDiagAlarmId, DIAG_ALARM_PREFIX } from './diagTypes';
 import { safeSetJSON, safeGetJSON } from '../../utils/storage';
 import { setAthanPluginBridgeForTesting, buildNativePrayerTimeAlarms } from '../../services/athanAlarmPlugin';
@@ -448,100 +448,28 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
   });
 
   describe('6. Test B Verdict Decision Matrix', () => {
-    const mockNativeEventsForRun = (runId: string) => {
+    const mockNativeEventsForRun = (runId: string, deltaMs: number = 56000) => {
       const id1 = `diag_${runId}_1`;
       const id2 = `diag_${runId}_2`;
+      const testFireTime = Date.now() - 50000;
       setAthanPluginBridgeForTesting({
         getNativeEventLog: async () => ({
           events: [
             { event: 'fire_received', timestampMs: Date.now() - 200000, details: `prayerKey=${id1} alarmType=custom` },
-            { event: 'fire_received', timestampMs: Date.now() - 50000, details: `prayerKey=${id2} alarmType=custom` },
-            { event: 'khushu_result', timestampMs: Date.now() - 49000, details: `sourceKey=${id2} appliedRinger=0 appliedFilter=3 hasDndPermission=true` },
+            { event: 'fire_received', timestampMs: testFireTime, details: `prayerKey=${id2} alarmType=custom` },
+            { event: 'khushu_attempt', timestampMs: testFireTime + deltaMs, details: `sourceKey=${id2} origin=native_deferred_custom_alarm` },
+            { event: 'khushu_result', timestampMs: testFireTime + deltaMs, details: `sourceKey=${id2} appliedRinger=0 appliedFilter=3 hasDndPermission=true` },
           ],
-          total: 3,
+          total: 4,
         }),
       });
     };
 
-    test('Control Heard + Test NOT Heard => SUPPORTS_HYPOTHESIS', async () => {
+    test('Control Heard + Test Heard + Muted in deferred window => PASS (R12d-3)', async () => {
       const runner = new DiagRunner();
       runner.registerSpec(TEST_B_SPEC);
-      const runId = 'test_b_supports';
-      mockNativeEventsForRun(runId);
-
-      const state: DiagRunState = {
-        runId,
-        testId: 'b3-khushu-custom-alarm',
-        startedAt: Date.now() - 400000,
-        phase: 'collectable',
-        snapshot: {},
-        createdAlarmIds: [],
-        cacheCleanupPending: [],
-        cleanup: 'none',
-        conflicts: [],
-        userResponses: {
-          hearing_check: { controlHeard: true, testHeard: false },
-        },
-      };
-      runner.saveState(state);
-
-      const result = await runner.submitUserAction();
-
-      assert.ok(result);
-      assert.equal(result?.verdict, 'SUPPORTS_HYPOTHESIS');
-      assert.match(result?.reason || '', /تم تأكيد الفرضية/);
-    });
-
-    test('Control Heard + Test NOT Heard but Khushu muted AFTER sound duration (deltaMs = 54,000 ms) => INCONCLUSIVE (R12d-1)', async () => {
-      const runner = new DiagRunner();
-      runner.registerSpec(TEST_B_SPEC);
-      const runId = 'test_b_delayed_mute';
-      const id1 = `diag_${runId}_1`;
-      const id2 = `diag_${runId}_2`;
-
-      // Mock native events where Khushu muting occurs 54,000 ms AFTER the test alarm was received
-      const testFireTime = Date.now() - 100000;
-      const khushuMuteTime = testFireTime + 54000; // 54s after alarm, sound (~52.4s) already completed!
-
-      setAthanPluginBridgeForTesting({
-        getNativeEventLog: async () => ({
-          events: [
-            { event: 'fire_received', timestampMs: testFireTime - 180000, details: `prayerKey=${id1} alarmType=custom` },
-            { event: 'fire_received', timestampMs: testFireTime, details: `prayerKey=${id2} alarmType=custom` },
-            { event: 'khushu_result', timestampMs: khushuMuteTime, details: `sourceKey=${id2} appliedRinger=0 appliedFilter=1 hasDndPermission=true` },
-          ],
-          total: 3,
-        }),
-      });
-
-      const state: DiagRunState = {
-        runId,
-        testId: 'b3-khushu-custom-alarm',
-        startedAt: Date.now() - 400000,
-        phase: 'collectable',
-        snapshot: {},
-        createdAlarmIds: [],
-        cacheCleanupPending: [],
-        cleanup: 'none',
-        conflicts: [],
-        userResponses: {
-          hearing_check: { controlHeard: true, testHeard: false },
-        },
-      };
-      runner.saveState(state);
-
-      const result = await runner.submitUserAction();
-
-      assert.ok(result);
-      assert.equal(result?.verdict, 'INCONCLUSIVE');
-      assert.match(result?.reason || '', /عدم سماع منبه الخشوع لا يمكن عزوه سببياً لوضع الخشوع/);
-    });
-
-    test('Control Heard + Test Heard => REFUTED', async () => {
-      const runner = new DiagRunner();
-      runner.registerSpec(TEST_B_SPEC);
-      const runId = 'test_b_refuted';
-      mockNativeEventsForRun(runId);
+      const runId = 'test_b_pass';
+      mockNativeEventsForRun(runId, 56000); // 56s delta is within [51958, 58958]
 
       const state: DiagRunState = {
         runId,
@@ -562,8 +490,66 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
       const result = await runner.submitUserAction();
 
       assert.ok(result);
-      assert.equal(result?.verdict, 'REFUTED');
-      assert.match(result?.reason || '', /سُمع صوت المنبه المخصص الثاني بوضوح/);
+      assert.equal(result?.verdict, 'PASS');
+      assert.match(result?.reason || '', /نجح الاختبار بالكامل/);
+    });
+
+    test('Muting occurs during audio playback (deltaMs = 10,000 ms) => FAIL', async () => {
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_B_SPEC);
+      const runId = 'test_b_early_mute';
+      mockNativeEventsForRun(runId, 10000); // 10s delta < 52448 ms
+
+      const state: DiagRunState = {
+        runId,
+        testId: 'b3-khushu-custom-alarm',
+        startedAt: Date.now() - 400000,
+        phase: 'collectable',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {
+          hearing_check: { controlHeard: true, testHeard: false },
+        },
+      };
+      runner.saveState(state);
+
+      const result = await runner.submitUserAction();
+
+      assert.ok(result);
+      assert.equal(result?.verdict, 'FAIL');
+      assert.match(result?.reason || '', /كتم الخشوع تم قبل انتهاء صوت المنبه المخصص/);
+    });
+
+    test('Excessive delay in deferred muting (deltaMs = 60,000 ms) => INCONCLUSIVE', async () => {
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_B_SPEC);
+      const runId = 'test_b_excessive_delay';
+      mockNativeEventsForRun(runId, 60000); // 60s > 56448 ms
+
+      const state: DiagRunState = {
+        runId,
+        testId: 'b3-khushu-custom-alarm',
+        startedAt: Date.now() - 400000,
+        phase: 'collectable',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {
+          hearing_check: { controlHeard: true, testHeard: true },
+        },
+      };
+      runner.saveState(state);
+
+      const result = await runner.submitUserAction();
+
+      assert.ok(result);
+      assert.equal(result?.verdict, 'INCONCLUSIVE');
+      assert.match(result?.reason || '', /كتم الخشوع تم بعد تأخر زائد/);
     });
 
     test('Control NOT Heard + Test NOT Heard => INCONCLUSIVE', async () => {
@@ -661,6 +647,157 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
       assert.ok(result);
       assert.equal(result?.verdict, 'INCONCLUSIVE');
       assert.match(result?.reason || '', /لم يُعثر على حدث تفعيل وضع الخشوع/);
+    });
+  });
+
+  describe('6b. Test B Automatic Restore Row Status Resolution (resolveRestoreRowStatus)', () => {
+    const startedAt = 1000000;
+    const khushuActivatedAt = startedAt + 60000; // activated 1m after start
+    const durationMinutes = 15;
+    const toleranceMarginMs = 60000;
+    const expectedRestoreAtMs = khushuActivatedAt + durationMinutes * 60000 + toleranceMarginMs; // startedAt + 17m
+
+    test('Case 1: source=alarm event exists => MATCH', () => {
+      const result = resolveRestoreRowStatus({
+        events: [
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt + 15 * 60000, details: 'source=alarm, restoredRinger=2' },
+        ],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: expectedRestoreAtMs + 5000,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MATCH');
+      assert.match(result.actualText, /تم تسجيل حدث استعادة المنبه التلقائية بنجاح/);
+    });
+
+    test('Case 2: Non-alarm event only (e.g. source=manual or expired_heal) => MISMATCH', () => {
+      const result = resolveRestoreRowStatus({
+        events: [
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt + 5000, details: 'source=manual, restoredRinger=2' },
+        ],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: expectedRestoreAtMs + 5000,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MISMATCH');
+      assert.match(result.actualText, /لم يُعثر على استعادة بالمنبه \(source=alarm\)/);
+      assert.match(result.actualText, /عُثر على استعادة بمصدر آخر/);
+    });
+
+    test('Case 3: No events and collectedAt is before expected deadline => UNMEASURED', () => {
+      const earlyCollectedAt = expectedRestoreAtMs - 120000; // 2 minutes before deadline
+      const result = resolveRestoreRowStatus({
+        events: [],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: earlyCollectedAt,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'UNMEASURED');
+      assert.match(result.actualText, /لم يُعثر على أي حدث KHUSHU_RESTORED بعد/);
+      assert.match(result.actualText, /يسبق موعد الاستعادة المتوقع/);
+    });
+
+    test('Case 4: No events and collectedAt is after expected deadline => MISMATCH', () => {
+      const lateCollectedAt = expectedRestoreAtMs + 10000; // 10s after deadline
+      const result = resolveRestoreRowStatus({
+        events: [],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: lateCollectedAt,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MISMATCH');
+      assert.match(result.actualText, /لم تُسجل أي استعادة رغم انقضاء مدة الخشوع بالكامل/);
+    });
+
+    test('Case 5: Both manual and alarm events exist => MATCH', () => {
+      const result = resolveRestoreRowStatus({
+        events: [
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt + 5000, details: 'source=manual' },
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt + 15 * 60000, details: 'source=alarm' },
+        ],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: expectedRestoreAtMs + 5000,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MATCH');
+      assert.match(result.actualText, /تم تسجيل حدث استعادة المنبه التلقائية بنجاح/);
+    });
+
+    test('Case 6: source=manual before khushuActivatedAt + source=alarm after => MATCH', () => {
+      const result = resolveRestoreRowStatus({
+        events: [
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt - 10000, details: 'source=manual, restoredRinger=2' },
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt + 15 * 60000, details: 'source=alarm, restoredRinger=2' },
+        ],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: expectedRestoreAtMs + 5000,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MATCH');
+      assert.match(result.actualText, /تم تسجيل حدث استعادة المنبه التلقائية بنجاح/);
+    });
+
+    test('Case 7: source=manual before khushuActivatedAt only, no events after, before deadline => UNMEASURED', () => {
+      const earlyCollectedAt = expectedRestoreAtMs - 120000;
+      const result = resolveRestoreRowStatus({
+        events: [
+          { event: 'KHUSHU_RESTORED', timestampMs: khushuActivatedAt - 10000, details: 'source=manual, restoredRinger=2' },
+        ],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: earlyCollectedAt,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'UNMEASURED');
+      assert.match(result.actualText, /لم يُعثر على أي حدث KHUSHU_RESTORED بعد/);
+    });
+
+    test('Case 8: khushuActivatedAt === null with no events => UNMEASURED (not activated)', () => {
+      const result = resolveRestoreRowStatus({
+        events: [],
+        startedAt,
+        khushuActivatedAt: null,
+        durationMinutes,
+        collectedAt: startedAt + 30 * 60000,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'UNMEASURED');
+      assert.equal(result.actualText, 'لم يتم تفعيل الخشوع للتحقق من استعادته');
+    });
+
+    test('Case 9: exact boundary collectedAt === expectedRestoreAtMs => MISMATCH (due to strict < check)', () => {
+      const result = resolveRestoreRowStatus({
+        events: [],
+        startedAt,
+        khushuActivatedAt,
+        durationMinutes,
+        collectedAt: expectedRestoreAtMs,
+        toleranceMarginMs,
+      });
+
+      assert.equal(result.status, 'MISMATCH');
+      assert.match(result.actualText, /لم تُسجل أي استعادة رغم انقضاء مدة الخشوع بالكامل/);
     });
   });
 

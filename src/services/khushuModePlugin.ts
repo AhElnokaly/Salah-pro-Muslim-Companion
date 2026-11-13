@@ -14,6 +14,10 @@ export interface KhushuStatusResult {
   durationMinutes: number;
   remainingSeconds: number;
   hasPermission: boolean;
+  activatedAt?: number;
+  hasPendingRestoreAlarm?: boolean;
+  ringerMode?: number;
+  interruptionFilter?: number;
 }
 
 export interface KhushuModePluginInterface {
@@ -70,25 +74,39 @@ class KhushuModeWebFallback implements KhushuModePluginInterface {
     active: boolean;
     mode: KhushuModeType;
     durationMinutes: number;
+    alreadyActive?: boolean;
   }> {
     if (khushuPluginBridgeForTesting?.activate) {
       return khushuPluginBridgeForTesting.activate(options);
     }
-    const state = {
+    const state = this.getState();
+    if (state.active && state.activatedAt > 0) {
+      return {
+        active: true,
+        mode: state.mode,
+        durationMinutes: state.durationMinutes,
+        alreadyActive: true,
+      };
+    }
+    const newState = {
       active: true,
       mode: options.mode || 'silent',
       durationMinutes: options.durationMinutes || 30,
       activatedAt: Date.now(),
     };
-    safeSetJSON(this.STORAGE_KEY, state);
+    safeSetJSON(this.STORAGE_KEY, newState);
     return {
       active: true,
-      mode: state.mode,
-      durationMinutes: state.durationMinutes,
+      mode: newState.mode,
+      durationMinutes: newState.durationMinutes,
+      alreadyActive: false,
     };
   }
 
   async deactivate(): Promise<{ active: boolean }> {
+    if (khushuPluginBridgeForTesting?.deactivate) {
+      return khushuPluginBridgeForTesting.deactivate();
+    }
     const state = this.getState();
     state.active = false;
     state.activatedAt = 0;
@@ -97,6 +115,9 @@ class KhushuModeWebFallback implements KhushuModePluginInterface {
   }
 
   async getStatus(): Promise<KhushuStatusResult> {
+    if (khushuPluginBridgeForTesting?.getStatus) {
+      return khushuPluginBridgeForTesting.getStatus();
+    }
     const state = this.getState();
     let remainingSeconds = 0;
     if (state.active && state.activatedAt > 0) {
@@ -110,12 +131,17 @@ class KhushuModeWebFallback implements KhushuModePluginInterface {
       }
     }
 
+    const isActive = state.active && remainingSeconds > 0;
     return {
-      active: state.active && remainingSeconds > 0,
+      active: isActive,
       mode: state.mode,
       durationMinutes: state.durationMinutes,
       remainingSeconds,
       hasPermission: true,
+      activatedAt: state.activatedAt,
+      hasPendingRestoreAlarm: isActive,
+      ringerMode: isActive ? 0 : 2,
+      interruptionFilter: isActive ? (state.mode === 'dnd' ? 3 : 1) : 1,
     };
   }
 }

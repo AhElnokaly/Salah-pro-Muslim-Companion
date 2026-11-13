@@ -43,6 +43,7 @@ import { toArabicNumbers } from '../../../utils/hijri';
 import { diagRunnerInstance } from '../../../diagnostics/tests/diagRunner';
 import { TEST_A_SPEC } from '../../../diagnostics/tests/specs/testA_previewSource';
 import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustomAlarm';
+import { TEST_E_SPEC } from '../../../diagnostics/tests/specs/testE_khushuRestoreSafety';
 import { DiagRunState, DiagResult } from '../../../diagnostics/tests/diagTypes';
 import { safeGetJSON } from '../../../utils/storage';
 import { AlarmConfig, AppSettings } from '../../../types';
@@ -137,6 +138,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   useEffect(() => {
     diagRunnerInstance.registerSpec(TEST_A_SPEC);
     diagRunnerInstance.registerSpec(TEST_B_SPEC);
+    diagRunnerInstance.registerSpec(TEST_E_SPEC);
     diagRunnerInstance.checkAndResumeOnAppStartup();
 
     const unsubscribe = diagRunnerInstance.subscribe((st) => {
@@ -714,6 +716,29 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               >
                 <Clock className="w-3.5 h-3.5" />
                 <span>تشغيل Test B (فحص الخشوع - ~24 دقيقة)</span>
+              </button>
+            </div>
+
+            {/* Test E Card */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Test E: فحص سلامة المعاملات والاستعادة (B1 Safety)</span>
+                </span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">فوري (Instant ~5 ثوانٍ)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                يتحقق من: 1) خط الأساس (NORMAL)، 2) الجدولة أولاً قبل الكتم، 3) حارس التكرار وعدم تمديد المؤقت، 4) استعادة رنين الهاتف وفلتر الإشعارات بالكامل، 5) توثيق أحداث التيليمتري (KHUSHU_RESTORE_SCHEDULED و KHUSHU_RESTORED).
+              </p>
+              <button
+                type="button"
+                onClick={() => handleStartTest('test-e-khushu-restore-safety')}
+                disabled={isActionBusy || (!!runnerState && runnerState.phase !== 'reported' && runnerState.phase !== 'cancelled')}
+                className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>تشغيل Test E (فحص أمان الاستعادة والمعاملات)</span>
               </button>
             </div>
           </div>

@@ -146,12 +146,24 @@ class KhushuModePlugin : Plugin() {
             }
         }
 
+        val ringerMode = audioManager?.ringerMode ?: -1
+        val interruptionFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager?.currentInterruptionFilter ?: -1
+        } else {
+            -1
+        }
+        val hasPendingRestoreAlarm = KhushuRestoreReceiver.hasPendingRestoreAlarm(context)
+
         val ret = JSObject()
         ret.put("active", isActive && remainingSeconds > 0)
         ret.put("mode", mode)
         ret.put("durationMinutes", durationMinutes)
         ret.put("remainingSeconds", remainingSeconds)
         ret.put("hasPermission", hasPermission)
+        ret.put("activatedAt", activatedAt)
+        ret.put("hasPendingRestoreAlarm", hasPendingRestoreAlarm)
+        ret.put("ringerMode", ringerMode)
+        ret.put("interruptionFilter", interruptionFilter)
         call.resolve(ret)
     }
 }

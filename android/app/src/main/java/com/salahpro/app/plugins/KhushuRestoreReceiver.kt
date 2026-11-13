@@ -172,12 +172,12 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 val elapsedMs = System.currentTimeMillis() - activatedAt
                 val totalMs = durationMinutes * 60_000L
                 if (elapsedMs >= totalMs) {
-                    restoreOriginalState(context)
+                    restoreOriginalState(context, source = "expired_heal")
                     return false
                 }
             } else {
                 // If isActive flag is true but activatedAt is 0 or corrupt, heal state to prevent permanent lock
-                restoreOriginalState(context)
+                restoreOriginalState(context, source = "expired_heal")
                 return false
             }
             return true
@@ -200,16 +200,8 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
 
         fun scheduleRestoreAlarmSafely(context: Context, durationMinutes: Int): Boolean {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
-            val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
-                action = ACTION_RESTORE_KHUSHU
-            }
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                KHUSHU_RESTORE_REQUEST_CODE,
-                intent,
-                flags
-            ) ?: return false
+            val pendingIntent = buildRestorePendingIntent(context, flags) ?: return false
 
             val triggerAt = System.currentTimeMillis() + (durationMinutes * 60_000L)
             val canScheduleExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -278,18 +270,28 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             scheduleRestoreAlarmSafely(context, durationMinutes)
         }
 
-        fun cancelRestoreAlarm(context: Context) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        private fun buildRestorePendingIntent(context: Context, flags: Int): PendingIntent? {
             val intent = Intent(context, KhushuRestoreReceiver::class.java).apply {
                 action = ACTION_RESTORE_KHUSHU
             }
-            val flags = PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-            val pendingIntent = PendingIntent.getBroadcast(
+            return PendingIntent.getBroadcast(
                 context,
                 KHUSHU_RESTORE_REQUEST_CODE,
                 intent,
                 flags
             )
+        }
+
+        fun hasPendingRestoreAlarm(context: Context): Boolean {
+            val flags = PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            val pendingIntent = buildRestorePendingIntent(context, flags)
+            return pendingIntent != null
+        }
+
+        fun cancelRestoreAlarm(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val flags = PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            val pendingIntent = buildRestorePendingIntent(context, flags)
             if (pendingIntent != null) {
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
@@ -493,7 +495,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             }
         }
 
-        fun restoreOriginalState(context: Context) {
+        fun restoreOriginalState(context: Context, source: String = "manual") {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val isActive = prefs.getBoolean(KEY_IS_ACTIVE, false)
             if (!isActive) {
@@ -541,7 +543,18 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
             cancelRestoreAlarm(context)
             Log.d(TAG, "Khushu mode successfully deactivated and marked inactive")
 
-            // 4. Dismiss Khushu status notification
+            // 4. Log KHUSHU_RESTORED event with source and restored values
+            try {
+                AthanAlarmPlugin.logNativeEvent(
+                    context,
+                    "KHUSHU_RESTORED",
+                    "source=$source, restoredRinger=$originalRinger, restoredFilter=$originalFilter, timestampMs=${System.currentTimeMillis()}"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed logging KHUSHU_RESTORED", e)
+            }
+
+            // 5. Dismiss Khushu status notification
             try {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 notificationManager?.cancel(KHUSHU_NOTIFICATION_ID)
@@ -549,7 +562,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                 Log.w(TAG, "Failed cancelling Khushu notification", e)
             }
 
-            // 5. Update Widgets
+            // 6. Update Widgets
             SalahWidgetProvider.updateAllWidgets(context)
         }
     }
@@ -608,6 +621,6 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
         }
 
         // Default or ACTION_RESTORE_KHUSHU: restore original device state
-        restoreOriginalState(context)
+        restoreOriginalState(context, source = "alarm")
     }
 }

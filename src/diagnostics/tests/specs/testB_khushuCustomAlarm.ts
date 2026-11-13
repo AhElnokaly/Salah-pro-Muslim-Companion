@@ -4,7 +4,7 @@
  */
 
 import { safeGetJSON, safeSetJSON } from '../../../utils/storage';
-import { getNativeEventLog } from '../../../services/athanAlarmPlugin';
+import { getNativeEventLog, NativeLogEvent } from '../../../services/athanAlarmPlugin';
 import { AlarmConfig } from '../../../types';
 import {
   DiagTestSpec,
@@ -17,6 +17,83 @@ import {
   isDiagAlarmId,
 } from '../diagTypes';
 import { evaluateMuteStateFromDetails } from '../diagRunner';
+
+export interface ResolveRestoreRowParams {
+  events: Array<{ event: string; timestampMs: number; details?: string }>;
+  startedAt: number;
+  khushuActivatedAt: number | null;
+  durationMinutes: number;
+  collectedAt: number;
+  toleranceMarginMs?: number;
+}
+
+export interface RestoreRowResolution {
+  status: 'MATCH' | 'MISMATCH' | 'UNMEASURED';
+  actualText: string;
+}
+
+export function resolveRestoreRowStatus(params: ResolveRestoreRowParams): RestoreRowResolution {
+  const {
+    events,
+    startedAt,
+    khushuActivatedAt,
+    durationMinutes,
+    collectedAt,
+    toleranceMarginMs = 60_000,
+  } = params;
+
+  const filterSinceMs = (khushuActivatedAt !== null && khushuActivatedAt > 0)
+    ? khushuActivatedAt
+    : startedAt;
+
+  const alarmRestoreEvent = events.find(
+    (evt) => evt.event === 'KHUSHU_RESTORED' &&
+             evt.timestampMs >= filterSinceMs &&
+             (evt.details || '').includes('source=alarm')
+  );
+  const otherRestoreEvents = events.filter(
+    (evt) => evt.event === 'KHUSHU_RESTORED' &&
+             evt.timestampMs >= filterSinceMs &&
+             !(evt.details || '').includes('source=alarm')
+  );
+
+  // Case 1 & 5: If an alarm restore event is present, it's a MATCH (even if manual events also exist)
+  if (alarmRestoreEvent) {
+    return {
+      status: 'MATCH',
+      actualText: `تم تسجيل حدث استعادة المنبه التلقائية بنجاح (${alarmRestoreEvent.details || ''})`,
+    };
+  }
+
+  // Case 2: Only non-alarm restore events found (manual / expired_heal)
+  if (otherRestoreEvents.length > 0) {
+    const otherDetails = otherRestoreEvents.map((e) => e.details).join(' | ');
+    return {
+      status: 'MISMATCH',
+      actualText: `لم يُعثر على استعادة بالمنبه (source=alarm). عُثر على استعادة بمصدر آخر: ${otherDetails}`,
+    };
+  }
+
+  // Case 3 & 4: No restore events at all -> check against expected restore deadline
+  if (khushuActivatedAt !== null && khushuActivatedAt > 0) {
+    const expectedRestoreAtMs = khushuActivatedAt + (durationMinutes * 60_000) + toleranceMarginMs;
+    if (collectedAt < expectedRestoreAtMs) {
+      return {
+        status: 'UNMEASURED',
+        actualText: 'لم يُعثر على أي حدث KHUSHU_RESTORED بعد (طبيعي: وقت الفحص الحالي يسبق موعد الاستعادة المتوقع)',
+      };
+    }
+    return {
+      status: 'MISMATCH',
+      actualText: 'لم تُسجل أي استعادة رغم انقضاء مدة الخشوع بالكامل وهامش الأمان، قد يكون الهاتف لا يزال في وضع الصامت',
+    };
+  }
+
+  return {
+    status: 'UNMEASURED',
+    actualText: 'لم يتم تفعيل الخشوع للتحقق من استعادته',
+  };
+}
 
 export const TEST_B_SPEC: DiagTestSpec = {
   id: 'b3-khushu-custom-alarm',
@@ -137,7 +214,7 @@ export const TEST_B_SPEC: DiagTestSpec = {
     const id2 = `${DIAG_ALARM_PREFIX}${ctx.runId}_2`;
 
     // Fetch native event log
-    const nativeLogs = await getNativeEventLog(100).catch(() => []);
+    const nativeLogs: NativeLogEvent[] = await getNativeEventLog(100).catch(() => []);
     const evidenceList: DiagEvidenceItem[] = [];
     const expectedVsActual: DiagExpectedVsActualItem[] = [];
 
@@ -195,22 +272,54 @@ export const TEST_B_SPEC: DiagTestSpec = {
     const controlHeard = hearingCheck?.controlHeard === true;
     const testHeard = hearingCheck?.testHeard === true;
 
-    // Timing constants for causal sound-window analysis (R12d-1)
-    // reminder.mp3 measured audio duration is ~52.4s (52,448 ms).
-    // If Khushu muting occurs after 52,448 ms, the sound had already finished playing,
-    // so inaudibility cannot be causally attributed to Khushu mute.
-    const ESTIMATED_SOUND_DURATION_MS = 52_448;
-    const AUDIO_STARTUP_TOLERANCE_MS = 1_000;
+    // Timing constants for causal sound-window analysis (R12d-1 & R12d-3)
+    // reminder.mp3 exact decoded PCM duration is ~51.958s (51,958 ms).
+    // In R12d-3 deferred Khushu architecture, Khushu muting is scheduled at:
+    // triggerAt = scheduledAtMs + delayMs, where delayMs = soundDurationMs (51,958 ms) + AUDIO_BUFFER_MARGIN_MS (4,000 ms) = 55,958 ms.
+    // Minimum allowable mute time is soundDurationMs (51,958 ms) — any mute before this interrupts audio (FAIL).
+    // Execution ceiling includes AUDIO_BUFFER_MARGIN_MS (4,000 ms) + 3,000 ms tolerance for AlarmManager wake-up/Doze exit:
+    // Window = [51,958 ms, 58,958 ms].
+    const SOUND_DURATION_MS = 51_958;
+    const AUDIO_BUFFER_MARGIN_MS = 4_000;
+    const ALARM_WAKEUP_TOLERANCE_MS = 3_000;
+    const SCHEDULED_TRIGGER_DELAY_MS = SOUND_DURATION_MS + AUDIO_BUFFER_MARGIN_MS; // 55,958 ms
+    const MAX_ALLOWED_MUTE_DELAY_MS = SCHEDULED_TRIGGER_DELAY_MS + ALARM_WAKEUP_TOLERANCE_MS; // 58,958 ms
 
     const deltaMs = (testReceivedMs > 0 && correlatedKhushuEvent)
       ? (correlatedKhushuEvent.timestampMs - testReceivedMs)
       : null;
 
-    // Causal relationship:
-    // - deltaMs < ESTIMATED_SOUND_DURATION_MS: Khushu muted system before or during playback.
-    // - deltaMs >= ESTIMATED_SOUND_DURATION_MS: Khushu muted system AFTER sound playback finished.
-    const isMuteDuringPlayback = deltaMs !== null && deltaMs < ESTIMATED_SOUND_DURATION_MS;
-    const isMuteAfterPlayback = deltaMs !== null && deltaMs >= ESTIMATED_SOUND_DURATION_MS;
+    // Deferred Khushu Timing Verification:
+    // - deltaMs < SOUND_DURATION_MS: Pre-mature mute during audio playback (FAIL).
+    // - deltaMs between [51,958, 58,958]: Expected deferred mute safely after audio finishes (PASS).
+    // - deltaMs > MAX_ALLOWED_MUTE_DELAY_MS: Excessive delay or system throttling (INCONCLUSIVE).
+    const isMuteDuringPlayback = deltaMs !== null && deltaMs < SOUND_DURATION_MS;
+    const isMuteInDeferredWindow = deltaMs !== null && deltaMs >= SOUND_DURATION_MS && deltaMs <= MAX_ALLOWED_MUTE_DELAY_MS;
+    const isMuteExcessivelyDelayed = deltaMs !== null && deltaMs > MAX_ALLOWED_MUTE_DELAY_MS;
+
+    // Analyze khushu_attempt events for origin and duplicate attempts (Item A verification)
+    let khushuAttemptOrigin = 'غير متوفر';
+    let khushuAttemptsForTestAlarm = 0;
+    let emptySourceKeyAttempts = 0;
+
+    for (const evt of nativeLogs) {
+      if (evt.event === 'khushu_attempt') {
+        const d = evt.details || '';
+        if (d.includes(`sourceKey=${id2}`) || d.includes(id2)) {
+          khushuAttemptsForTestAlarm++;
+          const originMatch = d.match(/origin=([^, ]+)/);
+          if (originMatch) {
+            khushuAttemptOrigin = originMatch[1];
+          }
+        }
+        if (d.includes('sourceKey=,') || d.includes('sourceKey= ') || d.includes('sourceKey=""') || /sourceKey=\s*(,|$)/.test(d)) {
+          // If within the run time window
+          if (evt.timestampMs >= startedAt && evt.timestampMs <= collectedAt) {
+            emptySourceKeyAttempts++;
+          }
+        }
+      }
+    }
 
     expectedVsActual.push({
       parameter: 'منبه المقارنة 1 (Control)',
@@ -238,22 +347,57 @@ export const TEST_B_SPEC: DiagTestSpec = {
     });
 
     expectedVsActual.push({
+      parameter: 'مصدر تفعيل الخشوع الأصلي (Item A Origin)',
+      expected: 'native_deferred_custom_alarm',
+      actual: khushuAttemptOrigin,
+      status: khushuAttemptOrigin === 'native_deferred_custom_alarm' ? 'MATCH' : 'MISMATCH',
+    });
+
+    expectedVsActual.push({
+      parameter: 'عدد محاولات تفعيل الخشوع للمنبه (Idempotency)',
+      expected: '1 محاولة فقط (بدون تكرار مزدوج من الواجهة)',
+      actual: `${khushuAttemptsForTestAlarm} محاولة (محاولات فارغة المصدر في النافذة: ${emptySourceKeyAttempts})`,
+      status: khushuAttemptsForTestAlarm === 1 && emptySourceKeyAttempts === 0 ? 'MATCH' : 'MISMATCH',
+    });
+
+    expectedVsActual.push({
       parameter: 'حالة كتم النظام (Mute State Telemetry)',
       expected: 'ringerMode في {0, 1} أو interruptionFilter في {3, 4}',
       actual: correlatedKhushuMuteInfo.description,
       status: correlatedKhushuMuteInfo.isMuted ? 'MATCH' : 'UNMEASURED',
     });
 
-    expectedVsActual.push({
-      parameter: 'التزامن السببي بين المنبه وكتم الخشوع (Causal Timing)',
-      expected: `كتم متزامن أو أثناء نافذة الصوت (< ${ESTIMATED_SOUND_DURATION_MS} ms)`,
-      actual: deltaMs !== null
-        ? `${deltaMs} ملي ثانية (${isMuteAfterPlayback ? 'كتم متأخر بعد انتهاء الصوت — ينفي السببية' : isMuteDuringPlayback ? 'كتم متزامن/متداخل أثناء نافذة تشغيل الصوت' : 'غير محدد'})`
-        : 'تعذر حساب فارق التوقيت لغياب أحد الحدثين',
-      status: deltaMs !== null && isMuteDuringPlayback ? 'MATCH' : isMuteAfterPlayback ? 'MISMATCH' : 'UNMEASURED',
+    // Resolve automatic Khushu restoration row status using pure function
+    const khushuActivatedAt = correlatedKhushuEvent
+      ? correlatedKhushuEvent.timestampMs
+      : (testReceivedMs > 0 ? testReceivedMs + SCHEDULED_TRIGGER_DELAY_MS : null);
+
+    const restoreResolution = resolveRestoreRowStatus({
+      events: nativeLogs,
+      startedAt,
+      khushuActivatedAt,
+      durationMinutes: 15,
+      collectedAt,
+      toleranceMarginMs: 60_000,
     });
 
-    // Apply strict verdict matrix with causal timing validation (R12d-1)
+    expectedVsActual.push({
+      parameter: 'التزامن الزمني للخشوع المؤجل (Deferred Timing Window)',
+      expected: `كتم مؤجل بعد انتهاء الصوت [${SOUND_DURATION_MS} - ${MAX_ALLOWED_MUTE_DELAY_MS} ms] (موعد الجدولة: ${SCHEDULED_TRIGGER_DELAY_MS} ms)`,
+      actual: deltaMs !== null
+        ? `${deltaMs} ملي ثانية (${isMuteInDeferredWindow ? 'كتم مؤجل سليم بعد انتهاء الصوت تماماً' : isMuteDuringPlayback ? 'كتم مبكر أثناء تشغيل الصوت (خطأ)' : 'تأخر زائد في تنفيذ المنبه المؤجل'})`
+        : 'تعذر حساب فارق التوقيت لغياب أحد الحدثين',
+      status: deltaMs !== null && isMuteInDeferredWindow ? 'MATCH' : 'MISMATCH',
+    });
+
+    expectedVsActual.push({
+      parameter: 'تسجيل الاستعادة التلقائية بالمنبه (KHUSHU_RESTORED)',
+      expected: 'تسجيل حدث KHUSHU_RESTORED بـ source=alarm (عند اكتمال مدة الخشوع 15 دقيقة)',
+      actual: restoreResolution.actualText,
+      status: restoreResolution.status,
+    });
+
+    // Apply strict verdict matrix for deferred architecture
     let verdict: DiagVerdict = 'INCONCLUSIVE';
     let reason = '';
 
@@ -272,25 +416,21 @@ export const TEST_B_SPEC: DiagTestSpec = {
     } else if (!correlatedKhushuMuteInfo.isMuted) {
       verdict = 'INCONCLUSIVE';
       reason = `سجل الخشوع المقترن بالمنبه الثاني لم يحقق حالة الكتم المطلوبة (${correlatedKhushuMuteInfo.description}).`;
-    } else if (controlHeard && !testHeard && correlatedKhushuMuteInfo.isMuted) {
-      if (isMuteAfterPlayback) {
-        // Causal failure (R12d-1): Khushu mute happened AFTER audio duration finished!
-        // The lack of audio cannot be caused by Khushu mute.
-        verdict = 'INCONCLUSIVE';
-        reason = `عدم سماع منبه الخشوع لا يمكن عزوه سببياً لوضع الخشوع؛ لأن كتم النظام حدث بعد انتهاء مدة الصوت المقدرة بفارق (${deltaMs} ملي ثانية مقابل مدة الصوت ${ESTIMATED_SOUND_DURATION_MS} ملي ثانية). غياب دليل سببي كافٍ يقتضي فحص تيليمتري قنوات الإشعار ومستويات الصوت.`;
-      } else {
-        verdict = 'SUPPORTS_HYPOTHESIS';
-        reason = `تم تأكيد الفرضية (B3): سُمع منبه المقارنة ولم يُسمع منبه الخشوع، مع توثيق كتم الصوت بالنظام أثناء نافذة تشغيل المنبه (فارق التوقيت: ${deltaMs} ملي ثانية).`;
-      }
-    } else if (controlHeard && testHeard && correlatedKhushuMuteInfo.isMuted) {
-      verdict = 'REFUTED';
-      reason = 'سُمع صوت المنبه المخصص الثاني بوضوح رغم تفعيل وكتم وضع الخشوع المقترن (الفرضية غير صحيحة أو الصوت صدر قبل اكتمال الكتم).';
+    } else if (isMuteDuringPlayback) {
+      verdict = 'FAIL';
+      reason = `فشل التحقق: كتم الخشوع تم قبل انتهاء صوت المنبه المخصص (فارق التوقيت ${deltaMs}ms أقل من مدة الصوت ${SOUND_DURATION_MS}ms).`;
+    } else if (controlHeard && testHeard && correlatedKhushuMuteInfo.isMuted && isMuteInDeferredWindow && khushuAttemptsForTestAlarm === 1) {
+      verdict = 'PASS';
+      reason = `نجح الاختبار بالكامل (PASS): سُمع صوت المنبه المخصص بالكامل حتى نهايته، ثم تم كتم النظام بنجاح بعد انتهاء الصوت في النافذة المؤجلة المحددة (${deltaMs}ms) بمحاولة تفعيل أصلية واحدة (${khushuAttemptOrigin}).`;
+    } else if (isMuteExcessivelyDelayed) {
+      verdict = 'INCONCLUSIVE';
+      reason = `كتم الخشوع تم بعد تأخر زائد عن النافذة المحددة (${deltaMs}ms مقابل الحد الأقصى المتوقع ${MAX_ALLOWED_MUTE_DELAY_MS}ms).`;
     } else {
       verdict = 'INCONCLUSIVE';
-      reason = 'الأدلة غير كافية لقطع الشك باليقين بشأن كتم الصوت.';
+      reason = 'النتائج غير حاسمة؛ يرجى مراجعة مصفوفة المتوقع مقابل الفعلي وسجل الأحداث.';
     }
 
-    const markdownReport = `# تقرير تشخيص Test B: تأثير وضع الخشوع على المنبه المخصص (B3)
+    const markdownReport = `# تقرير تشخيص Test B: فحص الخشوع المؤجل للمنبه المخصص (Deferred Architecture)
 - **المعرّف:** ${ctx.runId}
 - **النتيجة النهائية:** **${verdict}**
 - **السبب:** ${reason}
@@ -298,8 +438,8 @@ export const TEST_B_SPEC: DiagTestSpec = {
 - **توقيت الجمع:** ${new Date(collectedAt).toLocaleString('ar-EG')}
 - **توقيت وصول منبه الاختبار (testReceived):** ${testReceivedMs ? new Date(testReceivedMs).toLocaleTimeString('ar-EG') + ` (${testReceivedMs} ms)` : 'غير متوفر'}
 - **توقيت كتم الخشوع المقترن (khushuMute):** ${correlatedKhushuEvent ? new Date(correlatedKhushuEvent.timestampMs).toLocaleTimeString('ar-EG') + ` (${correlatedKhushuEvent.timestampMs} ms)` : 'غير متوفر'}
-- **فارق التوقيت (Delta):** ${deltaMs !== null ? `${deltaMs} ملي ثانية` : 'غير متوفر'} (مدة الصوت المقدرة: ${ESTIMATED_SOUND_DURATION_MS} ms)
-- **العلاقة السببية:** ${isMuteAfterPlayback ? 'كتم متأخر بعد انتهاء الصوت — ينفي السببية ويستوجب فحص مسار الإشعار ومستويات الصوت' : isMuteDuringPlayback ? 'كتم متزامن/متداخل مع تشغيل الصوت — يدعم الفرضية' : 'غير محدد'}
+- **فارق التوقيت الفعلي (Delta):** ${deltaMs !== null ? `${deltaMs} ملي ثانية` : 'غير متوفر'} (النافذة المتوقعة: ${SOUND_DURATION_MS} - ${MAX_ALLOWED_MUTE_DELAY_MS} ms، موعد الجدولة: ${SCHEDULED_TRIGGER_DELAY_MS} ms)
+- **مصدر التفعيل (Origin):** ${khushuAttemptOrigin} (المحاولات للمنبه: ${khushuAttemptsForTestAlarm}، محاولات بمصدر فارغ: ${emptySourceKeyAttempts})
 
 ## مصفوفة المتوقع مقابل الفعلي
 | البند | المتوقع | الفعلي | النتيجة |
@@ -311,8 +451,6 @@ ${evidenceList.length > 0 ? evidenceList.map((e, idx) => `${idx + 1}. [${new Dat
 
 ## شهادة المستخدم (Human Hearing Confirmation)
 - سماع منبه المقارنة (T+3m): **${controlHeard ? 'نعم (مسموع)' : 'لا (غير مسموع)'}**
-- سماع منبه الخشوع (T+6m): **${testHeard ? 'نعم (مسموع)' : 'لا (غير مسموع)'}**
-
 ## تنبيه منهجي هام
 المنبهات المخصصة تعمل عبر قناة إشعارات أندرويد وتصدر الصوت عبر النظام، ولذلك لا توجد إشارة تقنية برمجية مباشرة لاكتمال الصوت (مثل مشغل الأذان الكامل). الحكم اعتمد على تلاقي الأدلة: وصول الإشعار + اقتران حدث الخشوع عبر sourceKey + كتم رنين النظام + شهادة السماع الحقيقية.
 `;
