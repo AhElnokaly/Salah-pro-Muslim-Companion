@@ -44,6 +44,7 @@ import { diagRunnerInstance, getCollectableBannerMessage } from '../../../diagno
 import { TEST_A_SPEC } from '../../../diagnostics/tests/specs/testA_previewSource';
 import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustomAlarm';
 import { TEST_E_SPEC } from '../../../diagnostics/tests/specs/testE_khushuRestoreSafety';
+import { TEST_F_SPEC } from '../../../diagnostics/tests/specs/testF_khushuAutoRestore';
 import { DiagRunState, DiagResult } from '../../../diagnostics/tests/diagTypes';
 import { safeGetJSON } from '../../../utils/storage';
 import { AlarmConfig, AppSettings } from '../../../types';
@@ -139,6 +140,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     diagRunnerInstance.registerSpec(TEST_A_SPEC);
     diagRunnerInstance.registerSpec(TEST_B_SPEC);
     diagRunnerInstance.registerSpec(TEST_E_SPEC);
+    diagRunnerInstance.registerSpec(TEST_F_SPEC);
     diagRunnerInstance.checkAndResumeOnAppStartup();
 
     const unsubscribe = diagRunnerInstance.subscribe((st) => {
@@ -741,6 +743,32 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               >
                 <Play className="w-3.5 h-3.5" />
                 <span>تشغيل Test E (فحص أمان الاستعادة والمعاملات)</span>
+              </button>
+            </div>
+
+            {/* Test F Card */}
+            <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Test F: فحص الاستعادة التلقائية بالمنبه (source=alarm)</span>
+                </span>
+                <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">آلي (~1–2 دقيقة)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                يفعّل الخشوع لأقصر مدة (1 دقيقة) ويتحقق من الكتم (ringerMode != 2) وجدولة منبه الاستعادة، ثم ينتظر الاستعادة التلقائية بالمنبه نفسه (KHUSHU_RESTORED مع source=alarm) دون استدعاء deactivate أو expired_heal، ويتأكد من عودة الرنين والفلتر وزوال المنبه المعلّق.
+              </p>
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
+                تنبيه مهم: يُشغَّل هذا الاختبار من تبويب «تشخيص الأذان» (activeTab) لا من نافذة المودال لتفادي تداخل polling الخلفية في Dashboard.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleStartTest('test-f-khushu-auto-restore')}
+                disabled={isActionBusy || (!!runnerState && runnerState.phase !== 'reported' && runnerState.phase !== 'cancelled')}
+                className="w-full py-1.5 px-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>تشغيل Test F (فحص الاستعادة التلقائية بالمنبه)</span>
               </button>
             </div>
           </div>

@@ -12,6 +12,7 @@ import {
 import { TEST_A_SPEC } from './specs/testA_previewSource';
 import { TEST_B_SPEC, resolveRestoreRowStatus } from './specs/testB_khushuCustomAlarm';
 import { TEST_E_SPEC } from './specs/testE_khushuRestoreSafety';
+import { TEST_F_SPEC, createTestFSpec } from './specs/testF_khushuAutoRestore';
 import { DiagRunState, DiagContext, isDiagAlarmId, DIAG_ALARM_PREFIX } from './diagTypes';
 import { safeSetJSON, safeGetJSON } from '../../utils/storage';
 import { setAthanPluginBridgeForTesting, buildNativePrayerTimeAlarms } from '../../services/athanAlarmPlugin';
@@ -2309,6 +2310,576 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
         assert.equal(deactivateMissingTsCalled, false);
         assert.equal(resMissing?.phase, 'cancelled');
         assert.equal(resMissing?.result?.verdict, 'INCONCLUSIVE');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+  });
+
+  describe('19. Test F: Khushu Auto-Restore (source=alarm) & No-Heal Read-Only Gating', () => {
+    const safeAthanTimes = [{ name: 'Fajr', timeMs: Date.now() + 10 * 3600 * 1000 }];
+
+    test('(a) PASS when muted after activate (ringerMode != 2), KHUSHU_RESTORED has source=alarm, and ringer/filter/pending alarm restore cleanly', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let interruptionFilter = 1;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let deactivateCalls = 0;
+      let getStatusCalls = 0;
+      let activateDurationArg = 0;
+      let pollCount = 0;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_F_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => {
+            getStatusCalls++;
+            return {
+              active: khushuActive,
+              mode: 'silent',
+              durationMinutes: khushuActive ? 1 : 0,
+              remainingSeconds: khushuActive ? 60 : 0,
+              hasPermission: false,
+              activatedAt,
+              hasPendingRestoreAlarm,
+              ringerMode,
+              interruptionFilter,
+            };
+          },
+          activate: async (opts) => {
+            activateDurationArg = opts.durationMinutes;
+            khushuActive = true;
+            ringerMode = 1; // VIBRATE fallback when DND is not granted
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => {
+            deactivateCalls++;
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            const baseTs = activatedAt || Date.now();
+            const triggerAt = baseTs + 60_000;
+            pollCount++;
+            if (pollCount === 1) {
+              return {
+                events: [
+                  {
+                    event: 'KHUSHU_RESTORE_SCHEDULED',
+                    timestampMs: baseTs,
+                    details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                  },
+                ],
+                total: 1,
+              };
+            }
+            // Simulate native KhushuRestoreReceiver firing with source=alarm
+            khushuActive = false;
+            ringerMode = 2;
+            interruptionFilter = 1;
+            hasPendingRestoreAlarm = false;
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORED',
+                  timestampMs: triggerAt + 120,
+                  details: `source=alarm, restoredRinger=2, restoredFilter=1, timestampMs=${triggerAt + 120}`,
+                },
+                {
+                  event: 'KHUSHU_RESTORE_SCHEDULED',
+                  timestampMs: baseTs,
+                  details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                },
+              ],
+              total: 2,
+            };
+          },
+        });
+
+        const res = await runner.startTest(TEST_F_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.phase, 'reported');
+        assert.equal(res.state?.result?.verdict, 'PASS');
+        assert.equal(activateDurationArg, 1);
+        assert.equal(deactivateCalls, 0);
+        // Only 3 getStatus calls: baseline, immediate post-activate, and post-KHUSHU_RESTORED read-only check
+        assert.equal(getStatusCalls, 3);
+        assert.match(res.state?.result?.markdownReport || '', /source=alarm/);
+        assert.match(res.state?.result?.markdownReport || '', /تبويب التشخيص/);
+        assert.ok(
+          res.state?.result?.evidenceList.some((e) => e.alarmId === 'env_check' && e.details.includes('dashboardMounted='))
+        );
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(b) FAIL when device ringerMode remains 2 after activation (muting never happened)', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let pollCount = 0;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_F_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: khushuActive,
+            mode: 'silent',
+            durationMinutes: khushuActive ? 1 : 0,
+            remainingSeconds: khushuActive ? 60 : 0,
+            hasPermission: false,
+            activatedAt,
+            hasPendingRestoreAlarm,
+            ringerMode,
+            interruptionFilter: 1,
+          }),
+          activate: async (opts) => {
+            khushuActive = true;
+            // BUG simulation: ringerMode stayed at 2 (NORMAL)
+            ringerMode = 2;
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => {
+            khushuActive = false;
+            hasPendingRestoreAlarm = false;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            const baseTs = activatedAt || Date.now();
+            const triggerAt = baseTs + 60_000;
+            pollCount++;
+            if (pollCount === 1) {
+              return {
+                events: [
+                  {
+                    event: 'KHUSHU_RESTORE_SCHEDULED',
+                    timestampMs: baseTs,
+                    details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                  },
+                ],
+                total: 1,
+              };
+            }
+            khushuActive = false;
+            hasPendingRestoreAlarm = false;
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORED',
+                  timestampMs: triggerAt + 50,
+                  details: `source=alarm, restoredRinger=2, restoredFilter=1, timestampMs=${triggerAt + 50}`,
+                },
+              ],
+              total: 1,
+            };
+          },
+        });
+
+        const res = await runner.startTest(TEST_F_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.result?.verdict, 'FAIL');
+        const f2Row = res.state?.result?.expectedVsActual.find((r) => r.parameter.includes('ringerMode != 2'));
+        assert.equal(f2Row?.status, 'MISMATCH');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(c) FAIL with explicit reason when KHUSHU_RESTORED has source=manual even if ringer restored to 2', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let pollCount = 0;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_F_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: khushuActive,
+            mode: 'silent',
+            durationMinutes: khushuActive ? 1 : 0,
+            remainingSeconds: khushuActive ? 60 : 0,
+            hasPermission: false,
+            activatedAt,
+            hasPendingRestoreAlarm,
+            ringerMode,
+            interruptionFilter: 1,
+          }),
+          activate: async (opts) => {
+            khushuActive = true;
+            ringerMode = 1;
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => ({ active: false }),
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            const baseTs = activatedAt || Date.now();
+            const triggerAt = baseTs + 60_000;
+            pollCount++;
+            if (pollCount === 1) {
+              return {
+                events: [
+                  {
+                    event: 'KHUSHU_RESTORE_SCHEDULED',
+                    timestampMs: baseTs,
+                    details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                  },
+                ],
+                total: 1,
+              };
+            }
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORED',
+                  timestampMs: triggerAt + 500,
+                  details: `source=manual, restoredRinger=2, restoredFilter=1, timestampMs=${triggerAt + 500}`,
+                },
+              ],
+              total: 1,
+            };
+          },
+        });
+
+        const res = await runner.startTest(TEST_F_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.result?.verdict, 'FAIL');
+        assert.match(res.state?.result?.reason || '', /FAIL: alarm did not restore, healed by manual/);
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(d) INCONCLUSIVE when KHUSHU_RESTORED has source=expired_heal (UI polling race) with timestampMs vs triggerAtMs comparison', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let pollCount = 0;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_F_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: khushuActive,
+            mode: 'silent',
+            durationMinutes: khushuActive ? 1 : 0,
+            remainingSeconds: khushuActive ? 60 : 0,
+            hasPermission: false,
+            activatedAt,
+            hasPendingRestoreAlarm,
+            ringerMode,
+            interruptionFilter: 1,
+          }),
+          activate: async (opts) => {
+            khushuActive = true;
+            ringerMode = 1;
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => ({ active: false }),
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            const baseTs = activatedAt || Date.now();
+            const triggerAt = baseTs + 60_000;
+            pollCount++;
+            if (pollCount === 1) {
+              return {
+                events: [
+                  {
+                    event: 'KHUSHU_RESTORE_SCHEDULED',
+                    timestampMs: baseTs,
+                    details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                  },
+                ],
+                total: 1,
+              };
+            }
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORED',
+                  timestampMs: triggerAt + 250,
+                  details: `source=expired_heal, restoredRinger=2, restoredFilter=1, timestampMs=${triggerAt + 250}`,
+                },
+              ],
+              total: 1,
+            };
+          },
+        });
+
+        const res = await runner.startTest(TEST_F_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.result?.verdict, 'INCONCLUSIVE');
+        assert.match(res.state?.result?.reason || '', /expired_heal/);
+        assert.match(res.state?.result?.reason || '', /polling/);
+        assert.match(res.state?.result?.reason || '', /triggerAtMs=/);
+        assert.match(res.state?.result?.reason || '', /timestampMs=/);
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(e) INCONCLUSIVE on timeout without KHUSHU_RESTORED, never calls getStatus during/after timeout, and runs emergency restore in finally', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let getStatusCalls = 0;
+      let deactivateCalls = 0;
+
+      const fastTimeoutTestF = createTestFSpec({
+        pollIntervalMs: 5,
+        waitTimeoutMs: 25,
+      });
+
+      const runner = new DiagRunner();
+      runner.registerSpec(fastTimeoutTestF);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => {
+            getStatusCalls++;
+            return {
+              active: khushuActive,
+              mode: 'silent',
+              durationMinutes: khushuActive ? 1 : 0,
+              remainingSeconds: khushuActive ? 60 : 0,
+              hasPermission: false,
+              activatedAt,
+              hasPendingRestoreAlarm,
+              ringerMode,
+              interruptionFilter: 1,
+            };
+          },
+          activate: async (opts) => {
+            khushuActive = true;
+            ringerMode = 1;
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => {
+            deactivateCalls++;
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            const baseTs = activatedAt || Date.now();
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORE_SCHEDULED',
+                  timestampMs: baseTs,
+                  details: `durationMinutes=1, triggerAtMs=${baseTs + 60_000}, isExact=true, method=setExactAndAllowWhileIdle`,
+                },
+              ],
+              total: 1,
+            };
+          },
+        });
+
+        const res = await runner.startTest(fastTimeoutTestF, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.result?.verdict, 'INCONCLUSIVE');
+        // Must ONLY have called getStatus twice (baseline + immediate post-activate), NOT during polling or on timeout!
+        assert.equal(getStatusCalls, 2);
+        // Must have executed emergency restore in finally
+        assert.equal(deactivateCalls, 1);
+        assert.equal(khushuActive, false);
+        assert.equal(ringerMode, 2);
+        assert.ok(res.state?.result?.evidenceList.some((e) => e.alarmId === 'emergency_restore'));
+        assert.match(res.state?.result?.markdownReport || '', /استعادة طوارئ/);
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(f) returns PASS and never calls deactivate when KHUSHU_RESTORED (source=alarm) appears only on final post-deadline read', async () => {
+      let khushuActive = false;
+      let ringerMode = 2;
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let deactivateCalls = 0;
+      let logReadCalls = 0;
+
+      const lateWriteTestF = createTestFSpec({
+        pollIntervalMs: 5,
+        waitTimeoutMs: 15,
+      });
+
+      const runner = new DiagRunner();
+      runner.registerSpec(lateWriteTestF);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: khushuActive,
+            mode: 'silent',
+            durationMinutes: khushuActive ? 1 : 0,
+            remainingSeconds: khushuActive ? 60 : 0,
+            hasPermission: false,
+            activatedAt,
+            hasPendingRestoreAlarm,
+            ringerMode,
+            interruptionFilter: 1,
+          }),
+          activate: async (opts) => {
+            khushuActive = true;
+            ringerMode = 1;
+            activatedAt = Date.now();
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => {
+            deactivateCalls++;
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            savedAlarms: [],
+            nextAlarmClockMs: 0,
+            fireEvents: [],
+            standbyBucket: 10,
+          })) as any,
+          getNativeEventLog: async () => {
+            logReadCalls++;
+            const baseTs = activatedAt || Date.now();
+            const triggerAt = baseTs + 60_000;
+
+            // Call 1: F3 scheduled check; Call 2: normal F4 read that finishes after deadline without KHUSHU_RESTORED
+            if (logReadCalls === 1) {
+              return {
+                events: [
+                  {
+                    event: 'KHUSHU_RESTORE_SCHEDULED',
+                    timestampMs: baseTs,
+                    details: `durationMinutes=1, triggerAtMs=${triggerAt}, isExact=true, method=setExactAndAllowWhileIdle`,
+                  },
+                ],
+                total: 1,
+              };
+            }
+
+            if (logReadCalls === 2) {
+              await new Promise((r) => setTimeout(r, 25));
+              return {
+                events: [],
+                total: 0,
+              };
+            }
+
+            // Call 3+: final post-deadline read at remainingWaitMs <= 0 observes KHUSHU_RESTORED (source=alarm)
+            khushuActive = false;
+            ringerMode = 2;
+            hasPendingRestoreAlarm = false;
+            return {
+              events: [
+                {
+                  event: 'KHUSHU_RESTORED',
+                  timestampMs: triggerAt + 30,
+                  details: `source=alarm, restoredRinger=2, restoredFilter=1, timestampMs=${triggerAt + 30}`,
+                },
+              ],
+              total: 1,
+            };
+          },
+        });
+
+        const res = await runner.startTest(lateWriteTestF, { athanTimes: safeAthanTimes });
+        assert.equal(res.success, true);
+        assert.equal(res.state?.result?.verdict, 'PASS');
+        assert.equal(deactivateCalls, 0);
+        assert.equal(logReadCalls, 3);
       } finally {
         setKhushuPluginBridgeForTesting(null);
       }
