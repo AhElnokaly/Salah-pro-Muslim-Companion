@@ -40,7 +40,7 @@ import {
   groupScheduledAlarmsByType,
 } from '../../../services/athanAlarmPlugin';
 import { toArabicNumbers } from '../../../utils/hijri';
-import { diagRunnerInstance } from '../../../diagnostics/tests/diagRunner';
+import { diagRunnerInstance, getCollectableBannerMessage } from '../../../diagnostics/tests/diagRunner';
 import { TEST_A_SPEC } from '../../../diagnostics/tests/specs/testA_previewSource';
 import { TEST_B_SPEC } from '../../../diagnostics/tests/specs/testB_khushuCustomAlarm';
 import { TEST_E_SPEC } from '../../../diagnostics/tests/specs/testE_khushuRestoreSafety';
@@ -196,6 +196,8 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
 
       if (!res.success) {
         setGuardError(res.error || 'فشل بدء الاختبار بسبب حماية الصلاة أو خطأ في التهيئة.');
+      } else if (res.state?.phase === 'reported') {
+        fetchDiagnostics();
       }
     } catch (err: any) {
       setGuardError(err?.message || 'حدث خطأ غير متوقع أثناء تشغيل الاختبار.');
@@ -624,7 +626,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
             )}
             {runnerState.phase === 'collectable' && (
               <p className="font-black text-emerald-600 dark:text-emerald-400">
-                ✓ تم إطلاق المنبهات! يرجى الإجابة على سؤال السماع في بطاقة الفحص أدناه.
+                {getCollectableBannerMessage(runnerState.testId)}
               </p>
             )}
             <p className="text-[11px] text-rose-800/80 dark:text-rose-300/80">
@@ -869,15 +871,15 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-xs shrink-0 ${
-                    runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS'
+                    runnerState.result.verdict === 'PASS' || runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS'
                       ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                      : runnerState.result.verdict === 'REFUTED'
+                      : runnerState.result.verdict === 'FAIL' || runnerState.result.verdict === 'REFUTED'
                       ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-700'
                       : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
                   }`}
                 >
-                  {runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS' && <CheckCircle2 className="w-4 h-4 shrink-0" />}
-                  {runnerState.result.verdict === 'REFUTED' && <XCircle className="w-4 h-4 shrink-0" />}
+                  {(runnerState.result.verdict === 'PASS' || runnerState.result.verdict === 'SUPPORTS_HYPOTHESIS') && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                  {(runnerState.result.verdict === 'FAIL' || runnerState.result.verdict === 'REFUTED') && <XCircle className="w-4 h-4 shrink-0" />}
                   {runnerState.result.verdict === 'INCONCLUSIVE' && <AlertTriangle className="w-4 h-4 shrink-0" />}
                   <span>{runnerState.result.verdict}</span>
                 </span>

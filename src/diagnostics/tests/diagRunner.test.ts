@@ -6,16 +6,19 @@ import {
   checkPrayerProximityGuard,
   DiagRunner,
   DIAG_RUN_STATE_KEY,
+  shouldAutoEvaluateSpec,
+  getCollectableBannerMessage,
 } from './diagRunner';
 import { TEST_A_SPEC } from './specs/testA_previewSource';
 import { TEST_B_SPEC, resolveRestoreRowStatus } from './specs/testB_khushuCustomAlarm';
+import { TEST_E_SPEC } from './specs/testE_khushuRestoreSafety';
 import { DiagRunState, DiagContext, isDiagAlarmId, DIAG_ALARM_PREFIX } from './diagTypes';
 import { safeSetJSON, safeGetJSON } from '../../utils/storage';
 import { setAthanPluginBridgeForTesting, buildNativePrayerTimeAlarms } from '../../services/athanAlarmPlugin';
 import { filterUserVisibleAlarms } from '../../components/WorshipAlarms';
 import { deleteDownloadedAudio } from '../../utils/audioStorage';
 import { sanitizeAlarmsForExport, sanitizeAlarmsForRestore } from '../../utils/backupAlarmUtils';
-import { KhushuMode } from '../../services/khushuModePlugin';
+import { KhushuMode, setKhushuPluginBridgeForTesting } from '../../services/khushuModePlugin';
 import { AlarmConfig, AppSettings } from '../../types';
 import { generatePrayerSchedule } from '../../utils/prayerScheduleSync';
 import { resolveAthanTimes, normalizePrayerKey } from '../resolveAthanTimes';
@@ -1875,6 +1878,440 @@ describe('Diagnostics Test Framework (Phase 1): DiagRunner & Verdict Engine', ()
 
       assert.equal(guardRes.allowed, false);
       assert.match(guardRes.reason || '', /تعذر التحقق من مواقيت الصلاة/);
+    });
+  });
+
+  describe('18. Test E Auto-Evaluate Lifecycle, Double-Execution Guards & UI Banner Message', () => {
+    const safeAthanTimes = [{ name: 'Fajr', timeMs: Date.now() + 10 * 3600 * 1000 }];
+
+    test('shouldAutoEvaluateSpec returns true for Test E (instant without userSteps) and false for Test A & Test B', () => {
+      assert.equal(shouldAutoEvaluateSpec(TEST_E_SPEC), true);
+      assert.equal(shouldAutoEvaluateSpec(TEST_A_SPEC), false);
+      assert.equal(shouldAutoEvaluateSpec(TEST_B_SPEC), false);
+    });
+
+    test('(a) Test E auto-evaluates from startTest through running to reported PASS without manual intervention', async () => {
+      let khushuActive = false;
+      let ringerMode = 2; // NORMAL
+      let activatedAt = 0;
+      let hasPendingRestoreAlarm = false;
+      let nowOffset = 0;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_E_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: khushuActive,
+            mode: 'silent',
+            durationMinutes: khushuActive ? 2 : 0,
+            remainingSeconds: khushuActive ? 120 : 0,
+            hasPermission: true,
+            activatedAt,
+            hasPendingRestoreAlarm,
+            ringerMode,
+            interruptionFilter: 1,
+          }),
+          activate: async (opts) => {
+            if (khushuActive) {
+              return { active: true, mode: opts.mode, durationMinutes: 2, alreadyActive: true };
+            }
+            khushuActive = true;
+            ringerMode = 1; // VIBRATE fallback when DND is not granted
+            activatedAt = Date.now() + nowOffset;
+            hasPendingRestoreAlarm = true;
+            return { active: true, mode: opts.mode, durationMinutes: opts.durationMinutes, alreadyActive: false };
+          },
+          deactivate: async () => {
+            khushuActive = false;
+            ringerMode = 2;
+            activatedAt = 0;
+            hasPendingRestoreAlarm = false;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            platform: 'android',
+            androidVersion: 34,
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            scheduledCount: 0,
+            scheduledAlarms: [],
+          })) as any,
+          getNativeEventLog: async () => ({
+            events: [
+              { event: 'KHUSHU_RESTORE_SCHEDULED', timestampMs: Date.now() + 100, details: 'durationMinutes=2, isExact=true, method=setExactAndAllowWhileIdle' },
+              { event: 'KHUSHU_RESTORED', timestampMs: Date.now() + 200, details: 'source=manual, restoredRinger=2, restoredFilter=1' },
+            ],
+            total: 2,
+          }),
+        });
+
+        const startRes = await runner.startTest(TEST_E_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(startRes.success, true);
+        assert.equal(startRes.state?.phase, 'reported');
+        assert.ok(startRes.state?.expiresAt && startRes.state.expiresAt > startRes.state.startedAt);
+        assert.equal(startRes.state?.result?.verdict, 'PASS');
+        assert.equal(khushuActive, false); // Restored back to inactive
+        assert.equal(ringerMode, 2); // Restored back to NORMAL
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(b) Test A remains at collectable and Test B remains at waiting without auto-evaluating', async () => {
+      const runnerA = new DiagRunner();
+      runnerA.registerSpec(TEST_A_SPEC);
+      const resA = await runnerA.startTest(TEST_A_SPEC, { athanTimes: safeAthanTimes });
+      assert.equal(resA.success, true);
+      assert.equal(resA.state?.phase, 'collectable');
+      assert.equal(resA.state?.result, undefined);
+
+      const runnerB = new DiagRunner();
+      runnerB.registerSpec(TEST_B_SPEC);
+      const resB = await runnerB.startTest(TEST_B_SPEC, { athanTimes: safeAthanTimes });
+      assert.equal(resB.success, true);
+      assert.equal(resB.state?.phase, 'waiting');
+      assert.equal(resB.state?.result, undefined);
+    });
+
+    test('(c) Prevents double execution on concurrent startTest / submitUserAction calls and recovers orphaned running state', async () => {
+      let evalCount = 0;
+      let releaseEval!: () => void;
+      const evalGate = new Promise<void>((resolve) => {
+        releaseEval = resolve;
+      });
+
+      const slowInstantSpec = {
+        id: 'test-e-khushu-restore-safety',
+        title: 'Slow Auto-Evaluate Mock',
+        fixRef: 'B1',
+        mode: 'instant' as const,
+        touchesKeys: [],
+        guardDurationMinutes: 5,
+        setup: async () => {},
+        evaluate: async (ctx: DiagContext) => {
+          evalCount++;
+          await evalGate;
+          return {
+            runId: ctx.runId,
+            testId: 'test-e-khushu-restore-safety',
+            fixRef: 'B1',
+            verdict: 'PASS' as const,
+            reason: 'done',
+            startedAt: ctx.state.startedAt,
+            collectedAt: Date.now(),
+            deviceInfo: { appVersion: '1.2.1' },
+            expectedVsActual: [],
+            evidenceList: [],
+            markdownReport: '# OK',
+          };
+        },
+      };
+
+      const runner = new DiagRunner();
+      runner.registerSpec(slowInstantSpec);
+
+      // Concurrent startTest calls while first evaluation is still in-flight
+      const p1 = runner.startTest(slowInstantSpec, { athanTimes: safeAthanTimes });
+      const p2 = runner.startTest(slowInstantSpec, { athanTimes: safeAthanTimes });
+
+      // Wait microtasks for p1 to reach evaluate
+      await new Promise((r) => setTimeout(r, 10));
+      // Concurrent submitUserAction while already running -> single-flight deduplication
+      const p3 = runner.submitUserAction();
+
+      releaseEval();
+      const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+
+      assert.equal(r1.success, true);
+      assert.equal(r1.state?.phase, 'reported');
+      assert.equal(r2.success, false);
+      assert.match(r2.error || '', /قيد التنفيذ بالفعل/);
+      assert.equal(r3?.verdict, 'PASS');
+      assert.equal(evalCount, 1);
+
+      // Orphaned 'running' recovery after simulated app kill/restart (new DiagRunner instance)
+      const crashedRunner = new DiagRunner();
+      let evalReTriggered = false;
+      crashedRunner.registerSpec({
+        ...slowInstantSpec,
+        evaluate: async () => {
+          evalReTriggered = true;
+          return {} as any;
+        },
+      });
+      let deactivateCalledOnRecovery = false;
+      const orphanedStartedAt = Date.now() - 2000;
+      crashedRunner.saveState({
+        runId: 'crashed_run',
+        testId: 'test-e-khushu-restore-safety',
+        startedAt: orphanedStartedAt,
+        expiresAt: Date.now() + 60000,
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+      });
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 2,
+            remainingSeconds: 100,
+            hasPermission: true,
+            activatedAt: orphanedStartedAt + 200,
+          }),
+          deactivate: async () => {
+            deactivateCalledOnRecovery = true;
+            return { active: false };
+          },
+        });
+
+        const resumed = await crashedRunner.checkAndResumeOnAppStartup();
+        assert.equal(evalReTriggered, false);
+        assert.equal(deactivateCalledOnRecovery, true);
+        assert.equal(resumed?.phase, 'cancelled');
+        assert.equal(resumed?.result?.verdict, 'INCONCLUSIVE');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(d) UI collectable banner message is specialized per testId (hearing question only for Test B)', () => {
+      const msgB = getCollectableBannerMessage('b3-khushu-custom-alarm');
+      const msgE = getCollectableBannerMessage('test-e-khushu-restore-safety');
+      const msgA = getCollectableBannerMessage('fix1a-preview-source');
+
+      assert.match(msgB, /سؤال السماع/);
+      assert.equal(msgE, 'جاري تنفيذ الفحص الفوري...');
+      assert.equal(msgE.includes('سؤال السماع'), false);
+      assert.equal(msgA.includes('سؤال السماع'), false);
+    });
+
+    test('(e) Test E returns INCONCLUSIVE without calling activate or deactivate if Khushu is already active', async () => {
+      let activateCalled = false;
+      let deactivateCalled = false;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_E_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 30,
+            remainingSeconds: 1500,
+            hasPermission: true,
+            activatedAt: Date.now() - 300000,
+            ringerMode: 0,
+            interruptionFilter: 1,
+          }),
+          activate: async () => {
+            activateCalled = true;
+            return { active: true, mode: 'silent', durationMinutes: 2, alreadyActive: true };
+          },
+          deactivate: async () => {
+            deactivateCalled = true;
+            return { active: false };
+          },
+        });
+
+        const startRes = await runner.startTest(TEST_E_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(startRes.success, true);
+        assert.equal(startRes.state?.phase, 'reported');
+        assert.equal(startRes.state?.result?.verdict, 'INCONCLUSIVE');
+        assert.match(startRes.state?.result?.reason || '', /يوجد جلسة خشوع نشطة/);
+        assert.equal(activateCalled, false);
+        assert.equal(deactivateCalled, false);
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(f) Test E does not call deactivate even if activate returns alreadyActive: true (race condition guard)', async () => {
+      let deactivateCalled = false;
+
+      const runner = new DiagRunner();
+      runner.registerSpec(TEST_E_SPEC);
+
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: false,
+            mode: 'silent',
+            durationMinutes: 0,
+            remainingSeconds: 0,
+            hasPermission: true,
+            activatedAt: 0,
+            ringerMode: 2,
+            interruptionFilter: 1,
+          }),
+          activate: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 30,
+            alreadyActive: true,
+          }),
+          deactivate: async () => {
+            deactivateCalled = true;
+            return { active: false };
+          },
+        });
+
+        setAthanPluginBridgeForTesting({
+          getAlarmDiagnostics: (async () => ({
+            platform: 'android',
+            androidVersion: 34,
+            canScheduleExactAlarms: true,
+            isIgnoringBatteryOptimizations: true,
+            scheduledCount: 0,
+            scheduledAlarms: [],
+          })) as any,
+        });
+
+        const startRes = await runner.startTest(TEST_E_SPEC, { athanTimes: safeAthanTimes });
+        assert.equal(startRes.success, true);
+        assert.equal(startRes.state?.result?.verdict, 'INCONCLUSIVE');
+        assert.equal(deactivateCalled, false);
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+    });
+
+    test('(g) Orphaned running recovery deactivates only when activatedAt >= startedAt, leaving pre-existing or timestamp-missing sessions untouched', async () => {
+      const startedAt = Date.now() - 5000;
+
+      // Case 1: Khushu activated BEFORE startedAt -> must NOT deactivate
+      const runnerBefore = new DiagRunner();
+      runnerBefore.saveState({
+        runId: 'orphan_before',
+        testId: 'test-e-khushu-restore-safety',
+        startedAt,
+        expiresAt: Date.now() + 60000,
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+      });
+
+      let deactivateBeforeCalled = false;
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 30,
+            remainingSeconds: 1500,
+            hasPermission: true,
+            activatedAt: startedAt - 10000,
+          }),
+          deactivate: async () => {
+            deactivateBeforeCalled = true;
+            return { active: false };
+          },
+        });
+
+        const resBefore = await runnerBefore.checkAndResumeOnAppStartup();
+        assert.equal(deactivateBeforeCalled, false);
+        assert.equal(resBefore?.phase, 'cancelled');
+        assert.equal(resBefore?.result?.verdict, 'INCONCLUSIVE');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+
+      // Case 2: Khushu activated AFTER startedAt -> MUST deactivate
+      const runnerAfter = new DiagRunner();
+      runnerAfter.saveState({
+        runId: 'orphan_after',
+        testId: 'test-e-khushu-restore-safety',
+        startedAt,
+        expiresAt: Date.now() + 60000,
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+      });
+
+      let deactivateAfterCalled = false;
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 2,
+            remainingSeconds: 110,
+            hasPermission: true,
+            activatedAt: startedAt + 500,
+          }),
+          deactivate: async () => {
+            deactivateAfterCalled = true;
+            return { active: false };
+          },
+        });
+
+        const resAfter = await runnerAfter.checkAndResumeOnAppStartup();
+        assert.equal(deactivateAfterCalled, true);
+        assert.equal(resAfter?.phase, 'cancelled');
+        assert.equal(resAfter?.result?.verdict, 'INCONCLUSIVE');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
+
+      // Case 3: activatedAt unavailable (undefined) -> fail-safe, must NOT deactivate
+      const runnerMissingTs = new DiagRunner();
+      runnerMissingTs.saveState({
+        runId: 'orphan_missing_ts',
+        testId: 'test-e-khushu-restore-safety',
+        startedAt,
+        expiresAt: Date.now() + 60000,
+        phase: 'running',
+        snapshot: {},
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+      });
+
+      let deactivateMissingTsCalled = false;
+      try {
+        setKhushuPluginBridgeForTesting({
+          getStatus: async () => ({
+            active: true,
+            mode: 'silent',
+            durationMinutes: 2,
+            remainingSeconds: 100,
+            hasPermission: true,
+          }),
+          deactivate: async () => {
+            deactivateMissingTsCalled = true;
+            return { active: false };
+          },
+        });
+
+        const resMissing = await runnerMissingTs.checkAndResumeOnAppStartup();
+        assert.equal(deactivateMissingTsCalled, false);
+        assert.equal(resMissing?.phase, 'cancelled');
+        assert.equal(resMissing?.result?.verdict, 'INCONCLUSIVE');
+      } finally {
+        setKhushuPluginBridgeForTesting(null);
+      }
     });
   });
 });

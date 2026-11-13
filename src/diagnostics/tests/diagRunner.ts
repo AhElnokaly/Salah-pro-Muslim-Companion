@@ -183,9 +183,35 @@ export function evaluateMuteStateFromDetails(detailsStr: string): MuteStateInfo 
 
 export const parseMuteState = evaluateMuteStateFromDetails;
 
+/**
+ * Pure predicate: an instant test with no userSteps requires no user interaction
+ * and should auto-evaluate immediately after setup.
+ */
+export function shouldAutoEvaluateSpec(spec: DiagTestSpec): boolean {
+  return spec.mode === 'instant' && (!spec.userSteps || spec.userSteps.length === 0);
+}
+
+/**
+ * Returns the test-specific banner message shown during collectable phase.
+ */
+export function getCollectableBannerMessage(testId: string): string {
+  switch (testId) {
+    case 'b3-khushu-custom-alarm':
+      return '✓ تم إطلاق المنبهات! يرجى الإجابة على سؤال السماع في بطاقة الفحص أدناه.';
+    case 'fix1a-preview-source':
+      return '✓ اكتملت المرحلة الأولى! يرجى إيقاف الاتصال ثم الضغط على زر التأكيد في بطاقة الفحص أدناه.';
+    case 'test-e-khushu-restore-safety':
+      return 'جاري تنفيذ الفحص الفوري...';
+    default:
+      return 'اكتملت مرحلة الإعداد؛ يرجى استكمال خطوات التحقق في بطاقة الفحص أدناه.';
+  }
+}
+
 export class DiagRunner {
   private registeredSpecs = new Map<string, DiagTestSpec>();
   private listeners = new Set<(state: DiagRunState | null) => void>();
+  private isStartingRun = false;
+  private activeEvaluationPromise: Promise<DiagResult | null> | null = null;
 
   subscribe(listener: (state: DiagRunState | null) => void): () => void {
     this.listeners.add(listener);
@@ -365,87 +391,112 @@ export class DiagRunner {
       now?: number;
     }
   ): Promise<{ success: boolean; state?: DiagRunState; error?: string }> {
-    const now = options?.now ?? Date.now();
-
-    // 1. Check prayer proximity guard (fail closed if athanTimes missing or empty)
-    const guard = checkPrayerProximityGuard({
-      athanTimes: options?.athanTimes,
-      customAlarms: options?.customAlarms,
-      testDurationMinutes: spec.guardDurationMinutes ?? (spec.mode === 'timed' ? 40 : 5),
-      now,
-    });
-    if (!guard.allowed) {
-      return { success: false, error: guard.reason };
-    }
-
-    // 2. Build snapshot of allowed keys
-    const snapshot: Record<string, { original: any; hash: string; testVal: any }> = {};
-    for (const key of spec.touchesKeys) {
-      if (!ALLOWED_TOUCH_KEYS.includes(key as any)) continue;
-      const currentVal = safeGetJSON<any>(key, null);
-      snapshot[key] = {
-        original: currentVal,
-        hash: hashValue(currentVal),
-        testVal: null,
+    const existingState = this.getCurrentState();
+    if (this.isStartingRun || this.activeEvaluationPromise || existingState?.phase === 'running') {
+      return {
+        success: false,
+        error: 'يوجد فحص قيد التنفيذ بالفعل، يرجى الانتظار حتى يكتمل.',
       };
     }
 
-    const runId = `run_${now}_${Math.random().toString(36).substring(2, 7)}`;
-    const initialState: DiagRunState = {
-      runId,
-      testId: spec.id,
-      startedAt: now,
-      phase: 'armed',
-      snapshot,
-      createdAlarmIds: [],
-      cacheCleanupPending: [],
-      cleanup: 'none',
-      conflicts: [],
-      userResponses: {},
-    };
-
-    this.saveState(initialState);
-
-    const ctx: DiagContext = {
-      runId,
-      state: initialState,
-      updateState: (updater) => {
-        const cur = this.getCurrentState() || initialState;
-        const updated = updater(cur);
-        this.saveState(updated);
-      },
-      logAction: (action, details) => {
-        console.log(`[DiagRunner:${runId}] ${action}`, details || '');
-      },
-    };
-
+    this.isStartingRun = true;
     try {
-      // 3. Execute setup
-      await spec.setup(ctx);
-
-      // 4. Schedule timed events if timed mode
-      if (spec.mode === 'timed' && spec.schedule) {
-        const scheduleRes = await spec.schedule(ctx);
-        const currentState = this.getCurrentState() || initialState;
-        currentState.createdAlarmIds = scheduleRes.createdAlarmIds;
-        currentState.collectAt = scheduleRes.collectAt;
-        currentState.expiresAt = scheduleRes.expiresAt;
-        currentState.phase = 'waiting';
-        this.saveState(currentState);
-        return { success: true, state: currentState };
-      } else {
-        // Instant test can collect immediately
-        const currentState = this.getCurrentState() || initialState;
-        currentState.phase = 'collectable';
-        this.saveState(currentState);
-        return { success: true, state: currentState };
+      const now = options?.now ?? Date.now();
+      if (!this.getSpec(spec.id)) {
+        this.registerSpec(spec);
       }
-    } catch (err: any) {
-      const currentState = this.getCurrentState() || initialState;
-      currentState.phase = 'cancelled';
-      await this.compareAndRestore(currentState);
-      this.clearState();
-      return { success: false, error: `فشل إعداد الاختبار: ${err?.message || err}` };
+
+      // 1. Check prayer proximity guard (fail closed if athanTimes missing or empty)
+      const guard = checkPrayerProximityGuard({
+        athanTimes: options?.athanTimes,
+        customAlarms: options?.customAlarms,
+        testDurationMinutes: spec.guardDurationMinutes ?? (spec.mode === 'timed' ? 40 : 5),
+        now,
+      });
+      if (!guard.allowed) {
+        return { success: false, error: guard.reason };
+      }
+
+      // 2. Build snapshot of allowed keys
+      const snapshot: Record<string, { original: any; hash: string; testVal: any }> = {};
+      for (const key of spec.touchesKeys) {
+        if (!ALLOWED_TOUCH_KEYS.includes(key as any)) continue;
+        const currentVal = safeGetJSON<any>(key, null);
+        snapshot[key] = {
+          original: currentVal,
+          hash: hashValue(currentVal),
+          testVal: null,
+        };
+      }
+
+      const runId = `run_${now}_${Math.random().toString(36).substring(2, 7)}`;
+      const initialState: DiagRunState = {
+        runId,
+        testId: spec.id,
+        startedAt: now,
+        phase: 'armed',
+        snapshot,
+        createdAlarmIds: [],
+        cacheCleanupPending: [],
+        cleanup: 'none',
+        conflicts: [],
+        userResponses: {},
+      };
+
+      this.saveState(initialState);
+
+      const ctx: DiagContext = {
+        runId,
+        state: initialState,
+        updateState: (updater) => {
+          const cur = this.getCurrentState() || initialState;
+          const updated = updater(cur);
+          this.saveState(updated);
+        },
+        logAction: (action, details) => {
+          console.log(`[DiagRunner:${runId}] ${action}`, details || '');
+        },
+      };
+
+      try {
+        // 3. Execute setup
+        await spec.setup(ctx);
+
+        // 4. Schedule timed events if timed mode
+        if (spec.mode === 'timed' && spec.schedule) {
+          const scheduleRes = await spec.schedule(ctx);
+          const currentState = this.getCurrentState() || initialState;
+          currentState.createdAlarmIds = scheduleRes.createdAlarmIds;
+          currentState.collectAt = scheduleRes.collectAt;
+          currentState.expiresAt = scheduleRes.expiresAt;
+          currentState.phase = 'waiting';
+          this.saveState(currentState);
+          return { success: true, state: currentState };
+        } else {
+          // Instant test can collect immediately
+          const currentState = this.getCurrentState() || initialState;
+          const guardMs = (spec.guardDurationMinutes ?? 5) * 60 * 1000;
+          currentState.expiresAt = currentState.expiresAt ?? (now + guardMs);
+          currentState.phase = 'collectable';
+          this.saveState(currentState);
+
+          if (shouldAutoEvaluateSpec(spec)) {
+            await this.submitUserAction();
+            const finalState = this.getCurrentState() || currentState;
+            return { success: true, state: finalState };
+          }
+
+          return { success: true, state: currentState };
+        }
+      } catch (err: any) {
+        const currentState = this.getCurrentState() || initialState;
+        currentState.phase = 'cancelled';
+        await this.compareAndRestore(currentState);
+        this.clearState();
+        return { success: false, error: `فشل إعداد الاختبار: ${err?.message || err}` };
+      }
+    } finally {
+      this.isStartingRun = false;
     }
   }
 
@@ -521,6 +572,41 @@ export class DiagRunner {
       return state;
     }
 
+    // 2b. Recover orphaned 'running' state after app kill/restart without re-running evaluate
+    if (state.phase === 'running' && !this.activeEvaluationPromise) {
+      state.phase = 'cancelled';
+      state.result = {
+        runId: state.runId,
+        testId: state.testId,
+        fixRef: this.getSpec(state.testId)?.fixRef || 'B1',
+        verdict: 'INCONCLUSIVE',
+        reason: 'توقف التطبيق أثناء تنفيذ الفحص التلقائي، وتم إلغاء الجلسة واستعادة الإعدادات.',
+        startedAt: state.startedAt,
+        collectedAt: now,
+        deviceInfo: { appVersion: '1.2.1' },
+        expectedVsActual: [],
+        evidenceList: [],
+        markdownReport: '# تقرير الفحص: تم الإلغاء بعد توقف التطبيق أثناء التنفيذ',
+      };
+      if (state.testId === 'test-e-khushu-restore-safety') {
+        try {
+          const khushuStatus = await KhushuMode.getStatus();
+          const hasValidActivatedAt =
+            typeof khushuStatus?.activatedAt === 'number' &&
+            Number.isFinite(khushuStatus.activatedAt) &&
+            khushuStatus.activatedAt > 0;
+          if (khushuStatus?.active && hasValidActivatedAt && khushuStatus.activatedAt! >= state.startedAt) {
+            await KhushuMode.deactivate();
+          }
+        } catch {
+          // Native 2-minute restore alarm serves as fallback safety net
+        }
+      }
+      await this.compareAndRestore(state);
+      this.saveState(state);
+      return state;
+    }
+
     // 3. Check if waiting phase has arrived at collectable
     if (state.phase === 'waiting' && state.collectAt && now >= state.collectAt) {
       state.phase = 'collectable';
@@ -532,11 +618,16 @@ export class DiagRunner {
   }
 
   /**
-   * Submits user input and executes collect step to generate final verdict.
+   * Submits user input (or auto-evaluates) and executes evaluate step to generate final verdict.
+   * Uses a single-flight lock to prevent duplicate simultaneous evaluations.
    */
   async submitUserAction(userResponses?: Record<string, any>): Promise<DiagResult | null> {
+    if (this.activeEvaluationPromise) {
+      return this.activeEvaluationPromise;
+    }
+
     const state = this.getCurrentState();
-    if (!state) return null;
+    if (!state || state.phase === 'running') return null;
     const spec = this.getSpec(state.testId);
     if (!spec) return null;
 
@@ -559,22 +650,29 @@ export class DiagRunner {
       },
     };
 
-    try {
-      const evalFn = spec.evaluate || (spec as any).collect;
-      const result = await evalFn(ctx, state.userResponses || {});
-      const currentState = this.getCurrentState() || state;
-      currentState.result = result;
-      currentState.phase = 'reported';
-      await this.compareAndRestore(currentState);
-      this.saveState(currentState);
-      return result;
-    } catch (err: any) {
-      const currentState = this.getCurrentState() || state;
-      currentState.phase = 'cancelled';
-      await this.compareAndRestore(currentState);
-      this.saveState(currentState);
-      throw err;
-    }
+    const runPromise = (async (): Promise<DiagResult | null> => {
+      try {
+        const evalFn = spec.evaluate || (spec as any).collect;
+        const result = await evalFn(ctx, state.userResponses || {});
+        const currentState = this.getCurrentState() || state;
+        currentState.result = result;
+        currentState.phase = 'reported';
+        await this.compareAndRestore(currentState);
+        this.saveState(currentState);
+        return result;
+      } catch (err: any) {
+        const currentState = this.getCurrentState() || state;
+        currentState.phase = 'cancelled';
+        await this.compareAndRestore(currentState);
+        this.saveState(currentState);
+        throw err;
+      } finally {
+        this.activeEvaluationPromise = null;
+      }
+    })();
+
+    this.activeEvaluationPromise = runPromise;
+    return runPromise;
   }
 
   /**

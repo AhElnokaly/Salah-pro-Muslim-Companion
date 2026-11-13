@@ -26,24 +26,6 @@ export const TEST_E_SPEC: DiagTestSpec = {
     ctx.logAction('Setting up Test E: Khushu Restore & Transaction Safety');
   },
 
-  schedule: async (ctx: DiagContext) => {
-    const startedAt = ctx.state.startedAt;
-    const expiresAt = startedAt + 5 * 60 * 1000;
-
-    ctx.updateState((s) => ({
-      ...s,
-      phase: 'waiting',
-      collectAt: startedAt, // Instant test, immediately collectable
-      expiresAt,
-    }));
-
-    return {
-      createdAlarmIds: [],
-      collectAt: startedAt,
-      expiresAt,
-    };
-  },
-
   evaluate: async (ctx: DiagContext): Promise<DiagResult> => {
     const startedAt = ctx.state.startedAt;
     const collectedAt = Date.now();
@@ -56,9 +38,37 @@ export const TEST_E_SPEC: DiagTestSpec = {
 
     try {
       // ==========================================
-      // E1: Baseline Check
+      // E1: Baseline Check (Explicit pre-check before touching anything)
       // ==========================================
       const initialStatus = await KhushuMode.getStatus();
+      if (initialStatus.active) {
+        evidenceList.push({
+          alarmId: 'baseline',
+          timestampMs: Date.now(),
+          evidence: 'USER_CONFIRMED',
+          details: `E1 Pre-check: active=${initialStatus.active}, activatedAt=${initialStatus.activatedAt ?? 0}, ringerMode=${initialStatus.ringerMode ?? -1}`,
+        });
+        expectedVsActual.push({
+          parameter: 'E1. حالة الخشوع الابتدائية',
+          expected: 'غير نشط (active === false)',
+          actual: `active=${initialStatus.active}`,
+          status: 'MISMATCH',
+        });
+        return {
+          runId: ctx.runId,
+          testId: 'test-e-khushu-restore-safety',
+          fixRef: 'B1',
+          verdict: 'INCONCLUSIVE',
+          reason: 'يوجد جلسة خشوع نشطة؛ أوقفها ثم أعد الاختبار',
+          startedAt,
+          collectedAt,
+          deviceInfo: { appVersion: '1.2.1' },
+          expectedVsActual,
+          evidenceList,
+          markdownReport: '# تقرير Test E: غير حاسم — يوجد جلسة خشوع نشطة؛ أوقفها ثم أعد الاختبار',
+        };
+      }
+
       const initialDiag = await getAlarmDiagnostics();
 
       const initialRinger = initialStatus.ringerMode ?? -1;
@@ -93,23 +103,6 @@ export const TEST_E_SPEC: DiagTestSpec = {
         status: canScheduleExact ? 'MATCH' : 'MISMATCH',
       });
 
-      // Refuse or mark inconclusive if phone was already silent or in DND
-      if (initialStatus.active) {
-        return {
-          runId: ctx.runId,
-          testId: 'test-e-khushu-restore-safety',
-          fixRef: 'B1',
-          verdict: 'INCONCLUSIVE',
-          reason: 'وضع الخشوع كان نشطاً بالفعل قبل بدء الاختبار. يرجى إلغاء الخشوع أولاً ثم إعادة تشغيل الفحص.',
-          startedAt,
-          collectedAt,
-          deviceInfo: { appVersion: '1.2.1' },
-          expectedVsActual,
-          evidenceList,
-          markdownReport: '# تقرير Test E: ملغى بسبب نشاط مسبق للخشوع',
-        };
-      }
-
       if (initialRinger !== 2) {
         return {
           runId: ctx.runId,
@@ -134,7 +127,23 @@ export const TEST_E_SPEC: DiagTestSpec = {
         durationMinutes: 2,
         origin: 'diag_test',
       });
-      didActivateInTest = true;
+      didActivateInTest = Boolean(act1?.active) && !act1?.alreadyActive;
+
+      if (!didActivateInTest) {
+        return {
+          runId: ctx.runId,
+          testId: 'test-e-khushu-restore-safety',
+          fixRef: 'B1',
+          verdict: 'INCONCLUSIVE',
+          reason: 'يوجد جلسة خشوع نشطة؛ أوقفها ثم أعد الاختبار',
+          startedAt,
+          collectedAt,
+          deviceInfo: { appVersion: '1.2.1' },
+          expectedVsActual,
+          evidenceList,
+          markdownReport: '# تقرير Test E: غير حاسم — توجد جلسة خشوع نشطة عند التفعيل',
+        };
+      }
 
       const statusAfterE2 = await KhushuMode.getStatus();
       evidenceList.push({
