@@ -76,15 +76,30 @@ class KhushuModePlugin : Plugin() {
     fun activate(call: PluginCall) {
         val mode = call.getString("mode") ?: "silent" // "silent" | "dnd"
         val durationMinutes = call.getInt("durationMinutes") ?: 30
+        val origin = call.getString("origin") ?: "manual_ui"
 
         try {
-            KhushuRestoreReceiver.activateKhushuDirectly(context, mode, durationMinutes)
+            val result = KhushuRestoreReceiver.activateKhushuDirectly(context, mode, durationMinutes, sourceKey = "", origin = origin)
 
-            val ret = JSObject()
-            ret.put("active", true)
-            ret.put("mode", mode)
-            ret.put("durationMinutes", durationMinutes)
-            call.resolve(ret)
+            when (result) {
+                KhushuActivationResult.ACTIVATED,
+                KhushuActivationResult.ALREADY_ACTIVE -> {
+                    val ret = JSObject()
+                    ret.put("active", true)
+                    ret.put("mode", mode)
+                    ret.put("durationMinutes", durationMinutes)
+                    ret.put("alreadyActive", result == KhushuActivationResult.ALREADY_ACTIVE)
+                    call.resolve(ret)
+                }
+                KhushuActivationResult.SCHEDULE_FAILED -> {
+                    Log.e(TAG, "Failed to activate Khushu mode: SCHEDULE_FAILED")
+                    call.reject("Failed to activate Khushu mode: Restore schedule failed", "SCHEDULE_FAILED")
+                }
+                KhushuActivationResult.MUTING_FAILED -> {
+                    Log.e(TAG, "Failed to activate Khushu mode: MUTING_FAILED")
+                    call.reject("Failed to activate Khushu mode: Muting application failed", "MUTING_FAILED")
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to activate Khushu mode", e)
             call.reject("Failed to activate Khushu mode: ${e.message}")
@@ -131,12 +146,24 @@ class KhushuModePlugin : Plugin() {
             }
         }
 
+        val ringerMode = audioManager?.ringerMode ?: -1
+        val interruptionFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager?.currentInterruptionFilter ?: -1
+        } else {
+            -1
+        }
+        val hasPendingRestoreAlarm = KhushuRestoreReceiver.hasPendingRestoreAlarm(context)
+
         val ret = JSObject()
         ret.put("active", isActive && remainingSeconds > 0)
         ret.put("mode", mode)
         ret.put("durationMinutes", durationMinutes)
         ret.put("remainingSeconds", remainingSeconds)
         ret.put("hasPermission", hasPermission)
+        ret.put("activatedAt", activatedAt)
+        ret.put("hasPendingRestoreAlarm", hasPendingRestoreAlarm)
+        ret.put("ringerMode", ringerMode)
+        ret.put("interruptionFilter", interruptionFilter)
         call.resolve(ret)
     }
 }

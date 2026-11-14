@@ -38,32 +38,6 @@ export const DAYS_ARABIC_ORDERED = [
 
 export const DEFAULT_WORSHIP_ALARMS: AlarmConfig[] = [
   {
-    id: 'alarm_before_salah',
-    title: 'تنبيه قبل الصلاة',
-    enabled: true,
-    type: 'prayer_relative',
-    prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'],
-    relation: 'before',
-    offsetMinutes: 10,
-    offsetUnit: 'minutes',
-    days: [0, 1, 2, 3, 4, 5, 6],
-    soundType: 'hayya',
-    notifyMode: 'both'
-  },
-  {
-    id: 'alarm_after_salah',
-    title: 'تنبيه بعد الصلاة (الأذكار والسنن)',
-    enabled: true,
-    type: 'prayer_relative',
-    prayers: ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'],
-    relation: 'after',
-    offsetMinutes: 15,
-    offsetUnit: 'minutes',
-    days: [0, 1, 2, 3, 4, 5, 6],
-    soundType: 'salawat',
-    notifyMode: 'both'
-  },
-  {
     id: 'alarm_duha',
     title: 'صلاة الضحى (صلاة الأوابين)',
     enabled: true,

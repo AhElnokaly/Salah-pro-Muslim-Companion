@@ -16,6 +16,7 @@ import { syncUpcomingPrayerSchedule } from '../../utils/prayerScheduleSync';
 import { AppSettings, PrayerTimes, AlarmConfig } from '../../types';
 import { safeGetJSON } from '../../utils/storage';
 import { KhushuStorage } from '../khushu/khushuStorage';
+import { computeKhushuStartMs, resolveKhushuIqamaOffset } from '../khushu/khushuFlowUtils';
 import AthanAlarm, {
   PrayerTimeAlarm,
   DailyPrayerTimesEntry,
@@ -100,12 +101,12 @@ export class UnifiedNotificationOrchestrator {
           asrOffset: settings.prayerOffsets?.Asr || 0,
           maghribOffset: settings.prayerOffsets?.Maghrib || 0,
           ishaOffset: settings.prayerOffsets?.Isha || 0,
-          prayerPreAlert: preAlertEnabled,
-          preAlertMinutes: preAlertMins,
-          preAlertSound,
-          prayerPostAlert: postAlertEnabled,
-          postAlertMinutes: postAlertMins,
-          postAlertSound,
+          prayerPreAlert: false,
+          preAlertMinutes: 15,
+          preAlertSound: 'reminder',
+          prayerPostAlert: false,
+          postAlertMinutes: 15,
+          postAlertSound: 'reminder',
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuSettings,
           customAlarms: resolvedCustomAlarms,
@@ -213,47 +214,19 @@ export class UnifiedNotificationOrchestrator {
           });
         }
 
-        // Pre-alert alarm before prayer time (excluding sunrise) - suppressed if custom alarm exists
-        if (preAlertEnabled && !hasBeforeSalahCustom && key !== 'Sunrise') {
-          const preAlertTimeMs = triggerDate.getTime() - preAlertMins * 60000;
-          if (preAlertTimeMs > Date.now()) {
-            nativeAlarmsToSchedule.push({
-              prayerKey: `${key}_prealert`,
-              prayerName: key,
-              timeMs: preAlertTimeMs,
-              isFajr: key === 'Fajr',
-              alarmType: 'prealert',
-              soundType: preAlertSound,
-            });
-          }
-        }
-
-        // Post-alert worship & adhkar reminder after prayer time (excluding sunrise) - suppressed if custom alarm exists
-        if (postAlertEnabled && !hasAfterSalahCustom && key !== 'Sunrise') {
-          const postAlertTimeMs = triggerDate.getTime() + postAlertMins * 60000;
-          if (postAlertTimeMs > Date.now()) {
-            nativeAlarmsToSchedule.push({
-              prayerKey: `${key}_postalert`,
-              prayerName: key,
-              timeMs: postAlertTimeMs,
-              isFajr: key === 'Fajr',
-              alarmType: 'postalert',
-              soundType: postAlertSound,
-            });
-          }
-        }
+        // System prealert and postalert paths removed in B6.
+        // User-created prayer_relative custom alarms continue to be handled via custom alarms engine.
 
         // Auto Khushu alarm at Iqama moment (excluding sunrise)
         if (khushuSettings.autoWithIqama && key !== 'Sunrise') {
           const lowerKey = key.toLowerCase();
           const isFriday = triggerDate.getDay() === 5;
-          let iqamaOffset = (khushuSettings.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          const iqamaOffset = resolveKhushuIqamaOffset(khushuSettings, lowerKey, isFriday);
           let duration = (khushuSettings.prayerDurations as any)?.[lowerKey] ?? 15;
           if (isFriday && lowerKey === 'dhuhr' && khushuSettings.enableFridaySpecial) {
-            iqamaOffset = khushuSettings.iqamaOffsets.friday || 25;
             duration = khushuSettings.prayerDurations.friday || 45;
           }
-          const iqamaTimeMs = triggerDate.getTime() + iqamaOffset * 60000;
+          const iqamaTimeMs = computeKhushuStartMs(triggerDate.getTime(), iqamaOffset);
           if (iqamaTimeMs > Date.now()) {
             nativeAlarmsToSchedule.push({
               prayerKey: `${key}_khushu`,
@@ -271,14 +244,14 @@ export class UnifiedNotificationOrchestrator {
       if (nativeAlarmsToSchedule.length > 0) {
         const res = await AthanAlarm.scheduleAthanAlarms({
           times: nativeAlarmsToSchedule,
-          prayerPreAlert: preAlertEnabled,
-          preAlertMinutes: preAlertMins,
-          preAlertSound,
-          hasBeforeSalahCustom,
-          prayerPostAlert: postAlertEnabled,
-          postAlertMinutes: postAlertMins,
-          postAlertSound,
-          hasAfterSalahCustom,
+          prayerPreAlert: false,
+          preAlertMinutes: 15,
+          preAlertSound: 'reminder',
+          hasBeforeSalahCustom: false,
+          prayerPostAlert: false,
+          postAlertMinutes: 15,
+          postAlertSound: 'reminder',
+          hasAfterSalahCustom: false,
           khushuAutoWithIqama: khushuSettings.autoWithIqama,
           khushuMode: khushuSettings.preferredMode || 'silent',
           athan_enabled_Fajr: athanEnabledMap['Fajr'],

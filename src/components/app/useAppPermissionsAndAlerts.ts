@@ -52,8 +52,18 @@ export function useAppPermissionsAndAlerts() {
       setExactAlarmPermissionGranted(false);
     };
     window.addEventListener('exact-alarm-permission-missing', handleMissingPerm);
+
+    const handleKhushuError = (e: Event) => {
+      const customEvt = e as CustomEvent<{ message: string }>;
+      if (customEvt.detail?.message) {
+        setToastMessage(customEvt.detail.message);
+      }
+    };
+    window.addEventListener('khushu-activation-error', handleKhushuError);
+
     return () => {
       window.removeEventListener('exact-alarm-permission-missing', handleMissingPerm);
+      window.removeEventListener('khushu-activation-error', handleKhushuError);
     };
   }, []);
 

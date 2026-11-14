@@ -7,6 +7,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Activity, X, ShieldAlert } from 'lucide-react';
 import { AthanDiagnosticsSection } from './settings/adhan/AthanDiagnosticsSection';
+import { APP_VERSION } from '../version';
 
 interface AthanDiagnosticsModalProps {
   isOpen: boolean;
@@ -41,10 +42,10 @@ export const AthanDiagnosticsModal: React.FC<AthanDiagnosticsModalProps> = ({
                 <Activity className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2 flex-wrap">
                   <span>فحص وتشخيص الأذان والتنبيهات</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold">
-                    Diagnostics
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold font-mono">
+                    v{APP_VERSION.version} ({APP_VERSION.commitHash})
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">

@@ -3,15 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RotateCcw, ShieldCheck } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import type { AppSettings, AlarmConfig, SpiritualAlerts } from '../types';
 import { DEFAULT_WORSHIP_ALARMS } from '../utils/alarmUtils';
 import { safeSetItem } from '../utils/storage';
+import { applyPrayerAthanToggle } from '../domain/notifications/prayerAthanToggle';
 import AthanAlarm, { 
   requestNotificationPermission as requestNativeNotificationPermission,
-  cancelNativeAlarm 
+  cancelNativeAlarm
 } from '../services/athanAlarmPlugin';
 import { 
   showAppNotification, 
@@ -37,6 +38,16 @@ import { AlarmDeleteConfirmModal, AlarmRestoreConfirmModal } from './alarms/Alar
 import { AlarmDiagnosticsModal } from './AlarmDiagnosticsModal';
 import SystemAlarmCard from './alarms/SystemAlarmCard';
 import SystemAlarmEditModal, { SystemAlarmItemKey } from './alarms/SystemAlarmEditModal';
+import { isDiagAlarmId } from '../diagnostics/tests/diagTypes';
+
+/**
+ * Pure filter for user-visible custom alarms.
+ * Hides internal diagnostic synthetic alarms (prefixed with 'diag_') at render-time only.
+ */
+export function filterUserVisibleAlarms(alarms: AlarmConfig[]): AlarmConfig[] {
+  if (!Array.isArray(alarms)) return [];
+  return alarms.filter(a => !isDiagAlarmId(a?.id));
+}
 
 interface WorshipAlarmsProps {
   settings: AppSettings;
@@ -65,6 +76,7 @@ export default function WorshipAlarms({
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmConfig | null>(null);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const visibleAlarms = useMemo(() => filterUserVisibleAlarms(customAlarms), [customAlarms]);
 
   // System Push & Smart Notifications State
   const [pushSettings, setPushSettings] = useState<PushNotificationSettings>(() => getPushSettings());
@@ -88,9 +100,13 @@ export default function WorshipAlarms({
   // Keep system push & smart settings updated when changed elsewhere in the app
   useEffect(() => {
     const handlePushChanged = (e: Event) => {
-      const detail = (e as CustomEvent<PushNotificationSettings>).detail;
-      if (detail) setPushSettings(detail);
-      else setPushSettings(getPushSettings());
+      const detail = (e as CustomEvent<PushNotificationSettings & { changedKey?: string }>).detail;
+      if (detail && typeof detail === 'object') {
+        const { changedKey, ...rest } = detail;
+        setPushSettings(prev => ({ ...prev, ...rest }));
+      } else {
+        setPushSettings(getPushSettings());
+      }
     };
     const handleSmartChanged = (e: Event) => {
       const detail = (e as CustomEvent<SmartNotificationsSettings>).detail;
@@ -193,29 +209,7 @@ export default function WorshipAlarms({
     });
 
     // Two-way sync: reflect custom alarm edit in pushSettings
-    if (savedAlarm.id === 'alarm_before_salah') {
-      const updated = {
-        ...pushSettings,
-        prayerPreAlert: savedAlarm.enabled,
-        preAlertMinutes: savedAlarm.offsetMinutes ?? pushSettings.preAlertMinutes,
-      };
-      setPushSettings(updated);
-      savePushSettings(updated);
-      if (isNative) {
-        cancelNativeAlarm({ alarmId: 'prealert' }).catch(() => {});
-      }
-    } else if (savedAlarm.id === 'alarm_after_salah') {
-      const updated = {
-        ...pushSettings,
-        prayerPostAlert: savedAlarm.enabled,
-        postAlertMinutes: savedAlarm.offsetMinutes ?? pushSettings.postAlertMinutes,
-      };
-      setPushSettings(updated);
-      savePushSettings(updated);
-      if (isNative) {
-        cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
-      }
-    } else if (savedAlarm.id === 'alarm_morning_adhkar') {
+    if (savedAlarm.id === 'alarm_morning_adhkar') {
       const updated = {
         ...pushSettings,
         adhkarMorning: savedAlarm.enabled,
@@ -275,46 +269,24 @@ export default function WorshipAlarms({
 
     // If disabled, explicitly cancel any native scheduled alarms
     if (!enabled && isNative) {
-      if (key === 'prayerPreAlert') {
-        cancelNativeAlarm({ alarmId: 'prealert' }).catch(() => {});
-      } else if (key === 'prayerPostAlert') {
-        cancelNativeAlarm({ alarmId: 'postalert' }).catch(() => {});
-      } else if (key === 'prayerAthan') {
-        cancelNativeAlarm({ alarmId: 'athan' }).catch(() => {});
+      if (key === 'prayerAthan') {
+        // Handled inside applyPrayerAthanToggle (prefs -> cancel alarms -> stop audio)
       } else {
         cancelNativeAlarm({ alarmId: key }).catch(() => {});
       }
     }
 
-    // Sync prayerAthan with AppSettings.adhanEnabled
+    // Sync prayerAthan with native prefs & AppSettings.adhanEnabled
     if (key === 'prayerAthan') {
-      setSettings(prev => {
-        const updatedAdhan = { ...prev.adhanEnabled };
-        Object.keys(updatedAdhan).forEach(p => {
-          updatedAdhan[p] = enabled;
-        });
-        return { ...prev, adhanEnabled: updatedAdhan };
+      applyPrayerAthanToggle('prayerAthan', enabled, {
+        saveAppSettings: setSettings,
+      }).catch(err => {
+        console.warn('[WorshipAlarms] applyPrayerAthanToggle failed:', err);
       });
     }
 
     // Two-way sync back to custom alarms if one exists
-    if (key === 'prayerPreAlert') {
-      setCustomAlarms(prev => {
-        if (!prev.some(a => a.id === 'alarm_before_salah')) return prev;
-        const next = prev.map(a => a.id === 'alarm_before_salah' ? { ...a, enabled } : a);
-        safeSetItem('salah_custom_alarms', JSON.stringify(next));
-        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
-        return next;
-      });
-    } else if (key === 'prayerPostAlert') {
-      setCustomAlarms(prev => {
-        if (!prev.some(a => a.id === 'alarm_after_salah')) return prev;
-        const next = prev.map(a => a.id === 'alarm_after_salah' ? { ...a, enabled } : a);
-        safeSetItem('salah_custom_alarms', JSON.stringify(next));
-        window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: next }));
-        return next;
-      });
-    } else if (key === 'adhkarMorning') {
+    if (key === 'adhkarMorning') {
       setCustomAlarms(prev => {
         if (!prev.some(a => a.id === 'alarm_morning_adhkar')) return prev;
         const next = prev.map(a => a.id === 'alarm_morning_adhkar' ? { ...a, enabled } : a);
@@ -367,8 +339,6 @@ export default function WorshipAlarms({
   const enabledCount = customAlarms.filter(a => a.enabled).length;
 
   // De-duplication checks: if custom alarm exists, hide matching system alarm card
-  const hasBeforeSalahCustom = customAlarms.some(a => a.id === 'alarm_before_salah');
-  const hasAfterSalahCustom = customAlarms.some(a => a.id === 'alarm_after_salah');
   const hasMorningAdhkarCustom = customAlarms.some(a => a.id === 'alarm_morning_adhkar');
   const hasEveningAdhkarCustom = customAlarms.some(a => a.id === 'alarm_evening_adhkar');
 
@@ -414,12 +384,12 @@ export default function WorshipAlarms({
             المنبهات المخصصة والعبادات
           </h3>
           <span className="text-[11px] font-bold text-slate-400">
-            {customAlarms.length} منبه
+            {visibleAlarms.length} منبه
           </span>
         </div>
 
-        {customAlarms.length > 0 ? (
-          customAlarms.map(alarm => (
+        {visibleAlarms.length > 0 ? (
+          visibleAlarms.map(alarm => (
             <AlarmCard
               key={alarm.id}
               alarm={alarm}
@@ -437,7 +407,7 @@ export default function WorshipAlarms({
       </div>
 
       {/* Footer / Reset Defaults Helper for Custom Alarms */}
-      {customAlarms.length > 0 && (
+      {visibleAlarms.length > 0 && (
         <div className="flex items-center justify-between pt-1 px-1 text-xs font-bold text-slate-400 flex-wrap gap-2">
           <span>انقر على أي منبه لتعديل موعده، نغمته، أو الصلوات المرتبطة به.</span>
           <button
@@ -477,39 +447,7 @@ export default function WorshipAlarms({
             onEdit={handleOpenSystemEditModal}
           />
 
-          {/* 2. تنبيه قبل الصلاة (prayerPreAlert) — Shown if not overridden by custom alarm */}
-          {!hasBeforeSalahCustom && (
-            <SystemAlarmCard
-              alarmKey="prayerPreAlert"
-              title="تنبيه قبل الصلاة (الاستعداد والوضوء)"
-              timingDesc={`قبل الأذان بـ ${pushSettings.preAlertMinutes || 15} دقيقة`}
-              enabled={pushSettings.prayerPreAlert}
-              isDefault={
-                pushSettings.prayerPreAlert === DEFAULT_PUSH_SETTINGS.prayerPreAlert &&
-                pushSettings.preAlertMinutes === DEFAULT_PUSH_SETTINGS.preAlertMinutes
-              }
-              onToggle={handleToggleSystemAlarm}
-              onEdit={handleOpenSystemEditModal}
-            />
-          )}
-
-          {/* 3. تنبيه بعد الصلاة (prayerPostAlert) — Shown if not overridden by custom alarm */}
-          {!hasAfterSalahCustom && (
-            <SystemAlarmCard
-              alarmKey="prayerPostAlert"
-              title="تنبيه بعد الصلاة (الأذكار والسنن)"
-              timingDesc={`بعد الأذان بـ ${pushSettings.postAlertMinutes || 15} دقيقة`}
-              enabled={pushSettings.prayerPostAlert}
-              isDefault={
-                pushSettings.prayerPostAlert === DEFAULT_PUSH_SETTINGS.prayerPostAlert &&
-                pushSettings.postAlertMinutes === DEFAULT_PUSH_SETTINGS.postAlertMinutes
-              }
-              onToggle={handleToggleSystemAlarm}
-              onEdit={handleOpenSystemEditModal}
-            />
-          )}
-
-          {/* 4. أذكار الصباح (adhkarMorning) — Shown if not overridden by custom alarm */}
+          {/* 2. أذكار الصباح (adhkarMorning) — Shown if not overridden by custom alarm */}
           {!hasMorningAdhkarCustom && (
             <SystemAlarmCard
               alarmKey="adhkarMorning"

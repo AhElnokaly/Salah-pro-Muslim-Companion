@@ -13,11 +13,15 @@ import {
   findNearestLocationCache,
   saveLocationSchedule,
   getLastCachedLocationSchedule,
+  selectUpcomingCachedDays,
 } from '../utils/locationCache';
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
 import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
+import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
+import { migrateRemovedDefaultAlarms } from '../domain/notifications/migrateRemovedDefaultAlarms';
+import { migrateRemovedSystemPrePostAlerts } from '../domain/notifications/migrateRemovedSystemPrePostAlerts';
 
 export { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 
@@ -50,6 +54,7 @@ export function usePrayerScheduler({
 }: UsePrayerSchedulerProps): UsePrayerSchedulerReturn {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const prevPushAthanRef = useRef<boolean | undefined>(undefined);
   const days60ListRef = useRef<DailyPrayerTimesEntry[]>([]);
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
     const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
@@ -59,6 +64,8 @@ export function usePrayerScheduler({
       const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
       const nowMins = today.getHours() * 60 + today.getMinutes();
       const cleaned = saved.filter(a => {
+        if (a.id === 'alarm_before_salah' || a.id === 'alarm_after_salah') return false;
+        if (a.snoozeOf === 'alarm_before_salah' || a.snoozeOf === 'alarm_after_salah') return false;
         if (!a.oneShot && !a.fireDate && !a.id.startsWith('snooze_')) return true;
         if (a.fireDate) {
           if (a.fireDate < todayStr) return false;
@@ -82,24 +89,6 @@ export function usePrayerScheduler({
     let defaults = [...DEFAULT_WORSHIP_ALARMS];
     if (oldAlerts) {
       defaults = defaults.map(def => {
-        if (def.id === 'alarm_before_salah' && oldAlerts.before) {
-          return {
-            ...def,
-            enabled: Boolean(oldAlerts.before.enabled),
-            offsetMinutes: oldAlerts.before.minutes || 10,
-            days: oldAlerts.before.days || def.days,
-            prayers: oldAlerts.before.prayers || def.prayers
-          };
-        }
-        if (def.id === 'alarm_after_salah' && oldAlerts.after) {
-          return {
-            ...def,
-            enabled: Boolean(oldAlerts.after.enabled),
-            offsetMinutes: oldAlerts.after.minutes || 15,
-            days: oldAlerts.after.days || def.days,
-            prayers: oldAlerts.after.prayers || def.prayers
-          };
-        }
         if (def.id === 'alarm_duha' && oldAlerts.duha) {
           return {
             ...def,
@@ -148,6 +137,15 @@ export function usePrayerScheduler({
     return () => {
       window.removeEventListener('custom-alarms-changed', handleAlarmsChanged);
     };
+  }, []);
+
+  useEffect(() => {
+    migrateRemovedDefaultAlarms().catch(err => {
+      console.warn('[usePrayerScheduler] migrateRemovedDefaultAlarms error:', err);
+    });
+    migrateRemovedSystemPrePostAlerts().catch(err => {
+      console.warn('[usePrayerScheduler] migrateRemovedSystemPrePostAlerts error:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -214,7 +212,7 @@ export function usePrayerScheduler({
       let score = 200;
       const lowerTitle = (alarm.title || '').toLowerCase();
       // 1. Prayer alerts & Pre-alerts (Highest priority custom alarms)
-      if (lowerTitle.includes('صلاة') || lowerTitle.includes('أذان') || lowerTitle.includes('اقتربت') || alarm.id === 'alarm_before_salah' || alarm.id === 'alarm_after_salah') {
+      if (lowerTitle.includes('صلاة') || lowerTitle.includes('أذان') || lowerTitle.includes('اقتربت')) {
         score = 800;
       }
       // 2. Morning & Evening Adhkar
@@ -361,15 +359,18 @@ export function usePrayerScheduler({
           settings.prayerOffsets || {}
         );
 
-        if (cached && cached.schedule && cached.schedule.length >= 60) {
-          // Cache hit within 25km with 60 days -> reuse schedule
-          days60List = cached.schedule.map(s => ({
+        const SCHEDULE_BUFFER_DAYS = 30;
+        const upcomingCached = cached && cached.schedule
+          ? selectUpcomingCachedDays(cached.schedule, now, SCHEDULE_BUFFER_DAYS)
+          : null;
+        if (upcomingCached) {
+          days60List = upcomingCached.map(s => ({
             date: new Date(s.dateStr),
             timesMap: s.timesMap,
           }));
         } else {
-          // Cache miss or needs 60-day extension -> compute fresh 60 days
-          for (let i = 0; i < 60; i++) {
+          // Cache miss or needs extension -> compute fresh 30-day buffer
+          for (let i = 0; i < SCHEDULE_BUFFER_DAYS; i++) {
             const d = new Date(now);
             d.setDate(d.getDate() + i);
             const tzOffset = getTimezoneOffsetForLocation(d, settings.timezoneId);
@@ -433,13 +434,15 @@ export function usePrayerScheduler({
           const currentSettings = settingsRef.current;
           let effectiveSettings = currentSettings;
 
-          // If detail has push settings and prayerAthan is false, ensure adhanEnabled has all prayers disabled
-          if (detail && typeof detail === 'object' && 'prayerAthan' in detail && detail.prayerAthan === false) {
-            const updatedAdhan = { ...currentSettings.adhanEnabled };
-            (['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).forEach(p => {
-              updatedAdhan[p] = false;
-            });
-            effectiveSettings = { ...currentSettings, adhanEnabled: updatedAdhan };
+          const overrideResult = resolveAthanOverride(
+            detail,
+            prevPushAthanRef.current,
+            currentSettings.adhanEnabled
+          );
+          prevPushAthanRef.current = overrideResult.nextPrev;
+
+          if (overrideResult.shouldOverride) {
+            effectiveSettings = { ...currentSettings, adhanEnabled: overrideResult.adhanEnabled };
           }
 
           const targetDaysList = days60ListRef.current.length > 0 ? days60ListRef.current : days60List;

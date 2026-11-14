@@ -47,9 +47,13 @@ jobs:
           npm test
 
       - name: Build Web Assets for Mobile 🏗️
-        run: npm run build
+        run: |
+          export VITE_APP_COMMIT_HASH="${GITHUB_SHA::7}"
+          npm run build
         env:
           CAPACITOR_BUILD: 'true'
+          GITHUB_SHA: ${{ github.sha }}
+
 
       - name: Ensure Android Platform Exists 📱
         run: |

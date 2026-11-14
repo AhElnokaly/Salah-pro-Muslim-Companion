@@ -57,6 +57,67 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_SCHEDULED_COUNT = "scheduled_count"
         const val KEY_SCHEDULED_IDS = "scheduled_ids_set"
         const val KEY_SAVED_ALARMS = "saved_alarms_json"
+        const val KEY_NATIVE_EVENT_LOG = "native_event_log_json"
+
+        @JvmStatic
+        @Synchronized
+        fun logNativeEvent(
+            context: Context,
+            event: String,
+            details: String = "",
+            error: String? = null
+        ) {
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_NATIVE_EVENT_LOG, "[]") ?: "[]"
+                val array = JSONArray(raw)
+                val item = JSONObject().apply {
+                    put("timestampMs", System.currentTimeMillis())
+                    put("event", event)
+                    put("details", details)
+                    if (!error.isNullOrEmpty()) {
+                        put("error", error)
+                    }
+                }
+                array.put(item)
+                val trimmedArray = if (array.length() > 300) {
+                    val startIdx = array.length() - 300
+                    val sub = JSONArray()
+                    for (i in startIdx until array.length()) {
+                        sub.put(array.get(i))
+                    }
+                    sub
+                } else {
+                    array
+                }
+                prefs.edit().putString(KEY_NATIVE_EVENT_LOG, trimmedArray.toString()).apply()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to log native event: $event", e)
+            }
+        }
+
+        @JvmStatic
+        fun logNativeEvent(
+            context: Context,
+            event: String,
+            details: String = "",
+            throwable: Throwable
+        ) {
+            val errStr = "${throwable.javaClass.simpleName}: ${throwable.message ?: "no message"}"
+            logNativeEvent(context, event, details, errStr)
+        }
+
+        @JvmStatic
+        fun getNativeEventLogStatic(context: Context): JSONArray {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_NATIVE_EVENT_LOG, "[]") ?: "[]"
+                JSONArray(raw)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed reading native event log", e)
+                JSONArray()
+            }
+        }
 
         @JvmStatic
         fun getDeterministicRequestCode(prayerKey: String, timeMs: Long): Int {
@@ -154,36 +215,53 @@ class AthanAlarmPlugin : Plugin() {
         }
 
         @JvmStatic
+        fun isAlarmInActiveWindow(timeMs: Long, nowMs: Long, windowDays: Long = 14L): Boolean {
+            val maxWindowMs = nowMs + (windowDays * 86400000L)
+            return timeMs > nowMs && timeMs <= maxWindowMs
+        }
+
+        @JvmStatic
+        fun filterAlarmsFor14DayWindow(
+            items: JSONArray,
+            nowMs: Long = System.currentTimeMillis(),
+            windowDays: Long = 14L
+        ): List<JSONObject> {
+            val filtered = mutableListOf<JSONObject>()
+            for (i in 0 until items.length()) {
+                val item = items.optJSONObject(i) ?: continue
+                val timeMs = item.optLong("timeMs", 0L)
+                if (isAlarmInActiveWindow(timeMs, nowMs, windowDays)) {
+                    filtered.add(item)
+                }
+            }
+            return filtered
+        }
+
+        @JvmStatic
         fun reconcileAlarmsInternalStatic(
             context: Context,
             alarmManager: AlarmManager,
             desiredTimesArray: JSONArray
-        ): Map<String, Int> {
+        ): Map<String, Any> {
             val now = System.currentTimeMillis()
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val currentScheduledIds = (prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet()) ?: emptySet()).toMutableSet()
 
-            // 1. Build desired Map: reqCode -> JSONObject
+            // 1. Build desired Map for nearest 14 days using pure filter function
+            val active14DayList = filterAlarmsFor14DayWindow(desiredTimesArray, now, 14L)
             val desiredMap = mutableMapOf<Int, org.json.JSONObject>()
-            for (i in 0 until desiredTimesArray.length()) {
-                try {
-                    val item = desiredTimesArray.getJSONObject(i)
-                    val timeMs = item.optLong("timeMs", 0L)
-                    val prayerKey = item.optString("prayerKey", "")
-                    if (timeMs > now) {
-                        val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
-                        desiredMap[reqCode] = item
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error reading desired alarm at $i", e)
-                }
+            for (item in active14DayList) {
+                val timeMs = item.optLong("timeMs", 0L)
+                val prayerKey = item.optString("prayerKey", "")
+                val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
+                desiredMap[reqCode] = item
             }
 
             var addedCount = 0
             var removedCount = 0
             var retainedCount = 0
 
-            // 2. Identify Obsolete: in currentScheduledIds but NOT in desiredMap
+            // 2. Identify Obsolete: in currentScheduledIds but NOT in desiredMap (including past or slid past 14 days)
             val obsoleteIds = mutableListOf<Int>()
             for (idStr in currentScheduledIds) {
                 val reqCode = idStr.toIntOrNull() ?: continue
@@ -193,13 +271,21 @@ class AthanAlarmPlugin : Plugin() {
             }
 
             for (obsoleteCode in obsoleteIds) {
-                cancelSingleAlarmStatic(context, alarmManager, obsoleteCode)
+                cancelSingleAlarmStatic(context, alarmManager, obsoleteCode, skipLog = true)
                 currentScheduledIds.remove(obsoleteCode.toString())
                 removedCount++
             }
 
-            // 3. Identify Retained vs Missing
-            val newSavedAlarms = JSONArray()
+            if (obsoleteIds.isNotEmpty()) {
+                logNativeEvent(
+                    context,
+                    "alarm_cancel",
+                    "count=${obsoleteIds.size}, reason=reconcile_obsolete"
+                )
+            }
+
+            // 3. Unconditionally re-assert every 14-day alarm in AlarmManager
+            val newScheduledIds = mutableSetOf<String>()
             for ((reqCode, item) in desiredMap) {
                 val timeMs = item.optLong("timeMs", 0L)
                 val prayerName = item.optString("prayerName", "الصلاة")
@@ -212,63 +298,101 @@ class AthanAlarmPlugin : Plugin() {
                 val notifyMode = item.optString("notifyMode", "both")
                 val autoKhushu = item.optBoolean("autoKhushu", false)
 
-                newSavedAlarms.put(item)
-
-                if (currentScheduledIds.contains(reqCode.toString())) {
-                    // Already scheduled and unchanged -> Retain! Do NOT touch AlarmManager.
-                    retainedCount++
-                } else {
-                    // Missing -> Schedule newly!
-                    try {
-                        val intent = createAthanIntent(
-                            context = context,
-                            prayerName = prayerName,
-                            isFajr = isFajr,
-                            prayerKey = prayerKey,
-                            timeMs = timeMs,
-                            alarmType = alarmType,
-                            durationMinutes = durationMinutes,
-                            khushuMode = khushuMode,
-                            soundType = soundType,
-                            notifyMode = notifyMode,
-                            autoKhushu = autoKhushu
+                try {
+                    val intent = createAthanIntent(
+                        context = context,
+                        prayerName = prayerName,
+                        isFajr = isFajr,
+                        prayerKey = prayerKey,
+                        timeMs = timeMs,
+                        alarmType = alarmType,
+                        durationMinutes = durationMinutes,
+                        khushuMode = khushuMode,
+                        soundType = soundType,
+                        notifyMode = notifyMode,
+                        autoKhushu = autoKhushu
+                    )
+                    val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            timeMs,
+                            pendingIntent
                         )
-                        val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            alarmManager.setExactAndAllowWhileIdle(
-                                AlarmManager.RTC_WAKEUP,
-                                timeMs,
-                                pendingIntent
-                            )
-                        } else {
-                            alarmManager.setExact(
-                                AlarmManager.RTC_WAKEUP,
-                                timeMs,
-                                pendingIntent
-                            )
-                        }
-                        currentScheduledIds.add(reqCode.toString())
-                        addedCount++
-                        Log.d(TAG, "Reconcile: Added missing alarm for $prayerName at $timeMs (reqCode=$reqCode)")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error scheduling missing alarm reqCode=$reqCode", e)
+                    } else {
+                        alarmManager.setExact(
+                            AlarmManager.RTC_WAKEUP,
+                            timeMs,
+                            pendingIntent
+                        )
                     }
+
+                    if (currentScheduledIds.contains(reqCode.toString())) {
+                        retainedCount++
+                    } else {
+                        addedCount++
+                    }
+                    newScheduledIds.add(reqCode.toString())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error scheduling 14-day alarm reqCode=$reqCode", e)
+                    logNativeEvent(
+                        context,
+                        "schedule_failed",
+                        "requestCode=$reqCode, prayerKey=$prayerKey, timeMs=$timeMs",
+                        e
+                    )
                 }
             }
 
             // Save updated state ledger
             prefs.edit()
-                .putInt(KEY_SCHEDULED_COUNT, currentScheduledIds.size)
-                .putStringSet(KEY_SCHEDULED_IDS, currentScheduledIds)
-                .putString(KEY_SAVED_ALARMS, newSavedAlarms.toString())
+                .putInt(KEY_SCHEDULED_COUNT, newScheduledIds.size)
+                .putStringSet(KEY_SCHEDULED_IDS, newScheduledIds)
                 .apply()
 
-            Log.d(TAG, "Reconcile completed: added=$addedCount, removed=$removedCount, retained=$retainedCount, total=${currentScheduledIds.size}")
+            // 4. Verify OS registration via PendingIntent.getBroadcast(FLAG_NO_CREATE) for near window (next 20 upcoming alarms)
+            var osVerifiedStr = "unknown"
+            try {
+                val checkFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_NO_CREATE
+                }
+                val checkIntent = Intent(context, AthanAlarmReceiver::class.java).apply {
+                    action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
+                }
+                val nearWindowAlarms = active14DayList
+                    .filter { it.optLong("timeMs", 0L) > now }
+                    .take(20)
+                var verifiedCount = 0
+                for (item in nearWindowAlarms) {
+                    val timeMs = item.optLong("timeMs", 0L)
+                    val prayerKey = item.optString("prayerKey", "")
+                    val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
+                    val pi = PendingIntent.getBroadcast(context, reqCode, checkIntent, checkFlags)
+                    if (pi != null) {
+                        verifiedCount++
+                    }
+                }
+                osVerifiedStr = "$verifiedCount/${nearWindowAlarms.size}"
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed verifying alarms with OS via FLAG_NO_CREATE", e)
+                osVerifiedStr = "unknown"
+            }
+
+            Log.d(TAG, "Reconcile completed: 14-day active total=${newScheduledIds.size}, added=$addedCount, removed=$removedCount, reasserted/retained=$retainedCount, os_verified=$osVerifiedStr")
+            logNativeEvent(
+                context,
+                "reconcile",
+                "scheduled=$addedCount, cancelled=$removedCount, retained=$retainedCount, os_verified=$osVerifiedStr, total=${newScheduledIds.size}"
+            )
+
             return mapOf(
                 "added" to addedCount,
                 "removed" to removedCount,
                 "retained" to retainedCount,
-                "total" to currentScheduledIds.size
+                "os_verified" to osVerifiedStr,
+                "total" to newScheduledIds.size
             )
         }
 
@@ -278,13 +402,14 @@ class AthanAlarmPlugin : Plugin() {
                 ?: return 0
 
             val result = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
-            return result["total"] ?: 0
+            return (result["total"] as? Number)?.toInt() ?: 0
         }
 
         @JvmStatic
         fun cancelAlarmsInternalStatic(context: Context, alarmManager: AlarmManager) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val savedIds = prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet()) ?: emptySet()
+            val totalToCancel = savedIds.size
 
             for (idStr in savedIds) {
                 val reqCode = idStr.toIntOrNull() ?: continue
@@ -293,7 +418,6 @@ class AthanAlarmPlugin : Plugin() {
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
             }
-
             // Fallback sweep for legacy range
             val lastCount = prefs.getInt(KEY_SCHEDULED_COUNT, 150)
             val maxCancel = Math.max(lastCount + 50, 200)
@@ -309,14 +433,29 @@ class AthanAlarmPlugin : Plugin() {
                 .remove(KEY_SCHEDULED_IDS)
                 .putInt(KEY_SCHEDULED_COUNT, 0)
                 .apply()
+
+            logNativeEvent(
+                context,
+                "alarm_cancel",
+                "count=$totalToCancel, reason=cancel_all"
+            )
         }
 
         @JvmStatic
-        fun cancelSingleAlarmStatic(context: Context, alarmManager: AlarmManager, reqCode: Int): Boolean {
+        fun cancelSingleAlarmStatic(
+            context: Context,
+            alarmManager: AlarmManager,
+            reqCode: Int,
+            reason: String = "user_cancel",
+            skipLog: Boolean = false
+        ): Boolean {
             val intent = createAthanIntent(context)
             val pendingIntent = getAthanPendingIntent(context, reqCode, intent)
             alarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
+
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            notificationManager?.cancel(reqCode)
 
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val savedIds = prefs.getStringSet(KEY_SCHEDULED_IDS, emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -324,7 +463,34 @@ class AthanAlarmPlugin : Plugin() {
             if (removed) {
                 prefs.edit().putStringSet(KEY_SCHEDULED_IDS, savedIds).apply()
             }
+
+            if (!skipLog) {
+                logNativeEvent(
+                    context,
+                    "alarm_cancel",
+                    "requestCode=$reqCode, reason=$reason"
+                )
+            }
+
             return true
+        }
+
+        @JvmStatic
+        fun matchesAlarmId(alarmId: String, prayerKey: String, alarmType: String, snoozeOf: String = ""): Boolean {
+            return when (alarmId) {
+                "alarm_before_salah" -> prayerKey.startsWith("custom_alarm_before_salah_") ||
+                                        prayerKey.startsWith("custom_snooze_alarm_before_salah_") ||
+                                        snoozeOf == "alarm_before_salah"
+                "alarm_after_salah" -> prayerKey.startsWith("custom_alarm_after_salah_") ||
+                                       prayerKey.startsWith("custom_snooze_alarm_after_salah_") ||
+                                       snoozeOf == "alarm_after_salah"
+                "prealert" -> alarmType == "prealert" || prayerKey.contains("prealert")
+                "postalert" -> alarmType == "postalert" || prayerKey.contains("postalert")
+                "athan" -> alarmType.isEmpty() || alarmType == "athan"
+                else -> alarmType.equals(alarmId, ignoreCase = true) ||
+                        prayerKey.startsWith("custom_${alarmId}_") ||
+                        prayerKey.contains(alarmId, ignoreCase = true)
+            }
         }
     }
 
@@ -690,7 +856,7 @@ class AthanAlarmPlugin : Plugin() {
 
         // True State Reconciliation: Diff desired vs current scheduled
         val reconcileResult = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
-        val scheduledCount = reconcileResult["total"] ?: 0
+        val scheduledCount = (reconcileResult["total"] as? Number)?.toInt() ?: 0
 
         // Save calculation parameters for offline renewal
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -726,30 +892,7 @@ class AthanAlarmPlugin : Plugin() {
         if (call.hasOption("ishaOffset")) {
             editor.putFloat("ishaOffset", call.getDouble("ishaOffset", 0.0)?.toFloat() ?: 0f)
         }
-        if (call.hasOption("prayerPreAlert")) {
-            editor.putBoolean("prayerPreAlert", call.getBoolean("prayerPreAlert", false) ?: false)
-        }
-        if (call.hasOption("preAlertMinutes")) {
-            editor.putInt("preAlertMinutes", call.getInt("preAlertMinutes", 15) ?: 15)
-        }
-        if (call.hasOption("preAlertSound")) {
-            editor.putString("preAlertSound", call.getString("preAlertSound", "reminder") ?: "reminder")
-        }
-        if (call.hasOption("hasBeforeSalahCustom")) {
-            editor.putBoolean("hasBeforeSalahCustom", call.getBoolean("hasBeforeSalahCustom", false) ?: false)
-        }
-        if (call.hasOption("prayerPostAlert")) {
-            editor.putBoolean("prayerPostAlert", call.getBoolean("prayerPostAlert", false) ?: false)
-        }
-        if (call.hasOption("postAlertMinutes")) {
-            editor.putInt("postAlertMinutes", call.getInt("postAlertMinutes", 15) ?: 15)
-        }
-        if (call.hasOption("postAlertSound")) {
-            editor.putString("postAlertSound", call.getString("postAlertSound", "reminder") ?: "reminder")
-        }
-        if (call.hasOption("hasAfterSalahCustom")) {
-            editor.putBoolean("hasAfterSalahCustom", call.getBoolean("hasAfterSalahCustom", false) ?: false)
-        }
+        // B6: System prealert and postalert prefs saving removed; not read anywhere in Kotlin.
         if (call.hasOption("khushuAutoWithIqama")) {
             editor.putBoolean("khushuAutoWithIqama", call.getBoolean("khushuAutoWithIqama", false) ?: false)
         }
@@ -765,6 +908,7 @@ class AthanAlarmPlugin : Plugin() {
                 editor.putBoolean(key, true)
             }
         }
+        editor.putString(KEY_SAVED_ALARMS, timesArray.toString())
         editor.apply()
 
         val ret = JSObject()
@@ -774,6 +918,29 @@ class AthanAlarmPlugin : Plugin() {
         ret.put("retainedCount", reconcileResult["retained"] ?: 0)
         ret.put("exactAlarmPermissionMissing", false)
         call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun updateAthanPreferences(call: PluginCall) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
+            for (prayer in prayers) {
+                val key = "athan_enabled_$prayer"
+                if (call.hasOption(key)) {
+                    editor.putBoolean(key, call.getBoolean(key, true) ?: true)
+                }
+            }
+            // commit() (synchronous) on purpose: JS awaits this before re-orchestrating alarms.
+            val committed = editor.commit()
+            val ret = JSObject()
+            ret.put("success", committed)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update athan preferences", e)
+            call.reject("Failed to update athan preferences: ${e.message}", e)
+        }
     }
 
     @PluginMethod
@@ -817,10 +984,11 @@ class AthanAlarmPlugin : Plugin() {
 
         val result = reconcileAlarmsInternalStatic(context, alarmManager, timesArray)
         val ret = JSObject()
-        ret.put("scheduledCount", result["total"] ?: 0)
-        ret.put("addedCount", result["added"] ?: 0)
-        ret.put("removedCount", result["removed"] ?: 0)
-        ret.put("retainedCount", result["retained"] ?: 0)
+        ret.put("scheduledCount", (result["total"] as? Number)?.toInt() ?: 0)
+        ret.put("addedCount", (result["added"] as? Number)?.toInt() ?: 0)
+        ret.put("removedCount", (result["removed"] as? Number)?.toInt() ?: 0)
+        ret.put("retainedCount", (result["retained"] as? Number)?.toInt() ?: 0)
+        ret.put("os_verified", result["os_verified"] as? String ?: "unknown")
         ret.put("exactAlarmPermissionMissing", false)
         call.resolve(ret)
     }
@@ -848,7 +1016,7 @@ class AthanAlarmPlugin : Plugin() {
         if (reqCode != null) {
             var success = false
             if (alarmManager != null) {
-                success = cancelSingleAlarmStatic(context, alarmManager, reqCode)
+                success = cancelSingleAlarmStatic(context, alarmManager, reqCode, reason = "cancel_request_code")
             }
             val ret = JSObject()
             ret.put("cancelled", success)
@@ -870,22 +1038,25 @@ class AthanAlarmPlugin : Plugin() {
                             val item = array.getJSONObject(i)
                             val pKey = item.optString("prayerKey", "")
                             val aType = item.optString("alarmType", "")
-                            val matches = aType.equals(alarmId, ignoreCase = true) ||
-                                          pKey.contains(alarmId, ignoreCase = true) ||
-                                          (alarmId == "prealert" && (aType == "prealert" || pKey.contains("prealert"))) ||
-                                          (alarmId == "postalert" && (aType == "postalert" || pKey.contains("postalert"))) ||
-                                          (alarmId == "athan" && (aType.isEmpty() || aType == "athan"))
-
+                            val matches = matchesAlarmId(alarmId, pKey, aType, item.optString("snoozeOf", ""))
                             if (matches) {
                                 val timeMs = item.optLong("timeMs", 0L)
                                 val code = getDeterministicRequestCode(pKey, timeMs)
-                                cancelSingleAlarmStatic(context, alarmManager, code)
+                                cancelSingleAlarmStatic(context, alarmManager, code, skipLog = true)
                                 cancelledCount++
                             } else {
                                 remaining.put(item)
                             }
                         }
                         prefs.edit().putString(KEY_SAVED_ALARMS, remaining.toString()).apply()
+
+                        if (cancelledCount > 0) {
+                            logNativeEvent(
+                                context,
+                                "alarm_cancel",
+                                "count=$cancelledCount, reason=cancel_by_alarmId($alarmId)"
+                            )
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error cancelling alarms for alarmId=$alarmId", e)
                     }
@@ -1308,6 +1479,31 @@ class AthanAlarmPlugin : Plugin() {
         } else -1
         ret.put("standbyBucket", standbyBucket)
 
+        // 7. Native event log (last 100 events, newest first)
+        val nativeEventsArray = JSArray()
+        try {
+            val events = getNativeEventLogStatic(context)
+            val total = events.length()
+            val count = Math.min(total, 100)
+            for (i in 0 until count) {
+                val idx = total - 1 - i
+                val obj = events.getJSONObject(idx)
+                val jsObj = JSObject()
+                jsObj.put("timestampMs", obj.optLong("timestampMs", 0L))
+                jsObj.put("event", obj.optString("event", ""))
+                jsObj.put("details", obj.optString("details", ""))
+                if (obj.has("error") && !obj.isNull("error")) {
+                    jsObj.put("error", obj.optString("error", ""))
+                }
+                nativeEventsArray.put(jsObj)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in getAlarmDiagnostics reading native events", e)
+        }
+        val lastBootTimestamp = prefs.getLong("last_device_boot_timestamp", 0L)
+        ret.put("lastDeviceBootTimestamp", lastBootTimestamp)
+        ret.put("nativeEvents", nativeEventsArray)
+
         call.resolve(ret)
     }
 
@@ -1572,6 +1768,39 @@ class AthanAlarmPlugin : Plugin() {
             }
             notifyListeners("apkDownloadError", errorData)
             call.reject("Failed to start download: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun getNativeEventLog(call: PluginCall) {
+        try {
+            val eventsArray = getNativeEventLogStatic(context)
+            val limit = call.getInt("limit", 100) ?: 100
+            val ret = JSObject()
+            val list = com.getcapacitor.JSArray()
+            val total = eventsArray.length()
+            val count = Math.min(total, limit)
+            for (i in 0 until count) {
+                val idx = total - 1 - i
+                val obj = eventsArray.getJSONObject(idx)
+                val jsObj = JSObject()
+                jsObj.put("timestampMs", obj.optLong("timestampMs", 0L))
+                jsObj.put("event", obj.optString("event", ""))
+                jsObj.put("details", obj.optString("details", ""))
+                if (obj.has("error") && !obj.isNull("error")) {
+                    jsObj.put("error", obj.optString("error", ""))
+                }
+                list.put(jsObj)
+            }
+            ret.put("events", list)
+            ret.put("total", total)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get native event log", e)
+            val ret = JSObject()
+            ret.put("events", com.getcapacitor.JSArray())
+            ret.put("total", 0)
+            call.resolve(ret)
         }
     }
 

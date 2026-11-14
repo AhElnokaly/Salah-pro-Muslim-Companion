@@ -3,6 +3,9 @@ import { parseTimeToMinutes } from '../utils/prayerCalc';
 import { PrayerTimes, AlarmConfig } from '../types';
 import { prayerCanonicalNames } from '../domain/notifications/prayerCanonicalNames';
 import { KhushuSettings } from '../domain/khushu/khushuTypes';
+import { computeKhushuStartMs, resolveKhushuIqamaOffset } from '../domain/khushu/khushuFlowUtils';
+import { isDiagAlarmId } from '../diagnostics/tests/diagTypes';
+import { safeGetJSON } from '../utils/storage';
 
 export interface PrayerTimeAlarm {
   prayerKey: string;
@@ -15,6 +18,7 @@ export interface PrayerTimeAlarm {
   soundType?: string;
   notifyMode?: string;
   autoKhushu?: boolean;
+  snoozeOf?: string;
 }
 
 export interface ScheduleAthanResult {
@@ -31,6 +35,7 @@ export interface ReconcileAthanResult {
   removedCount: number;
   retainedCount: number;
   exactAlarmPermissionMissing?: boolean;
+  os_verified?: string;
 }
 
 export interface ScheduledAlarmItem extends PrayerTimeAlarm {
@@ -87,6 +92,13 @@ export interface AthanAlarmPlugin {
   downloadAndInstallApk?(options: { url: string }): Promise<{ success: boolean; message?: string }>;
   stopAthan?(): Promise<{ stopped: boolean }>;
   isNativeAthanRunning?(): Promise<{ isRunning: boolean }>;
+  updateAthanPreferences?(options: {
+    athan_enabled_Fajr?: boolean;
+    athan_enabled_Dhuhr?: boolean;
+    athan_enabled_Asr?: boolean;
+    athan_enabled_Maghrib?: boolean;
+    athan_enabled_Isha?: boolean;
+  }): Promise<{ success: boolean }>;
   setNativeAthanFiles?(options: {
     paths?: NativeAthanPathsMap;
     generalPath?: string;
@@ -103,7 +115,20 @@ export interface AthanAlarmPlugin {
   listAthanCache?(): Promise<Record<string, { exists: boolean; sizeBytes: number }>>;
   getLastAthanPlay?(): Promise<LastAthanPlayRecord>;
   getAlarmDiagnostics?(): Promise<AlarmDiagnosticsResult>;
+  getNativeEventLog?(options?: { limit?: number }): Promise<NativeEventLogResult>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
+}
+
+export interface NativeLogEvent {
+  timestampMs: number;
+  event: string;
+  details: string;
+  error?: string;
+}
+
+export interface NativeEventLogResult {
+  events: NativeLogEvent[];
+  total: number;
 }
 
 export interface SavedNativeAlarmItem {
@@ -133,6 +158,56 @@ export interface AlarmDiagnosticsResult {
   isIgnoringBatteryOptimizations: boolean;
   canScheduleExactAlarms: boolean;
   standbyBucket: number;
+  nativeEvents?: NativeLogEvent[];
+  lastDeviceBootTimestamp?: number;
+}
+
+export interface ScheduledAlarmCountsByType {
+  athan: number;
+  prealert: number;
+  postalert: number;
+  khushu: number;
+  custom: number;
+  other: number;
+  total: number;
+}
+
+export function groupScheduledAlarmsByType(
+  alarms?: Array<{ alarmType?: string }> | null
+): ScheduledAlarmCountsByType {
+  const counts: ScheduledAlarmCountsByType = {
+    athan: 0,
+    prealert: 0,
+    postalert: 0,
+    khushu: 0,
+    custom: 0,
+    other: 0,
+    total: 0,
+  };
+
+  if (!alarms || !Array.isArray(alarms)) {
+    return counts;
+  }
+
+  for (const alarm of alarms) {
+    counts.total++;
+    const type = (alarm?.alarmType || '').toLowerCase().trim();
+    if (type === 'athan') {
+      counts.athan++;
+    } else if (type === 'prealert') {
+      counts.prealert++;
+    } else if (type === 'postalert') {
+      counts.postalert++;
+    } else if (type === 'khushu') {
+      counts.khushu++;
+    } else if (type === 'custom') {
+      counts.custom++;
+    } else {
+      counts.other++;
+    }
+  }
+
+  return counts;
 }
 
 export interface LastAthanPlayRecord {
@@ -166,7 +241,13 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     },
     reconcileAthanAlarms: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback simulation for reconciling native alarms:', options.times.length);
-      return { scheduledCount: options.times.length, addedCount: options.times.length, removedCount: 0, retainedCount: 0 };
+      return {
+        scheduledCount: options.times.length,
+        addedCount: options.times.length,
+        removedCount: 0,
+        retainedCount: 0,
+        os_verified: `${Math.min(options.times.length, 20)}/${Math.min(options.times.length, 20)}`,
+      };
     },
     getScheduledAlarms: async () => {
       console.log('[AthanAlarm Plugin]: Web fallback getScheduledAlarms');
@@ -220,7 +301,11 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
         isIgnoringBatteryOptimizations: true,
         canScheduleExactAlarms: true,
         standbyBucket: 10,
+        nativeEvents: [],
       };
+    },
+    getNativeEventLog: async () => {
+      return { events: [], total: 0 };
     },
     updateWidgetData: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback for updating widget data:', options);
@@ -433,8 +518,26 @@ export function buildNativePrayerTimeAlarms(
       customList.forEach((alarm) => {
         if (!alarm.enabled) return;
 
-        // If oneShot is set, it must ONLY be scheduled for its specific fireDate (never weekly via days[])
-        if (alarm.oneShot) {
+        // If oneShot is set or it is a diagnostic alarm, it must ONLY be scheduled for its specific fireDate (never weekly via days[])
+        const isDiag = isDiagAlarmId(alarm.id);
+        if (isDiag) {
+          // F6: Skip diag alarm unless diag_run_state exists, has phase === 'waiting', and alarm.id is in createdAlarmIds
+          const diagState = safeGetJSON<any>('diag_run_state', null);
+          if (
+            !diagState ||
+            diagState.phase !== 'waiting' ||
+            !Array.isArray(diagState.createdAlarmIds) ||
+            !diagState.createdAlarmIds.includes(alarm.id)
+          ) {
+            return;
+          }
+          if (!alarm.fireDate) return;
+          const dayDateYear = dayDate.getFullYear();
+          const dayDateMonth = (dayDate.getMonth() + 1).toString().padStart(2, '0');
+          const dayDateDay = dayDate.getDate().toString().padStart(2, '0');
+          const dayDateStr = `${dayDateYear}-${dayDateMonth}-${dayDateDay}`;
+          if (dayDateStr !== alarm.fireDate) return;
+        } else if (alarm.oneShot) {
           if (!alarm.fireDate) return;
           const dayDateYear = dayDate.getFullYear();
           const dayDateMonth = (dayDate.getMonth() + 1).toString().padStart(2, '0');
@@ -456,7 +559,9 @@ export function buildNativePrayerTimeAlarms(
           const timeMs = targetDate.getTime();
           if (timeMs > now) {
             times.push({
-              prayerKey: `custom_${alarm.id}_${timeMs}`,
+              prayerKey: alarm.snoozeOf
+                ? `custom_snooze_${alarm.snoozeOf}_${alarm.id}_${timeMs}`
+                : `custom_${alarm.id}_${timeMs}`,
               prayerName: alarm.title || 'منبه مخصص',
               timeMs,
               isFajr: false,
@@ -465,6 +570,7 @@ export function buildNativePrayerTimeAlarms(
               notifyMode: alarm.notifyMode || 'both',
               autoKhushu: Boolean(alarm.autoKhushu),
               durationMinutes: alarm.khushuDurationMinutes || 15,
+              snoozeOf: alarm.snoozeOf,
             });
           }
           return;
@@ -496,16 +602,15 @@ export function buildNativePrayerTimeAlarms(
             // Task 6: Khushu collision check for custom post-prayer alarms
             if (khushuEnabled && lowerTarget !== 'sunrise' && alarm.relation === 'after') {
               const isFriday = dayDate.getDay() === 5;
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerTarget] ?? 15;
+              const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerTarget, isFriday);
               let duration = (ks?.prayerDurations as any)?.[lowerTarget] ?? 15;
               if (isFriday && lowerTarget === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
                 duration = ks.prayerDurations.friday || 45;
               }
               const pBaseDate = new Date(dayDate);
               pBaseDate.setHours(0, 0, 0, 0);
               const prayerTimeMs = pBaseDate.getTime() + basePrayerMins * 60000;
-              const iqamaTimeMs = prayerTimeMs + iqamaOffset * 60000;
+              const iqamaTimeMs = computeKhushuStartMs(prayerTimeMs, iqamaOffset);
               const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
 
               if (timeMs >= iqamaTimeMs && timeMs < khushuEndTimeMs) {
@@ -574,62 +679,16 @@ export function buildNativePrayerTimeAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-            const preMins = calcParams.preAlertMinutes || 15;
-            const preTimeMs = timeMs - preMins * 60000;
-            if (preTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: preTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'prealert',
-                soundType: calcParams.preAlertSound || 'reminder',
-              });
-            }
-          }
-
-          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-            const postMins = calcParams.postAlertMinutes || 15;
-            let postTimeMs = timeMs + postMins * 60000;
-
-            if (khushuEnabled) {
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-              let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-              if (isFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
-                duration = ks.prayerDurations.friday || 45;
-              }
-              const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-              const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-              if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-                const oldTime = postTimeMs;
-                postTimeMs = khushuEndTimeMs;
-                console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-              }
-            }
-
-            if (postTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: postTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'postalert',
-                soundType: calcParams.postAlertSound || 'reminder',
-              });
-            }
-          }
+          // System prealert and postalert paths removed in B6.
+          // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isFriday);
             let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
             if (isFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
               duration = ks.prayerDurations.friday || 45;
             }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
             if (iqamaTimeMs > now) {
               times.push({
                 prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
@@ -677,62 +736,16 @@ export function buildNativePrayerTimeAlarms(
           });
         }
 
-        if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-          const preMins = calcParams.preAlertMinutes || 15;
-          const preTimeMs = timeMs - preMins * 60000;
-          if (preTimeMs > now) {
-            times.push({
-              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-              prayerName: prayerArabicNames[lowerKey],
-              timeMs: preTimeMs,
-              isFajr: lowerKey === 'fajr',
-              alarmType: 'prealert',
-              soundType: calcParams.preAlertSound || 'reminder',
-            });
-          }
-        }
-
-        if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-          const postMins = calcParams.postAlertMinutes || 15;
-          let postTimeMs = timeMs + postMins * 60000;
-
-          if (khushuEnabled) {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-            let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-            if (isTodayFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
-              duration = ks.prayerDurations.friday || 45;
-            }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-            const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-            if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-              const oldTime = postTimeMs;
-              postTimeMs = khushuEndTimeMs;
-              console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-            }
-          }
-
-          if (postTimeMs > now) {
-            times.push({
-              prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-              prayerName: prayerArabicNames[lowerKey],
-              timeMs: postTimeMs,
-              isFajr: lowerKey === 'fajr',
-              alarmType: 'postalert',
-              soundType: calcParams.postAlertSound || 'reminder',
-            });
-          }
-        }
+        // System prealert and postalert paths removed in B6.
+        // User-created prayer_relative custom alarms continue to be generated below.
 
         if (khushuEnabled && lowerKey !== 'sunrise') {
-          let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+          const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isTodayFriday);
           let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
           if (isTodayFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-            iqamaOffset = ks.iqamaOffsets.friday || 25;
             duration = ks.prayerDurations.friday || 45;
           }
-          const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+          const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
           if (iqamaTimeMs > now) {
             times.push({
               prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
@@ -780,62 +793,16 @@ export function buildNativePrayerTimeAlarms(
             });
           }
 
-          if (calcParams?.prayerPreAlert && !hasBeforeSalahCustom && lowerKey !== 'sunrise') {
-            const preMins = calcParams.preAlertMinutes || 15;
-            const preTimeMs = timeMs - preMins * 60000;
-            if (preTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_prealert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: preTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'prealert',
-                soundType: calcParams.preAlertSound || 'reminder',
-              });
-            }
-          }
-
-          if (calcParams?.prayerPostAlert && !hasAfterSalahCustom && lowerKey !== 'sunrise') {
-            const postMins = calcParams.postAlertMinutes || 15;
-            let postTimeMs = timeMs + postMins * 60000;
-
-            if (khushuEnabled) {
-              let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
-              let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
-              if (isTomorrowFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-                iqamaOffset = ks.iqamaOffsets.friday || 25;
-                duration = ks.prayerDurations.friday || 45;
-              }
-              const iqamaTimeMs = timeMs + iqamaOffset * 60000;
-              const khushuEndTimeMs = iqamaTimeMs + duration * 60000;
-
-              if (postTimeMs >= iqamaTimeMs && postTimeMs < khushuEndTimeMs) {
-                const oldTime = postTimeMs;
-                postTimeMs = khushuEndTimeMs;
-                console.log(`[ALARM] kind=postalert shifted from=${new Date(oldTime).toISOString()} to=${new Date(postTimeMs).toISOString()} reason=khushu_window_collision`);
-              }
-            }
-
-            if (postTimeMs > now) {
-              times.push({
-                prayerKey: `${prayerCanonicalNames[lowerKey] || key}_postalert`,
-                prayerName: prayerArabicNames[lowerKey],
-                timeMs: postTimeMs,
-                isFajr: lowerKey === 'fajr',
-                alarmType: 'postalert',
-                soundType: calcParams.postAlertSound || 'reminder',
-              });
-            }
-          }
+          // System prealert and postalert paths removed in B6.
+          // User-created prayer_relative custom alarms continue to be generated below.
 
           if (khushuEnabled && lowerKey !== 'sunrise') {
-            let iqamaOffset = (ks?.iqamaOffsets as any)?.[lowerKey] ?? 15;
+            const iqamaOffset = resolveKhushuIqamaOffset(ks, lowerKey, isTomorrowFriday);
             let duration = (ks?.prayerDurations as any)?.[lowerKey] ?? 15;
             if (isTomorrowFriday && lowerKey === 'dhuhr' && ks?.enableFridaySpecial) {
-              iqamaOffset = ks.iqamaOffsets.friday || 25;
               duration = ks.prayerDurations.friday || 45;
             }
-            const iqamaTimeMs = timeMs + iqamaOffset * 60000;
+            const iqamaTimeMs = computeKhushuStartMs(timeMs, iqamaOffset);
             if (iqamaTimeMs > now) {
               times.push({
                 prayerKey: `${prayerCanonicalNames[lowerKey] || key}_khushu`,
@@ -927,14 +894,14 @@ export async function scheduleNativeAthanAlarms(
       asrOffset: calcParams?.asrOffset,
       maghribOffset: calcParams?.maghribOffset,
       ishaOffset: calcParams?.ishaOffset,
-      prayerPreAlert: calcParams?.prayerPreAlert,
-      preAlertMinutes: calcParams?.preAlertMinutes,
+      prayerPreAlert: false,
+      preAlertMinutes: calcParams?.preAlertMinutes || 15,
       preAlertSound: calcParams?.preAlertSound || 'reminder',
-      hasBeforeSalahCustom,
-      prayerPostAlert: calcParams?.prayerPostAlert,
-      postAlertMinutes: calcParams?.postAlertMinutes,
+      hasBeforeSalahCustom: false,
+      prayerPostAlert: false,
+      postAlertMinutes: calcParams?.postAlertMinutes || 15,
       postAlertSound: calcParams?.postAlertSound || 'reminder',
-      hasAfterSalahCustom,
+      hasAfterSalahCustom: false,
       khushuAutoWithIqama: calcParams?.khushuAutoWithIqama,
       khushuMode: calcParams?.khushuSettings?.preferredMode || 'silent',
       athan_enabled_Fajr: athanMap['Fajr'] ?? true,
@@ -955,6 +922,19 @@ export async function scheduleNativeAthanAlarms(
   } catch (err) {
     console.warn('[AthanAlarm]: Error scheduling native athan alarms:', err);
     return 0;
+  }
+}
+
+export async function reconcileNativeAthanAlarms(options: {
+  times: PrayerTimeAlarm[];
+}): Promise<ReconcileAthanResult | null> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!plugin.reconcileAthanAlarms) return null;
+  try {
+    return await plugin.reconcileAthanAlarms(options);
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=RECONCILE [AthanAlarmPlugin] reconcileAthanAlarms error:', err);
+    return null;
   }
 }
 
@@ -1061,8 +1041,9 @@ export async function downloadAndInstallAppUpdate(
 export async function stopNativeAthan(): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return true;
   try {
-    if (AthanAlarm.stopAthan) {
-      const res = await AthanAlarm.stopAthan();
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.stopAthan) {
+      const res = await plugin.stopAthan();
       return res?.stopped ?? true;
     }
     return true;
@@ -1093,14 +1074,104 @@ export async function isNativeAthanRunning(): Promise<boolean> {
 }
 
 export async function cancelNativeAlarm(options: { alarmId?: string; requestCode?: number }): Promise<boolean> {
-  if (!Capacitor.isNativePlatform() || !AthanAlarm.cancelAlarm) return true;
+  if (!Capacitor.isNativePlatform()) return true;
   try {
-    const res = await AthanAlarm.cancelAlarm(options);
-    return res?.cancelled ?? false;
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.cancelAlarm) {
+      const res = await plugin.cancelAlarm(options);
+      return res?.cancelled ?? false;
+    }
+    return true;
   } catch (err) {
     console.warn('[AthanAlarmPlugin] cancelAlarm error:', err);
     return false;
   }
+}
+
+/**
+ * Writes the per-prayer athan_enabled_<Prayer> flags to native SharedPreferences (synchronous commit() on the native side).
+ * Returns false when the native method is missing or fails; true on web (no-op).
+ */
+export async function syncAthanPreferencesToNative(
+  enabledMap: Partial<Record<'Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha', boolean>>
+): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (plugin.updateAthanPreferences) {
+      const res = await plugin.updateAthanPreferences({
+        athan_enabled_Fajr: enabledMap.Fajr,
+        athan_enabled_Dhuhr: enabledMap.Dhuhr,
+        athan_enabled_Asr: enabledMap.Asr,
+        athan_enabled_Maghrib: enabledMap.Maghrib,
+        athan_enabled_Isha: enabledMap.Isha,
+      });
+      return res?.success ?? false;
+    }
+    console.warn('[AthanAlarmPlugin] updateAthanPreferences method not available on plugin');
+    return false;
+  } catch (err) {
+    console.warn('[AthanAlarmPlugin] syncAthanPreferencesToNative error:', err);
+    return false;
+  }
+}
+
+/**
+ * Master athan toggle -> native. Order matters:
+ * 1) write the 5 prefs (so a firing alarm's guard sees the new value),
+ * 2) when turning OFF: cancel scheduled athan alarms, then stop any playing athan.
+ */
+export interface MasterAthanSyncResult {
+  /** The 5 athan_enabled_<Prayer> flags were committed natively. */
+  prefsSaved: boolean;
+  /** Scheduled athan alarms cancelled (true when ON or when cancel was skipped). */
+  alarmsCancelled: boolean;
+  /** Playing native athan stopped (true when ON or when stop was skipped). */
+  audioStopped: boolean;
+  /** Full success: every step required for this direction succeeded. */
+  ok: boolean;
+}
+
+export async function syncMasterAthanToggleDetailed(
+  enabled: boolean,
+  options?: { stopNativeAudio?: boolean; cancelAlarms?: boolean }
+): Promise<MasterAthanSyncResult> {
+  const prefsSaved = await syncAthanPreferencesToNative({
+    Fajr: enabled,
+    Dhuhr: enabled,
+    Asr: enabled,
+    Maghrib: enabled,
+    Isha: enabled,
+  });
+
+  let alarmsCancelled = true;
+  let audioStopped = true;
+
+  if (!enabled) {
+    if (options?.cancelAlarms !== false) {
+      // cancelNativeAlarm reports failure via its boolean result (it rarely throws).
+      alarmsCancelled = await cancelNativeAlarm({ alarmId: 'athan' }).catch(err => {
+        console.warn('[AthanAlarmPlugin] cancelNativeAlarm failed during toggle OFF:', err);
+        return false;
+      });
+    }
+    if (options?.stopNativeAudio !== false) {
+      audioStopped = await stopNativeAthan().catch(err => {
+        console.warn('[AthanAlarmPlugin] stopNativeAthan failed during toggle OFF:', err);
+        return false;
+      });
+    }
+  }
+
+  return { prefsSaved, alarmsCancelled, audioStopped, ok: prefsSaved && alarmsCancelled && audioStopped };
+}
+
+/** Boolean wrapper: true only when EVERY required step succeeded (see syncMasterAthanToggleDetailed). */
+export async function syncMasterAthanToggle(
+  enabled: boolean,
+  options?: { stopNativeAudio?: boolean; cancelAlarms?: boolean }
+): Promise<boolean> {
+  return (await syncMasterAthanToggleDetailed(enabled, options)).ok;
 }
 
 export async function cancelAllNativeAlarms(): Promise<boolean> {
@@ -1201,6 +1272,19 @@ export async function getAlarmDiagnostics(): Promise<AlarmDiagnosticsResult | nu
   } catch (err) {
     console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getAlarmDiagnostics error:', err);
     return null;
+  }
+}
+
+export async function getNativeEventLog(limit: number = 100): Promise<NativeLogEvent[]> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return [];
+  if (!plugin.getNativeEventLog) return [];
+  try {
+    const res = await plugin.getNativeEventLog({ limit });
+    return res?.events || [];
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getNativeEventLog error:', err);
+    return [];
   }
 }
 

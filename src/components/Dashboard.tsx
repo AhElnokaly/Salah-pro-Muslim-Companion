@@ -405,6 +405,7 @@ export default function Dashboard({
         dhikrLogs={dhikrLogs}
         quranSessions={quranSessions}
         khatmat={khatmat}
+        voluntaryPrayerLogs={voluntaryPrayerLogs}
         isWomenExcuse={settings?.isWomenExcuse}
         onNavigateTab={(tab) => setActiveTab && setActiveTab(tab as DashboardTab)}
         appStyle={currentStyle}

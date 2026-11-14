@@ -115,7 +115,7 @@ describe('Phase 6: System Worship Alarms & De-duplication', () => {
     assert.equal(resAthan, true, 'cancelNativeAlarm must succeed for athan');
   });
 
-  test('TASK 7: building native items with preAlertSound="hayya" yields soundType "hayya"; default is "reminder"; with custom alarm_before_salah present, no system prealert items are built', async () => {
+  test('TASK 7 (B6): no system prealert or postalert items are produced even with stored flags true; prayer_relative custom alarms still produce items', async () => {
     const tomorrow = new Date(Date.now() + 86400000);
     const daysEntry: DailyPrayerTimesEntry[] = [
       {
@@ -131,8 +131,8 @@ describe('Phase 6: System Worship Alarms & De-duplication', () => {
       }
     ];
 
-    // 1. With preAlertSound='hayya'
-    const itemsWithHayya = buildNativePrayerTimeAlarms(daysEntry, undefined, {
+    // 1. With prayerPreAlert=true and prayerPostAlert=true: NO system prealert/postalert items must be built
+    const items = buildNativePrayerTimeAlarms(daysEntry, undefined, {
       prayerPreAlert: true,
       preAlertMinutes: 15,
       preAlertSound: 'hayya',
@@ -141,48 +141,24 @@ describe('Phase 6: System Worship Alarms & De-duplication', () => {
       postAlertSound: 'salawat',
     });
 
-    const preAlertItems = itemsWithHayya.filter((t) => t.alarmType === 'prealert');
-    assert.ok(preAlertItems.length > 0, 'Should build prealert items for tomorrow');
-    for (const item of preAlertItems) {
-      assert.equal(item.soundType, 'hayya', `prealert soundType must be 'hayya', got ${item.soundType}`);
-    }
+    const preAlertItems = items.filter((t) => t.alarmType === 'prealert');
+    assert.equal(preAlertItems.length, 0, 'No system prealert items must be built under B6');
 
-    const postAlertItems = itemsWithHayya.filter((t) => t.alarmType === 'postalert');
-    assert.ok(postAlertItems.length > 0, 'Should build postalert items for tomorrow');
-    for (const item of postAlertItems) {
-      assert.equal(item.soundType, 'salawat', `postalert soundType must be 'salawat', got ${item.soundType}`);
-    }
+    const postAlertItems = items.filter((t) => t.alarmType === 'postalert');
+    assert.equal(postAlertItems.length, 0, 'No system postalert items must be built under B6');
 
-    // 2. Default sound fallback is 'reminder'
-    const itemsWithDefaults = buildNativePrayerTimeAlarms(daysEntry, undefined, {
+    // 2. User-created prayer_relative custom alarms continue to produce items
+    const itemsWithCustom = buildNativePrayerTimeAlarms(daysEntry, undefined, {
       prayerPreAlert: true,
-      preAlertMinutes: 15,
       prayerPostAlert: true,
-      postAlertMinutes: 15,
-    });
-
-    const defaultPreItems = itemsWithDefaults.filter((t) => t.alarmType === 'prealert');
-    assert.ok(defaultPreItems.length > 0);
-    for (const item of defaultPreItems) {
-      assert.equal(item.soundType, 'reminder', `Default prealert soundType must be 'reminder', got ${item.soundType}`);
-    }
-
-    const defaultPostItems = itemsWithDefaults.filter((t) => t.alarmType === 'postalert');
-    assert.ok(defaultPostItems.length > 0);
-    for (const item of defaultPostItems) {
-      assert.equal(item.soundType, 'reminder', `Default postalert soundType must be 'reminder', got ${item.soundType}`);
-    }
-
-    // 3. With a custom alarm_before_salah present, no system prealert items are built
-    const itemsWithCustomBefore = buildNativePrayerTimeAlarms(daysEntry, undefined, {
-      prayerPreAlert: true,
-      preAlertMinutes: 15,
-      preAlertSound: 'hayya',
       customAlarms: [
         {
-          id: 'alarm_before_salah',
-          title: 'تنبيه مخصص قبل الصلاة',
+          id: 'user_before_fajr',
+          title: 'استيقاظ قبل الفجر',
           enabled: true,
+          type: 'prayer_relative',
+          relation: 'before',
+          prayers: ['Fajr'],
           offsetMinutes: 20,
           soundType: 'takbeer',
           days: [0, 1, 2, 3, 4, 5, 6],
@@ -190,28 +166,9 @@ describe('Phase 6: System Worship Alarms & De-duplication', () => {
       ]
     });
 
-    const suppressedPreItems = itemsWithCustomBefore.filter((t) => t.alarmType === 'prealert');
-    assert.equal(suppressedPreItems.length, 0, 'With custom alarm_before_salah present, NO system prealert items must be built');
-
-    // 4. With a custom alarm_after_salah present, no system postalert items are built
-    const itemsWithCustomAfter = buildNativePrayerTimeAlarms(daysEntry, undefined, {
-      prayerPostAlert: true,
-      postAlertMinutes: 15,
-      postAlertSound: 'salawat',
-      customAlarms: [
-        {
-          id: 'alarm_after_salah',
-          title: 'تنبيه مخصص بعد الصلاة',
-          enabled: true,
-          offsetMinutes: 20,
-          soundType: 'istighfar',
-          days: [0, 1, 2, 3, 4, 5, 6],
-        }
-      ]
-    });
-
-    const suppressedPostItems = itemsWithCustomAfter.filter((t) => t.alarmType === 'postalert');
-    assert.equal(suppressedPostItems.length, 0, 'With custom alarm_after_salah present, NO system postalert items must be built');
+    const customItems = itemsWithCustom.filter((t) => t.alarmType === 'custom');
+    assert.ok(customItems.length > 0, 'User prayer_relative custom alarms must still produce items');
+    assert.equal(customItems[0].soundType, 'takbeer');
 
     // 5. Test scheduleNativeAthanAlarms executes cleanly
     const scheduledCount = await scheduleNativeAthanAlarms(daysEntry, undefined, {

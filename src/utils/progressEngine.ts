@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PrayerLog, QuranSession, QuranKhatma } from '../types';
+import { PrayerLog, QuranSession, QuranKhatma, VoluntaryPrayerLog } from '../types';
 import { formatDateKey, subtractDays } from './prayerDayBoundary';
 
 export interface ProgressTierInfo {
@@ -158,6 +158,7 @@ export interface CalculateUnifiedProgressOptions {
   dhikrLogs: Record<string, Record<string, number>>;
   quranSessions?: QuranSession[];
   khatmat?: QuranKhatma[];
+  voluntaryPrayerLogs?: VoluntaryPrayerLog[];
   isWomenExcuse?: boolean;
   latitude?: number;
   longitude?: number;
@@ -168,11 +169,27 @@ export interface CalculateUnifiedProgressOptions {
 
 const PRAYER_KEYS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 
+function safeRakahs(val: unknown): number {
+  return typeof val === 'number' && Number.isFinite(val) && val > 0 ? val : 0;
+}
+
+function normalizeVoluntaryType(key: string): string {
+  return key.trim().toLowerCase();
+}
+
 function computePeriodProgress(
   daysCount: number,
   options: CalculateUnifiedProgressOptions
 ): UnifiedPeriodProgress {
-  const { prayerLogs, fastingLogs, dhikrLogs, quranSessions = [], isWomenExcuse = false } = options;
+  const {
+    prayerLogs = {},
+    fastingLogs = {},
+    dhikrLogs = {},
+    quranSessions = [],
+    voluntaryPrayerLogs = [],
+    isWomenExcuse = false,
+  } = options;
+  const safeVoluntaryLogs = Array.isArray(voluntaryPrayerLogs) ? voluntaryPrayerLogs : [];
 
   const now = new Date();
   const dateKeys: string[] = [];
@@ -227,19 +244,44 @@ function computePeriodProgress(
   let completedSunnah = 0;
   const targetSunnah = daysCount * 12; // 12 Rawatib daily target
   for (const dk of dateKeys) {
-    const dayLog = prayerLogs[dk] || {};
+    const dayLog = prayerLogs?.[dk] || {};
+    const countedVoluntaryTypes = new Set<string>();
+
+    // First, count voluntary logs (duha, qiyam, shafi, witr, taraweeh) for this day
+    for (const vLog of safeVoluntaryLogs) {
+      if (!vLog || vLog.appPrayerDay !== dk || typeof vLog.type !== 'string') continue;
+      const normType = normalizeVoluntaryType(vLog.type);
+      if (!normType) continue;
+      const rakahs = vLog.rakaat === undefined ? 2 : safeRakahs(vLog.rakaat);
+      if (rakahs > 0) {
+        completedSunnah += rakahs;
+        countedVoluntaryTypes.add(normType);
+      }
+    }
+
+    // Second, count Rawatib (sunnahBefore/sunnahAfter) on obligatory prayers
+    // and any extra voluntary entries stored directly in prayerLogs without double counting
     for (const [k, v] of Object.entries(dayLog)) {
-      if (!PRAYER_KEYS.includes(k) && (v?.status === 'A' || v?.status === 'done' || (v?.status as any) === 'prayed')) {
-        completedSunnah += (v?.extraRakahs || 2);
+      if (PRAYER_KEYS.includes(k)) {
+        completedSunnah += safeRakahs(v?.sunnahBefore) + safeRakahs(v?.sunnahAfter);
+      } else if (v?.status === 'A' || v?.status === 'done' || (v?.status as any) === 'prayed') {
+        const normType = normalizeVoluntaryType(k);
+        if (normType && !countedVoluntaryTypes.has(normType)) {
+          const rakahs = v?.extraRakahs === undefined ? 2 : safeRakahs(v?.extraRakahs);
+          if (rakahs > 0) {
+            completedSunnah += rakahs;
+            countedVoluntaryTypes.add(normType);
+          }
+        }
       }
     }
   }
-  const sunnahPercentage = Math.min(100, Math.round((completedSunnah / Math.max(1, targetSunnah)) * 100));
+  const sunnahPercentage = Math.max(0, Math.round((completedSunnah / Math.max(1, targetSunnah)) * 100));
   const sunnahItem: ProgressItemData = {
     id: 'sunnah',
     categoryName: 'السنن والرواتب',
     percentage: sunnahPercentage,
-    detailText: `${completedSunnah} ركعة وسنة`,
+    detailText: `${completedSunnah} من ${targetSunnah} ركعة`,
     icon: '✨',
     tier: getProgressTier(sunnahPercentage),
     onTimeValue: completedSunnah,
@@ -320,7 +362,7 @@ function computePeriodProgress(
 
   const items = [salahItem, sunnahItem, dhikrItem, fastingItem, quranItem];
   const overallPercentage = Math.round(
-    items.reduce((acc, it) => acc + it.percentage, 0) / items.length
+    items.reduce((acc, it) => acc + Math.min(100, it.percentage), 0) / items.length
   );
   const overallTier = getProgressTier(overallPercentage);
 

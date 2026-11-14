@@ -96,7 +96,7 @@ export const PrayerTimeRowItem: React.FC<PrayerTimeRowItemProps> = ({
   const getShortMuezzinName = (id: string) => {
     const found = muezzins.find(m => m.id === id);
     if (found) {
-      const isDownloaded = downloadedTrackIds.has(id) || found.isCustom;
+      const isDownloaded = downloadedTrackIds.has(id) || id.startsWith('custom_') || Boolean(found.isCustom);
       return isDownloaded ? `⚡ ${found.name}` : found.name;
     }
     return id;

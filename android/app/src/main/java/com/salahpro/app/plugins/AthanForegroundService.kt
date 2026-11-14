@@ -28,7 +28,7 @@ class AthanForegroundService : Service() {
         const val CHANNEL_NAME = "أذان الصلاة - Salah Athan"
         const val NOTIFICATION_ID = 78601
         const val ACTION_STOP_ATHAN = "com.salahpro.app.ACTION_STOP_ATHAN"
-        const val TIMEOUT_MS = 180000L // 3 minutes timeout
+        const val TIMEOUT_MS = 600000L // 10 minutes safety net; athan normally stops on completion
 
         @Volatile
         var isServiceRunning: Boolean = false
@@ -71,6 +71,11 @@ class AthanForegroundService : Service() {
         val rawPrayerKey = intent?.getStringExtra(AthanAlarmReceiver.EXTRA_PRAYER_KEY) ?: ""
 
         Log.d(TAG, "Starting AthanForegroundService for $prayerName (prayerKey: $rawPrayerKey, isFajr: $isFajr)")
+        AthanAlarmPlugin.logNativeEvent(
+            applicationContext,
+            "service_start",
+            "prayerName=$prayerName, prayerKey=$rawPrayerKey, isFajr=$isFajr"
+        )
 
         acquireWakeLock()
         createNotificationChannel()
@@ -313,6 +318,13 @@ class AthanForegroundService : Service() {
     }
 
     private fun stopAthanAndSelf() {
+        if (isServiceRunning) {
+            AthanAlarmPlugin.logNativeEvent(
+                applicationContext,
+                "service_stop",
+                "reason=stop_or_completed"
+            )
+        }
         isServiceRunning = false
         handler.removeCallbacks(stopRunnable)
         try {
