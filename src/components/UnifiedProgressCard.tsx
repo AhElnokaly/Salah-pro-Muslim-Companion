@@ -23,7 +23,7 @@ import {
 } from '../utils/progressEngine';
 import BadgesShowcaseModal from './BadgesShowcaseModal';
 import { ProgressRowItem } from './progress/ProgressRowItem';
-import { PrayerLog, QuranSession, QuranKhatma, AppSettings } from '../types';
+import { PrayerLog, QuranSession, QuranKhatma, AppSettings, VoluntaryPrayerLog } from '../types';
 import { toArabicNumbers } from '../utils/hijri';
 
 interface UnifiedProgressCardProps {
@@ -32,6 +32,7 @@ interface UnifiedProgressCardProps {
   dhikrLogs: Record<string, Record<string, number>>;
   quranSessions?: QuranSession[];
   khatmat?: QuranKhatma[];
+  voluntaryPrayerLogs?: VoluntaryPrayerLog[];
   isWomenExcuse?: boolean;
   onNavigateTab?: (tab: string) => void;
   appStyle?: 'glass-dark' | 'faith-bright';
@@ -44,6 +45,7 @@ export default function UnifiedProgressCard({
   dhikrLogs,
   quranSessions = [],
   khatmat = [],
+  voluntaryPrayerLogs = [],
   isWomenExcuse = false,
   onNavigateTab,
   appStyle = 'faith-bright',
@@ -59,6 +61,7 @@ export default function UnifiedProgressCard({
     dhikrLogs,
     quranSessions,
     khatmat,
+    voluntaryPrayerLogs,
     isWomenExcuse,
     latitude: settings?.latitude,
     longitude: settings?.longitude,

@@ -17,7 +17,9 @@ import {
 } from './khushuFlowUtils';
 import { KhushuStorage, KHUSHU_SETTINGS_STORAGE_KEY } from './khushuStorage';
 import { DEFAULT_KHUSHU_SETTINGS, KhushuSettings } from './khushuTypes';
-import { buildNativePrayerTimeAlarms, DailyPrayerTimesEntry } from '../../services/athanAlarmPlugin';
+import { buildNativePrayerTimeAlarms, DailyPrayerTimesEntry, getLastScheduledOptions } from '../../services/athanAlarmPlugin';
+import { UnifiedNotificationOrchestrator } from '../notifications/UnifiedNotificationOrchestrator';
+import { DEFAULT_APP_SETTINGS } from '../../config/defaultSettings';
 import { PrayerTimes } from '../../types';
 
 describe('Phase 2 - Khushu Start Delay Subsystem Tests', () => {
@@ -556,6 +558,101 @@ describe('Phase 2 - Khushu Start Delay Subsystem Tests', () => {
       }
     });
   });
+
+  describe('8. Missing edge cases: resolveKhushuIqamaOffset & syncAllNotificationChannels', () => {
+    it('resolveKhushuIqamaOffset handles null/undefined settings, corrupted/out-of-range offsets, and enableFridaySpecial=false', () => {
+      // Null/undefined settings fall back to per-prayer defaults
+      assert.equal(resolveKhushuIqamaOffset(null, 'fajr', false), 20);
+      assert.equal(resolveKhushuIqamaOffset(undefined, 'maghrib', false), 10);
+
+      // Friday with enableFridaySpecial = false uses dhuhr offset instead of friday offset
+      const fridayDisabledSettings: Partial<KhushuSettings> = {
+        enableFridaySpecial: false,
+        iqamaOffsets: {
+          fajr: 20,
+          dhuhr: 12,
+          asr: 15,
+          maghrib: 10,
+          isha: 15,
+          friday: 28,
+        },
+      };
+      assert.equal(resolveKhushuIqamaOffset(fridayDisabledSettings, 'dhuhr', true), 12);
+
+      // Corrupted & out-of-range values inside settings.iqamaOffsets
+      const corruptedSettings = {
+        enableFridaySpecial: true,
+        iqamaOffsets: {
+          fajr: 4,
+          dhuhr: 31,
+          asr: 0,
+          maghrib: 'bad' as any,
+          isha: Number.NaN,
+          friday: 25,
+        },
+      } as KhushuSettings;
+      assert.equal(resolveKhushuIqamaOffset(corruptedSettings, 'fajr', false), 5);
+      assert.equal(resolveKhushuIqamaOffset(corruptedSettings, 'dhuhr', false), 30);
+      assert.equal(resolveKhushuIqamaOffset(corruptedSettings, 'asr', false), 5);
+      assert.equal(resolveKhushuIqamaOffset(corruptedSettings, 'maghrib', false), 10);
+      assert.equal(resolveKhushuIqamaOffset(corruptedSettings, 'isha', false), 15);
+    });
+
+    it('UnifiedNotificationOrchestrator.syncAllNotificationChannels schedules khushu alarms using saved iqamaOffsets without altering athan times', async () => {
+      KhushuStorage.saveSettings({
+        ...DEFAULT_KHUSHU_SETTINGS,
+        autoWithIqama: true,
+        iqamaOffsets: {
+          ...DEFAULT_KHUSHU_SETTINGS.iqamaOffsets,
+          fajr: 9,
+          dhuhr: 24,
+        },
+      });
+
+      const futureDay = new Date();
+      futureDay.setDate(futureDay.getDate() + 2);
+      if (futureDay.getDay() === 5) {
+        futureDay.setDate(futureDay.getDate() + 1);
+      }
+      const yyyy = futureDay.getFullYear();
+      const mm = String(futureDay.getMonth() + 1).padStart(2, '0');
+      const dd = String(futureDay.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+
+      const prayerTimes: PrayerTimes = {
+        Fajr: '05:00',
+        Sunrise: '06:30',
+        Dhuhr: '12:30',
+        Asr: '15:30',
+        Maghrib: '18:00',
+        Isha: '19:30',
+      };
+
+      await UnifiedNotificationOrchestrator.syncAllNotificationChannels(
+        {
+          ...DEFAULT_APP_SETTINGS,
+          adhanEnabled: { Fajr: true, Sunrise: false, Dhuhr: true, Asr: true, Maghrib: true, Isha: true },
+        },
+        dateStr,
+        prayerTimes,
+        { Fajr: true, Dhuhr: true, Asr: true, Maghrib: true, Isha: true }
+      );
+
+      const scheduled = getLastScheduledOptions();
+      assert.ok(scheduled && Array.isArray(scheduled.times), 'Expected scheduled times from AthanAlarm web fallback');
+
+      const fajrAthan = scheduled.times.find((t: any) => t.prayerKey === 'Fajr' && t.alarmType === 'athan');
+      const fajrKhushu = scheduled.times.find((t: any) => t.prayerKey === 'Fajr_khushu' && t.alarmType === 'khushu');
+      const dhuhrAthan = scheduled.times.find((t: any) => t.prayerKey === 'Dhuhr' && t.alarmType === 'athan');
+      const dhuhrKhushu = scheduled.times.find((t: any) => t.prayerKey === 'Dhuhr_khushu' && t.alarmType === 'khushu');
+
+      assert.ok(fajrAthan && fajrKhushu, 'Expected Fajr athan and khushu alarms');
+      assert.ok(dhuhrAthan && dhuhrKhushu, 'Expected Dhuhr athan and khushu alarms');
+      assert.equal(fajrKhushu.timeMs - fajrAthan.timeMs, 9 * 60000);
+      assert.equal(dhuhrKhushu.timeMs - dhuhrAthan.timeMs, 24 * 60000);
+    });
+  });
 });
+
 
 

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { KhushuModeType } from '../services/khushuModePlugin';
 import { KhushuSettings } from '../domain/khushu/khushuTypes';
-import { buildIqamaOptions, getDefaultIqamaOffset } from '../domain/khushu/khushuFlowUtils';
+import { buildIqamaOptions, clampIqamaOffset, getDefaultIqamaOffset } from '../domain/khushu/khushuFlowUtils';
 import { toArabicNumbers } from '../utils/hijri';
 import { KhushuPermissionOnboardingModal } from './khushu/KhushuPermissionOnboardingModal';
 
@@ -336,7 +336,10 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
                   { key: 'friday', label: 'صلاة وخطبة الجمعة' },
                 ].map((item) => {
                   const prayerDefault = getDefaultIqamaOffset(item.key);
-                  const currentVal = settings.iqamaOffsets?.[item.key as keyof typeof settings.iqamaOffsets] ?? prayerDefault;
+                  const currentVal = clampIqamaOffset(
+                    settings.iqamaOffsets?.[item.key as keyof typeof settings.iqamaOffsets],
+                    prayerDefault
+                  );
                   const optionsList = buildIqamaOptions(currentVal);
 
                   return (
@@ -352,7 +355,7 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
                             onUpdateSettings({
                               iqamaOffsets: {
                                 ...settings.iqamaOffsets,
-                                [item.key]: parseInt(e.target.value, 10),
+                                [item.key]: clampIqamaOffset(parseInt(e.target.value, 10), prayerDefault),
                               },
                             })
                           }
