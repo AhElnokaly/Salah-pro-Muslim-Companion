@@ -116,7 +116,47 @@ export interface AthanAlarmPlugin {
   getLastAthanPlay?(): Promise<LastAthanPlayRecord>;
   getAlarmDiagnostics?(): Promise<AlarmDiagnosticsResult>;
   getNativeEventLog?(options?: { limit?: number }): Promise<NativeEventLogResult>;
+  // TEMP: remove after Commit 0a result
+  runDndAudioProbe?(options: { state: DndProbeTargetState }): Promise<DndProbeResult>;
+  // TEMP: remove after Commit 0a result
+  recordDndProbeVerdict?(options: { state: DndProbeTargetState; heard: boolean }): Promise<{ recorded: boolean; state: string; heard: boolean }>;
+  logRingDiagnosticEvent?(options: RingDiagnosticEvent): Promise<{ logged: boolean }>;
+  getRingDiagnosticLog?(options?: { limit?: number }): Promise<RingDiagnosticLogResult>;
   addListener?(eventName: string, listenerFunc: (data: any) => void): Promise<any>;
+}
+
+// TEMP: remove after Commit 0a result
+export type DndProbeTargetState = 'ringer_silent' | 'filter_none' | 'filter_alarms' | 'filter_priority';
+
+// TEMP: remove after Commit 0a result
+export interface DndProbeResult {
+  started: boolean;
+  permissionMissing?: boolean;
+  state: DndProbeTargetState | string;
+  origRinger?: number;
+  origFilter?: number;
+  appliedRinger?: number;
+  appliedFilter?: number;
+  volAlarm?: number;
+  maxAlarm?: number;
+  alarmMuted?: boolean;
+  restoredRinger?: number;
+  restoredFilter?: number;
+  error?: string;
+}
+
+export interface RingDiagnosticEvent {
+  timeMs?: number;
+  source: 'JS' | 'NATIVE' | string;
+  alarmType: string;
+  alarmId: string;
+  stage: string;
+  details?: string;
+}
+
+export interface RingDiagnosticLogResult {
+  events: RingDiagnosticEvent[];
+  total: number;
 }
 
 export interface NativeLogEvent {
@@ -305,6 +345,20 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
       };
     },
     getNativeEventLog: async () => {
+      return { events: [], total: 0 };
+    },
+    // TEMP: remove after Commit 0a result
+    runDndAudioProbe: async (options) => {
+      return { started: false, state: options.state, error: 'web_unsupported' };
+    },
+    // TEMP: remove after Commit 0a result
+    recordDndProbeVerdict: async (options) => {
+      return { recorded: false, state: options.state, heard: options.heard };
+    },
+    logRingDiagnosticEvent: async () => {
+      return { logged: false };
+    },
+    getRingDiagnosticLog: async () => {
       return { events: [], total: 0 };
     },
     updateWidgetData: async (options) => {
@@ -1284,6 +1338,68 @@ export async function getNativeEventLog(limit: number = 100): Promise<NativeLogE
     return res?.events || [];
   } catch (err) {
     console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getNativeEventLog error:', err);
+    return [];
+  }
+}
+
+// TEMP: remove after Commit 0a result
+export async function runDndAudioProbe(state: DndProbeTargetState): Promise<DndProbeResult> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) {
+    return { started: false, state, error: 'يتطلب هذا الاختبار التشغيل على جهاز Android الفعلي.' };
+  }
+  if (!plugin.runDndAudioProbe) {
+    return { started: false, state, error: 'دالة runDndAudioProbe غير متوفرة في النسخة الحالية من البلجن.' };
+  }
+  try {
+    return await plugin.runDndAudioProbe({ state });
+  } catch (err: any) {
+    console.warn('[ATHAN] [Commit 0a] runDndAudioProbe error:', err);
+    return { started: false, state, error: err?.message || 'probe_failed' };
+  }
+}
+
+// TEMP: remove after Commit 0a result
+export async function recordDndProbeVerdict(state: DndProbeTargetState, heard: boolean): Promise<boolean> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return false;
+  if (!plugin.recordDndProbeVerdict) return false;
+  try {
+    const res = await plugin.recordDndProbeVerdict({ state, heard });
+    return Boolean(res?.recorded);
+  } catch (err) {
+    console.warn('[ATHAN] [Commit 0a] recordDndProbeVerdict error:', err);
+    return false;
+  }
+}
+
+/**
+ * Commit 0b telemetry-only helper: strictly non-blocking fire-and-forget, never awaits or throws.
+ */
+export function logRingDiagnosticEvent(event: RingDiagnosticEvent): void {
+  try {
+    const plugin = athanPluginBridgeForTesting || AthanAlarm;
+    if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting?.logRingDiagnosticEvent) return;
+    if (!plugin.logRingDiagnosticEvent) return;
+    const payload: RingDiagnosticEvent = {
+      ...event,
+      timeMs: event.timeMs ?? Date.now(),
+    };
+    void plugin.logRingDiagnosticEvent(payload).catch(() => {});
+  } catch (_err) {
+    // Telemetry-only: ignore errors so caller flow is never disrupted
+  }
+}
+
+export async function getRingDiagnosticLog(limit: number = 200): Promise<RingDiagnosticEvent[]> {
+  const plugin = athanPluginBridgeForTesting || AthanAlarm;
+  if (!Capacitor.isNativePlatform() && !athanPluginBridgeForTesting) return [];
+  if (!plugin.getRingDiagnosticLog) return [];
+  try {
+    const res = await plugin.getRingDiagnosticLog({ limit });
+    return res?.events || [];
+  } catch (err) {
+    console.warn('[ATHAN] SOURCE=DIAGNOSTICS [AthanAlarmPlugin] getRingDiagnosticLog error:', err);
     return [];
   }
 }

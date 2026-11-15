@@ -18,7 +18,7 @@ import {
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
-import { isNativeAthanRunning, DailyPrayerTimesEntry } from '../services/athanAlarmPlugin';
+import { isNativeAthanRunning, DailyPrayerTimesEntry, logRingDiagnosticEvent } from '../services/athanAlarmPlugin';
 import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
 import { migrateRemovedDefaultAlarms } from '../domain/notifications/migrateRemovedDefaultAlarms';
 import { migrateRemovedSystemPrePostAlerts } from '../domain/notifications/migrateRemovedSystemPrePostAlerts';
@@ -197,9 +197,27 @@ export function usePrayerScheduler({
             if (isRunning) {
               safeSetItem(playedKey, 'true');
               console.log(`[ATHAN] SOURCE=WEB ACTION=SKIP REASON=NATIVE_RUNNING PRAYER=${prayer}`);
+              try {
+                logRingDiagnosticEvent({
+                  source: 'JS',
+                  alarmType: 'athan',
+                  alarmId: prayer,
+                  stage: 'skip_native_running',
+                  details: `diff=${diff}, catchup=${Boolean(isCatchup)}`,
+                });
+              } catch {}
               break;
             }
 
+            try {
+              logRingDiagnosticEvent({
+                source: 'JS',
+                alarmType: 'athan',
+                alarmId: prayer,
+                stage: 'scheduler_trigger_athan',
+                details: `diff=${diff}, catchup=${Boolean(isCatchup)}`,
+              });
+            } catch {}
             // Always trigger athan, which opens the full AthanOverlay screen and plays sound
             triggerAthan(prayer, currentTimes[prayer], settings, setToastMessage);
             break;
@@ -303,8 +321,26 @@ export function usePrayerScheduler({
       const primaryItem = pendingAlarmsToTrigger[0];
       safeSetItem(primaryItem.triggeredKey, 'true');
       if (!isAudioBusy) {
+        try {
+          logRingDiagnosticEvent({
+            source: 'JS',
+            alarmType: 'custom',
+            alarmId: primaryItem.alarm.id,
+            stage: 'custom_dispatch_audible',
+            details: `prayer=${primaryItem.targetPrayer || 'fixed'}, soundType=${primaryItem.alarm.soundType || 'reminder'}, notifyMode=${primaryItem.alarm.notifyMode || 'both'}`,
+          });
+        } catch {}
         triggerCustomAlarm(primaryItem.alarm, primaryItem.targetPrayer);
       } else {
+        try {
+          logRingDiagnosticEvent({
+            source: 'JS',
+            alarmType: 'custom',
+            alarmId: primaryItem.alarm.id,
+            stage: 'custom_dispatch_muted_busy',
+            details: `prayer=${primaryItem.targetPrayer || 'fixed'}, origSound=${primaryItem.alarm.soundType || 'reminder'}`,
+          });
+        } catch {}
         triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
       }
 
@@ -323,6 +359,15 @@ export function usePrayerScheduler({
         const secondaryItem = pendingAlarmsToTrigger[i];
         safeSetItem(secondaryItem.triggeredKey, 'true');
         // Secondary items trigger silently and skip overwriting the primary ringing modal
+        try {
+          logRingDiagnosticEvent({
+            source: 'JS',
+            alarmType: 'custom',
+            alarmId: secondaryItem.alarm.id,
+            stage: 'custom_dispatch_muted_secondary',
+            details: `prayer=${secondaryItem.targetPrayer || 'fixed'}, idx=${i}`,
+          });
+        } catch {}
         triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer, true);
         if (secondaryItem.alarm.id.startsWith('snooze_') || secondaryItem.alarm.oneShot) {
           setTimeout(() => {

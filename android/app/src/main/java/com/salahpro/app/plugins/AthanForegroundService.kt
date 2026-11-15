@@ -76,6 +76,16 @@ class AthanForegroundService : Service() {
             "service_start",
             "prayerName=$prayerName, prayerKey=$rawPrayerKey, isFajr=$isFajr"
         )
+        try {
+            AthanAlarmPlugin.logRingDiagEvent(
+                context = applicationContext,
+                source = "NATIVE",
+                alarmType = "athan",
+                alarmId = rawPrayerKey.ifEmpty { prayerName },
+                stage = "service_on_start",
+                details = "prayerName=$prayerName, isFajr=$isFajr"
+            )
+        } catch (_: Exception) {}
 
         acquireWakeLock()
         createNotificationChannel()
@@ -160,6 +170,16 @@ class AthanForegroundService : Service() {
                     localMp.start()
                     playedCustom = true
                     Log.d(TAG, "[ATHAN] SOURCE=NATIVE ACTION=START TRACK=file:${file.name} PRAYER=$prayerLogKey")
+                    try {
+                        AthanAlarmPlugin.logRingDiagEvent(
+                            context = applicationContext,
+                            source = "NATIVE",
+                            alarmType = "athan",
+                            alarmId = rawPrayerKey.ifEmpty { prayerLogKey },
+                            stage = "native_mp_start",
+                            details = "track=file:${file.name}, prayer=$prayerLogKey"
+                        )
+                    } catch (_: Exception) {}
 
                     val sourceStr = when (candidateKey) {
                         "athan_file_$normalizedPrayer" -> "per-prayer"
@@ -241,6 +261,16 @@ class AthanForegroundService : Service() {
                         true
                     }
                     start()
+                    try {
+                        AthanAlarmPlugin.logRingDiagEvent(
+                            context = applicationContext,
+                            source = "NATIVE",
+                            alarmType = "athan",
+                            alarmId = rawPrayerKey.ifEmpty { prayerLogKey },
+                            stage = "native_mp_start",
+                            details = "track=raw:$rawResName, prayer=$prayerLogKey"
+                        )
+                    } catch (_: Exception) {}
                 }
             }
         } catch (e: Exception) {

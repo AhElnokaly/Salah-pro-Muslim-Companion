@@ -372,6 +372,16 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.w(TAG, "Failed logging fire_received", e)
         }
+        try {
+            AthanAlarmPlugin.logRingDiagEvent(
+                context = context,
+                source = "NATIVE",
+                alarmType = alarmType,
+                alarmId = prayerKey,
+                stage = "receiver_on_receive",
+                details = "requestCode=$requestCode, soundType=$soundType, notifyMode=$notifyMode, channelId=$targetChannelId"
+            )
+        } catch (_: Exception) {}
 
         if (alarmType == "custom" || prayerKey.startsWith("custom_")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
@@ -447,6 +457,17 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                 )
             )
             val channelId = customPolicy.channelId
+
+            try {
+                AthanAlarmPlugin.logRingDiagEvent(
+                    context = context,
+                    source = "NATIVE",
+                    alarmType = "custom",
+                    alarmId = prayerKey,
+                    stage = "custom_notif_post",
+                    details = "soundType=$soundType, notifyMode=$notifyMode, channelId=$channelId, isKhushuActive=$isKhushuActive, silent=${customPolicy.effectiveIsSilent}"
+                )
+            } catch (_: Exception) {}
 
             val notifPosted = showCustomAlarmNotification(context, prayerName, prayerKey, soundType, notifyMode, isKhushuActive)
             if (customPolicy.shouldTriggerDirectVibrate) {
@@ -623,6 +644,16 @@ class AthanAlarmReceiver : BroadcastReceiver() {
         if (alarmType == "prealert" || prayerKey.contains("prealert")) {
             val soundType = intent.getStringExtra("soundType") ?: "reminder"
             val notifyMode = intent.getStringExtra("notifyMode") ?: "both"
+            try {
+                AthanAlarmPlugin.logRingDiagEvent(
+                    context = context,
+                    source = "NATIVE",
+                    alarmType = "prealert",
+                    alarmId = prayerKey,
+                    stage = "prealert_notif_post",
+                    details = "soundType=$soundType, notifyMode=$notifyMode"
+                )
+            } catch (_: Exception) {}
             showPreAlertNotification(context, prayerName, prayerKey, soundType, notifyMode)
             logFireEvent(context, prayerName, prayerKey, "prealert", "played", "prealert_notification (sound: $soundType)")
             return
@@ -641,6 +672,16 @@ class AthanAlarmReceiver : BroadcastReceiver() {
                     ringerMode = currentRingerMode
                 )
             )
+            try {
+                AthanAlarmPlugin.logRingDiagEvent(
+                    context = context,
+                    source = "NATIVE",
+                    alarmType = "postalert",
+                    alarmId = prayerKey,
+                    stage = "postalert_notif_post",
+                    details = "soundType=$soundType, notifyMode=$notifyMode, isKhushuActive=$isKhushuActive, channelId=${postPolicy.channelId}"
+                )
+            } catch (_: Exception) {}
             showPostAlertNotification(context, prayerName, prayerKey, soundType, notifyMode, isKhushuActive)
             if (postPolicy.shouldTriggerDirectVibrate) {
                 vibrateDirectlyForKhushu(context)
@@ -686,6 +727,17 @@ class AthanAlarmReceiver : BroadcastReceiver() {
             putExtra(EXTRA_IS_FAJR, isFajr)
             putExtra(EXTRA_PRAYER_KEY, prayerKey)
         }
+
+        try {
+            AthanAlarmPlugin.logRingDiagEvent(
+                context = context,
+                source = "NATIVE",
+                alarmType = "athan",
+                alarmId = prayerKey,
+                stage = "start_foreground_service",
+                details = "isFajr=$isFajr, prayerName=$prayerName"
+            )
+        } catch (_: Exception) {}
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

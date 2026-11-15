@@ -11,7 +11,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -58,6 +62,62 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_SCHEDULED_IDS = "scheduled_ids_set"
         const val KEY_SAVED_ALARMS = "saved_alarms_json"
         const val KEY_NATIVE_EVENT_LOG = "native_event_log_json"
+        const val KEY_RING_DIAG_LOG = "ring_diag_log_json"
+
+        // TEMP: remove after Commit 0a result
+        const val KEY_DND_PROBE_PENDING_RESTORE = "dnd_probe_pending_restore"
+        // TEMP: remove after Commit 0a result
+        const val KEY_DND_PROBE_ORIG_RINGER = "dnd_probe_orig_ringer"
+        // TEMP: remove after Commit 0a result
+        const val KEY_DND_PROBE_ORIG_FILTER = "dnd_probe_orig_filter"
+
+        // TEMP: remove after Commit 0a result
+        @JvmStatic
+        @Synchronized
+        fun restoreDndProbeSnapshotIfNeeded(context: Context, triggerSource: String): Boolean {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                if (!prefs.getBoolean(KEY_DND_PROBE_PENDING_RESTORE, false)) {
+                    return false
+                }
+                val origRinger = prefs.getInt(KEY_DND_PROBE_ORIG_RINGER, AudioManager.RINGER_MODE_NORMAL)
+                val origFilter = prefs.getInt(KEY_DND_PROBE_ORIG_FILTER, -1)
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && origFilter != -1) {
+                    if (notificationManager?.isNotificationPolicyAccessGranted == true) {
+                        notificationManager.setInterruptionFilter(origFilter)
+                    }
+                }
+                if (origRinger != -1) {
+                    if (origRinger != AudioManager.RINGER_MODE_SILENT || Build.VERSION.SDK_INT < Build.VERSION_CODES.M || notificationManager?.isNotificationPolicyAccessGranted == true) {
+                        audioManager?.ringerMode = origRinger
+                    }
+                }
+
+                prefs.edit()
+                    .putBoolean(KEY_DND_PROBE_PENDING_RESTORE, false)
+                    .remove(KEY_DND_PROBE_ORIG_RINGER)
+                    .remove(KEY_DND_PROBE_ORIG_FILTER)
+                    .commit()
+
+                val restoredRinger = audioManager?.ringerMode ?: -1
+                val restoredFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    notificationManager?.currentInterruptionFilter ?: -1
+                } else -1
+
+                logNativeEvent(
+                    context,
+                    "DND_PROBE_STARTUP_RESTORE",
+                    "source=$triggerSource, targetRinger=$origRinger, targetFilter=$origFilter, restoredRinger=$restoredRinger, restoredFilter=$restoredFilter"
+                )
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed restoring pending Commit 0a DND probe snapshot", e)
+                false
+            }
+        }
 
         @JvmStatic
         @Synchronized
@@ -115,6 +175,60 @@ class AthanAlarmPlugin : Plugin() {
                 JSONArray(raw)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed reading native event log", e)
+                JSONArray()
+            }
+        }
+
+        @JvmStatic
+        @Synchronized
+        fun logRingDiagEvent(
+            context: Context,
+            source: String,
+            alarmType: String,
+            alarmId: String,
+            stage: String,
+            timeMs: Long = System.currentTimeMillis(),
+            details: String = ""
+        ) {
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_RING_DIAG_LOG, "[]") ?: "[]"
+                val array = JSONArray(raw)
+                val item = JSONObject().apply {
+                    put("timeMs", timeMs)
+                    put("source", source)
+                    put("alarmType", alarmType)
+                    put("alarmId", alarmId)
+                    put("stage", stage)
+                    if (details.isNotEmpty()) {
+                        put("details", details)
+                    }
+                }
+                array.put(item)
+                val trimmedArray = if (array.length() > 300) {
+                    val startIdx = array.length() - 300
+                    val sub = JSONArray()
+                    for (i in startIdx until array.length()) {
+                        sub.put(array.get(i))
+                    }
+                    sub
+                } else {
+                    array
+                }
+                prefs.edit().putString(KEY_RING_DIAG_LOG, trimmedArray.toString()).apply()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to log ring diagnostic event: $stage", e)
+            }
+        }
+
+        @JvmStatic
+        fun getRingDiagLogStatic(context: Context): JSONArray {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(KEY_RING_DIAG_LOG, "[]") ?: "[]"
+                JSONArray(raw)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed reading ring diagnostic log", e)
                 JSONArray()
             }
         }
@@ -1797,6 +1911,305 @@ class AthanAlarmPlugin : Plugin() {
             call.resolve(ret)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get native event log", e)
+            val ret = JSObject()
+            ret.put("events", com.getcapacitor.JSArray())
+            ret.put("total", 0)
+            call.resolve(ret)
+        }
+    }
+
+    // TEMP: remove after Commit 0a result
+    override fun load() {
+        super.load()
+        try {
+            restoreDndProbeSnapshotIfNeeded(context, "plugin_load")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Commit 0a DND probe snapshot on load", e)
+        }
+    }
+
+    // TEMP: remove after Commit 0a result
+    private fun resolveDndRawResId(context: Context): Int {
+        val candidates = listOf("athan_default", "reminder", "beep")
+        for (name in candidates) {
+            val id = context.resources.getIdentifier(name, "raw", context.packageName)
+            if (id != 0) return id
+        }
+        return 0
+    }
+
+    // TEMP: remove after Commit 0a result
+    @PluginMethod
+    fun runDndAudioProbe(call: PluginCall) {
+        val targetState = call.getString("state") ?: ""
+        val validStates = setOf("ringer_silent", "filter_none", "filter_alarms", "filter_priority")
+        if (!validStates.contains(targetState)) {
+            call.reject("Invalid DND probe state: $targetState")
+            return
+        }
+
+        val ctx = context
+        val notificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val audioManager = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            notificationManager?.isNotificationPolicyAccessGranted != true
+        ) {
+            logNativeEvent(
+                ctx,
+                "DND_PROBE",
+                "targetState=$targetState, permissionMissing=true"
+            )
+            try {
+                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed opening DND permission settings from Commit 0a probe", e)
+            }
+            val ret = JSObject().apply {
+                put("started", false)
+                put("permissionMissing", true)
+                put("state", targetState)
+            }
+            call.resolve(ret)
+            return
+        }
+
+        val origRinger = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
+        val origFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
+        } else {
+            -1
+        }
+
+        val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putBoolean(KEY_DND_PROBE_PENDING_RESTORE, true)
+            .putInt(KEY_DND_PROBE_ORIG_RINGER, origRinger)
+            .putInt(KEY_DND_PROBE_ORIG_FILTER, origFilter)
+            .commit()
+
+        thread(start = true) {
+            var mp: MediaPlayer? = null
+            var appliedRinger = -1
+            var appliedFilter = -1
+            var volAlarm = -1
+            var maxAlarm = -1
+            var alarmMuted = false
+            var restoredRinger = -1
+            var restoredFilter = -1
+            var probeError = ""
+            var startedPlayback = false
+
+            try {
+                when (targetState) {
+                    "ringer_silent" -> {
+                        audioManager?.ringerMode = AudioManager.RINGER_MODE_SILENT
+                    }
+                    "filter_none" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+                        }
+                    }
+                    "filter_alarms" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS)
+                        }
+                    }
+                    "filter_priority" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                        }
+                    }
+                }
+
+                Thread.sleep(300L)
+
+                appliedRinger = audioManager?.ringerMode ?: -1
+                appliedFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    notificationManager?.currentInterruptionFilter ?: -1
+                } else -1
+                volAlarm = audioManager?.getStreamVolume(AudioManager.STREAM_ALARM) ?: -1
+                maxAlarm = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: -1
+                alarmMuted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    audioManager?.isStreamMute(AudioManager.STREAM_ALARM) ?: false
+                } else false
+
+                val attrs = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+                val resId = resolveDndRawResId(ctx)
+                mp = MediaPlayer().apply {
+                    setAudioAttributes(attrs)
+                    if (resId != 0) {
+                        ctx.resources.openRawResourceFd(resId).use { afd ->
+                            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                        }
+                    } else {
+                        val fallbackUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                        setDataSource(ctx, fallbackUri)
+                    }
+                    isLooping = true
+                    prepare()
+                    start()
+                }
+                startedPlayback = true
+                Thread.sleep(3000L)
+
+                logNativeEvent(
+                    ctx,
+                    "DND_PROBE",
+                    "targetState=$targetState, origRinger=$origRinger, origFilter=$origFilter, " +
+                        "appliedRinger=$appliedRinger, appliedFilter=$appliedFilter, " +
+                        "volAlarm=$volAlarm/$maxAlarm, alarmMuted=$alarmMuted, started=$startedPlayback"
+                )
+            } catch (e: Exception) {
+                probeError = "${e.javaClass.simpleName}: ${e.message ?: "probe failed"}"
+                Log.e(TAG, "Commit 0a DND probe failed for $targetState", e)
+                logNativeEvent(
+                    ctx,
+                    "DND_PROBE",
+                    "targetState=$targetState, origRinger=$origRinger, origFilter=$origFilter, " +
+                        "appliedRinger=$appliedRinger, appliedFilter=$appliedFilter",
+                    probeError
+                )
+            } finally {
+                try {
+                    if (mp?.isPlaying == true) {
+                        mp.stop()
+                    }
+                } catch (_: Exception) {}
+                try {
+                    mp?.release()
+                } catch (_: Exception) {}
+
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && origFilter != -1) {
+                        if (notificationManager?.isNotificationPolicyAccessGranted == true) {
+                            notificationManager.setInterruptionFilter(origFilter)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed restoring interruption filter in finally", e)
+                }
+
+                try {
+                    audioManager?.ringerMode = origRinger
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed restoring ringer mode in finally", e)
+                }
+
+                try {
+                    prefs.edit()
+                        .putBoolean(KEY_DND_PROBE_PENDING_RESTORE, false)
+                        .remove(KEY_DND_PROBE_ORIG_RINGER)
+                        .remove(KEY_DND_PROBE_ORIG_FILTER)
+                        .commit()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed clearing DND probe snapshot flag in finally", e)
+                }
+
+                restoredRinger = audioManager?.ringerMode ?: -1
+                restoredFilter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    notificationManager?.currentInterruptionFilter ?: -1
+                } else -1
+
+                logNativeEvent(
+                    ctx,
+                    "DND_PROBE_RESTORE",
+                    "targetState=$targetState, restoredRinger=$restoredRinger, restoredFilter=$restoredFilter"
+                )
+            }
+
+            val ret = JSObject().apply {
+                put("started", startedPlayback && probeError.isEmpty())
+                put("permissionMissing", false)
+                put("state", targetState)
+                put("origRinger", origRinger)
+                put("origFilter", origFilter)
+                put("appliedRinger", appliedRinger)
+                put("appliedFilter", appliedFilter)
+                put("volAlarm", volAlarm)
+                put("maxAlarm", maxAlarm)
+                put("alarmMuted", alarmMuted)
+                put("restoredRinger", restoredRinger)
+                put("restoredFilter", restoredFilter)
+                if (probeError.isNotEmpty()) {
+                    put("error", probeError)
+                }
+            }
+            call.resolve(ret)
+        }
+    }
+
+    // TEMP: remove after Commit 0a result
+    @PluginMethod
+    fun recordDndProbeVerdict(call: PluginCall) {
+        val targetState = call.getString("state") ?: ""
+        val heard = call.getBoolean("heard")
+        if (targetState.isBlank() || heard == null) {
+            call.reject("Missing state or heard boolean")
+            return
+        }
+        logNativeEvent(
+            context,
+            "DND_PROBE_VERDICT",
+            "targetState=$targetState, userHeard=$heard"
+        )
+        val ret = JSObject().apply {
+            put("recorded", true)
+            put("state", targetState)
+            put("heard", heard)
+        }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun logRingDiagnosticEvent(call: PluginCall) {
+        val source = call.getString("source") ?: "JS"
+        val alarmType = call.getString("alarmType") ?: "unknown"
+        val alarmId = call.getString("alarmId") ?: ""
+        val stage = call.getString("stage") ?: ""
+        val timeMs = call.data?.optLong("timeMs", System.currentTimeMillis()) ?: System.currentTimeMillis()
+        val details = call.getString("details") ?: ""
+
+        logRingDiagEvent(context, source, alarmType, alarmId, stage, timeMs, details)
+        val ret = JSObject().apply {
+            put("logged", true)
+        }
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun getRingDiagnosticLog(call: PluginCall) {
+        try {
+            val eventsArray = getRingDiagLogStatic(context)
+            val limit = call.getInt("limit", 200) ?: 200
+            val ret = JSObject()
+            val list = com.getcapacitor.JSArray()
+            val total = eventsArray.length()
+            val count = Math.min(total, limit)
+            for (i in 0 until count) {
+                val idx = total - 1 - i
+                val obj = eventsArray.getJSONObject(idx)
+                val jsObj = JSObject()
+                jsObj.put("timeMs", obj.optLong("timeMs", 0L))
+                jsObj.put("source", obj.optString("source", ""))
+                jsObj.put("alarmType", obj.optString("alarmType", ""))
+                jsObj.put("alarmId", obj.optString("alarmId", ""))
+                jsObj.put("stage", obj.optString("stage", ""))
+                jsObj.put("details", obj.optString("details", ""))
+                list.put(jsObj)
+            }
+            ret.put("events", list)
+            ret.put("total", total)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get ring diagnostic log", e)
             val ret = JSObject()
             ret.put("events", com.getcapacitor.JSArray())
             ret.put("total", 0)

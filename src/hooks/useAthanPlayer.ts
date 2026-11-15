@@ -8,7 +8,7 @@ import { formatDateKey } from '../utils/prayerDayBoundary';
 import { athanPhrases, computePhraseTimings } from './athanPhraseTimings';
 import { useMuezzinSettings } from './useMuezzinSettings';
 import { useAudioUnlocker } from './useAudioUnlocker';
-import { stopNativeAthan } from '../services/athanAlarmPlugin';
+import { stopNativeAthan, logRingDiagnosticEvent } from '../services/athanAlarmPlugin';
 import { stopAudioSafely } from '../utils/audioUtils';
 import { resolveMuezzinId } from '../utils/muezzinResolver';
 
@@ -262,6 +262,15 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
       setShowAthanOverlay(true);
     }
 
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'athan',
+        alarmId: prayer,
+        stage: 'html_audio_play',
+        details: `isFajr=${isFajr}, fallback=${srcUrl === localFallback}`,
+      });
+    } catch {}
     audio.play().then(() => {
       if (userDismissedRef.current) return;
       setIsAthanPlaying(true);
@@ -366,6 +375,15 @@ export function useAthanPlayer(): UseAthanPlayerReturn {
     userDismissedRef.current = false;
     setAudioError(null);
     // Crucial: Stop native background athan if running so there is never two adhans playing at the same time!
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'athan',
+        alarmId: prayer,
+        stage: 'stop_native_called',
+        details: `timeStr=${timeStr}`,
+      });
+    } catch {}
     stopNativeAthan().catch(() => {});
     // Open full screen Athan overlay immediately
     setAthanOverlayPrayer(prayer);

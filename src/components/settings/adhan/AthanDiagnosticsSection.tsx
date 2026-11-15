@@ -34,9 +34,19 @@ import {
   getLastAthanPlay,
   getAlarmDiagnostics,
   getNativeEventLog,
+  getRingDiagnosticLog,
+  // TEMP: remove after Commit 0a result
+  runDndAudioProbe,
+  // TEMP: remove after Commit 0a result
+  recordDndProbeVerdict,
   LastAthanPlayRecord,
   AlarmDiagnosticsResult,
   NativeLogEvent,
+  RingDiagnosticEvent,
+  // TEMP: remove after Commit 0a result
+  DndProbeTargetState,
+  // TEMP: remove after Commit 0a result
+  DndProbeResult,
   groupScheduledAlarmsByType,
 } from '../../../services/athanAlarmPlugin';
 import { toArabicNumbers } from '../../../utils/hijri';
@@ -78,17 +88,28 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   const [lastPlay, setLastPlay] = useState<LastAthanPlayRecord | null>(null);
   const [diagnostics, setDiagnostics] = useState<AlarmDiagnosticsResult | null>(null);
   const [nativeLogs, setNativeLogs] = useState<NativeLogEvent[]>([]);
+  const [ringDiagLogs, setRingDiagLogs] = useState<RingDiagnosticEvent[]>([]);
   const [isDndGranted, setIsDndGranted] = useState<boolean | null>(null);
-  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs'>('none');
+  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs' | 'ringDiag'>('none');
+
+  // TEMP: remove after Commit 0a result
+  const [dndProbeBusy, setDndProbeBusy] = useState<DndProbeTargetState | null>(null);
+  // TEMP: remove after Commit 0a result
+  const [dndProbePermissionMissing, setDndProbePermissionMissing] = useState(false);
+  // TEMP: remove after Commit 0a result
+  const [dndProbeResults, setDndProbeResults] = useState<
+    Partial<Record<DndProbeTargetState, { probe?: DndProbeResult; heard?: boolean | null }>>
+  >({});
 
   const fetchDiagnostics = useCallback(async () => {
     setLoading(true);
     try {
-      const [files, playRecord, diag, logs, dndPerm] = await Promise.all([
+      const [files, playRecord, diag, logs, ringLogs, dndPerm] = await Promise.all([
         getNativeAthanFiles(),
         getLastAthanPlay(),
         getAlarmDiagnostics(),
         getNativeEventLog(100),
+        getRingDiagnosticLog(200),
         KhushuMode.checkPermission().catch(() => null),
       ]);
 
@@ -99,6 +120,9 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       }
       setLastPlay(playRecord);
       setIsDndGranted(dndStatus);
+      if (ringLogs) {
+        setRingDiagLogs(ringLogs);
+      }
       if (diag) {
         setDiagnostics(diag);
         if (diag.nativeEvents && diag.nativeEvents.length > 0) {
@@ -246,6 +270,40 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     fetchDiagnostics();
   };
 
+  // TEMP: remove after Commit 0a result
+  const handleRunDndProbe = async (targetState: DndProbeTargetState) => {
+    setGuardError(null);
+    setDndProbePermissionMissing(false);
+    setDndProbeBusy(targetState);
+    try {
+      const res = await runDndAudioProbe(targetState);
+      if (res.permissionMissing) {
+        setDndProbePermissionMissing(true);
+        setGuardError('يرجى منح صلاحية الوصول لعدم الإزعاج (DND) من صفحة الإعدادات المفتوحة ثم العودة وإعادة الضغط على الحالة.');
+      } else {
+        setDndProbeResults((prev) => ({
+          ...prev,
+          [targetState]: { probe: res, heard: prev[targetState]?.heard ?? null },
+        }));
+      }
+      await fetchDiagnostics();
+    } catch (err: any) {
+      setGuardError(err?.message || 'فشل تشغيل اختبار DND.');
+    } finally {
+      setDndProbeBusy(null);
+    }
+  };
+
+  // TEMP: remove after Commit 0a result
+  const handleRecordDndVerdict = async (targetState: DndProbeTargetState, heard: boolean) => {
+    setDndProbeResults((prev) => ({
+      ...prev,
+      [targetState]: { ...prev[targetState], heard },
+    }));
+    await recordDndProbeVerdict(targetState, heard);
+    await fetchDiagnostics();
+  };
+
   const formatSize = (bytes: number): string => {
     if (!bytes || bytes <= 0) return '٠ بايت';
     if (bytes >= 1024 * 1024) {
@@ -312,7 +370,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     (!diagnostics.isIgnoringBatteryOptimizations || !diagnostics.canScheduleExactAlarms)
   );
 
-  const copyToClipboard = async (text: string, type: 'all' | 'events' | 'nativeLogs') => {
+  const copyToClipboard = async (text: string, type: 'all' | 'events' | 'nativeLogs' | 'ringDiag') => {
     let success = false;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -348,6 +406,8 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
             ? 'تم نسخ تقرير التشخيص الشامل بنجاح ✓'
             : type === 'events'
             ? 'تم نسخ سجل إطلاق التنبيهات بنجاح ✓'
+            : type === 'ringDiag'
+            ? 'تم نسخ سجل قياس الرنين المزدوج بنجاح ✓'
             : 'تم نسخ سجل الأحداث الأصلية بنجاح ✓'
         );
       }
@@ -405,6 +465,27 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         lines.push(`   الخطأ: ${evt.error}`);
       }
       lines.push(`--------------------------------------------------`);
+    });
+    return lines.join('\n');
+  };
+
+  const generateRingDiagLogsText = (): string => {
+    if (!ringDiagLogs || ringDiagLogs.length === 0) {
+      return 'سجل قياس الرنين المزدوج (Commit 0b): لا توجد أحداث مسجلة بعد.';
+    }
+    const lines = [
+      `=== سجل قياس الرنين المزدوج (Commit 0b - Ring Diag Log) ===`,
+      `تاريخ الاستخراج: ${new Date().toLocaleString('ar-EG')}`,
+      `إجمالي الأحداث المسجلة: ${ringDiagLogs.length}`,
+      `--------------------------------------------------`,
+    ];
+    ringDiagLogs.forEach((evt, idx) => {
+      const timeStr = formatTimestamp(evt.timeMs);
+      lines.push(
+        `[${idx + 1}] ${timeStr} (${evt.timeMs ?? 0}) | ${evt.source} | ${evt.alarmType} | ${evt.alarmId} | ${evt.stage}`,
+        `   التفاصيل: ${evt.details || '—'}`,
+        `--------------------------------------------------`
+      );
     });
     return lines.join('\n');
   };
@@ -528,6 +609,21 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       const path = nativeInfo?.path || 'لا يوجد';
       lines.push(`• ${label}: معرف المؤذن: ${selectedId} | الحالة: ${exists} (${size}) | المسار: ${path}`);
     });
+
+    lines.push(
+      ``,
+      `[7] سجل قياس الرنين المزدوج (Commit 0b - Ring Diag Log - آخر ${ringDiagLogs.length} حدث):`
+    );
+
+    if (ringDiagLogs.length > 0) {
+      ringDiagLogs.forEach((evt, idx) => {
+        lines.push(
+          `  ${idx + 1}. [${formatTimestamp(evt.timeMs)} | ${evt.timeMs ?? 0}] ${evt.source} | ${evt.alarmType} | ${evt.alarmId} | ${evt.stage}${evt.details ? ` | ${evt.details}` : ''}`
+        );
+      });
+    } else {
+      lines.push(`  (لم يتم تسجيل أي حدث قياس رنين بعد)`);
+    }
 
     lines.push(
       ``,
@@ -770,6 +866,102 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                 <Play className="w-3.5 h-3.5" />
                 <span>تشغيل Test F (فحص الاستعادة التلقائية بالمنبه)</span>
               </button>
+            </div>
+
+            {/* TEMP: remove after Commit 0a result */}
+            <div className="p-3.5 rounded-xl border-2 border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20 space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="font-black text-xs text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                  <Volume2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Commit 0a (مؤقت): مسبار MediaPlayer (USAGE_ALARM) تحت 4 حالات DND</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                  TEMP: remove after 0a
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                يختبر حالة واحدة في كل ضغطة: يحفظ وضع الهاتف في SharedPreferences بـ commit()، يطبق الحالة، يشغّل عينة USAGE_ALARM لـ 3 ثوانٍ، ثم يستعيد الوضع الأصلي تلقائياً داخل finally وعند تشغيل التطبيق.
+              </p>
+
+              {dndProbePermissionMissing && (
+                <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-[11px] font-bold text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>إذن الوصول لعدم الإزعاج (DND) غير ممنوح. تم فتح شاشة الإذن — امنحه للتطبيق ثم أعد المحاولة.</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {(
+                  [
+                    { state: 'ringer_silent', title: '1. RINGER_MODE_SILENT', desc: 'كتم الرنين (صامت)' },
+                    { state: 'filter_none', title: '2. INTERRUPTION_FILTER_NONE', desc: 'عدم إزعاج: كتم تام (NONE)' },
+                    { state: 'filter_alarms', title: '3. INTERRUPTION_FILTER_ALARMS', desc: 'عدم إزعاج: المنبهات فقط (ALARMS)' },
+                    { state: 'filter_priority', title: '4. INTERRUPTION_FILTER_PRIORITY', desc: 'عدم إزعاج: الأولوية فقط (PRIORITY)' },
+                  ] as const
+                ).map(({ state, title, desc }) => {
+                  const entry = dndProbeResults[state];
+                  const probe = entry?.probe;
+                  const heard = entry?.heard ?? null;
+                  const isRunningThis = dndProbeBusy === state;
+
+                  return (
+                    <div
+                      key={state}
+                      className="p-2.5 rounded-xl bg-white dark:bg-[#161d26] border border-slate-200 dark:border-slate-800 space-y-2"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-mono text-[11px] font-black text-slate-900 dark:text-slate-100">
+                          {title}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">{desc}</div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRunDndProbe(state)}
+                        disabled={dndProbeBusy !== null}
+                        className="w-full py-1.5 px-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 shrink-0" />
+                        <span>{isRunningThis ? 'جاري الاختبار (3 ثوانٍ)...' : 'تشغيل العينة 3ث'}</span>
+                      </button>
+
+                      {probe && (
+                        <div className="text-[10px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-1.5 rounded border border-slate-200/70 dark:border-slate-700/60 break-all">
+                          {probe.error
+                            ? `خطأ: ${probe.error}`
+                            : `volAlarm=${probe.volAlarm}/${probe.maxAlarm}, muted=${String(probe.alarmMuted)}, applied=(r=${probe.appliedRinger}, f=${probe.appliedFilter}), restored=(r=${probe.restoredRinger}, f=${probe.restoredFilter})`}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleRecordDndVerdict(state, true)}
+                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                            heard === true
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          }`}
+                        >
+                          سمعت الصوت ✓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRecordDndVerdict(state, false)}
+                          className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                            heard === false
+                              ? 'bg-rose-600 text-white border-rose-600'
+                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                          }`}
+                        >
+                          لم أسمع الصوت ✕
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -1316,6 +1508,85 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         ) : (
           <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl text-slate-400 text-xs">
             لم يتم تسجيل أي حدث في السجل الأصلي حتى الآن (يتم التسجيل تلقائياً عند المطابقة وإطلاق التنبيهات والخدمة والاستعادة).
+          </div>
+        )}
+      </div>
+
+      {/* 4b. Commit 0b Ring Diagnostic Log (Separate Ring Buffer) */}
+      <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h4 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-sky-500 shrink-0" />
+            <span>
+              سجل قياس الرنين المزدوج (Commit 0b - Ring Diag Log):
+            </span>
+          </h4>
+          <button
+            type="button"
+            onClick={() => copyToClipboard(generateRingDiagLogsText(), 'ringDiag')}
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/40 rounded-lg transition-all cursor-pointer"
+            title="نسخ سجل قياس الرنين المزدوج"
+          >
+            {copiedType === 'ringDiag' ? (
+              <>
+                <Check className="w-3 h-3 text-sky-500" />
+                <span className="text-sky-600 dark:text-sky-400">تم النسخ ✓</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" />
+                <span>نسخ سجل الرنين 📋</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {ringDiagLogs.length > 0 ? (
+          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            {ringDiagLogs.map((evt, idx) => (
+              <div
+                key={`${evt.timeMs ?? 0}_${idx}`}
+                className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 space-y-1 text-xs"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border ${
+                        evt.source === 'NATIVE'
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                      }`}
+                    >
+                      {evt.source}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      {evt.alarmType}
+                    </span>
+                    <span className="font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                      {evt.stage}
+                    </span>
+                    {evt.alarmId && (
+                      <span className="font-mono text-[10px] text-indigo-600 dark:text-indigo-400">
+                        ({evt.alarmId})
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                    {formatTimestamp(evt.timeMs)}
+                  </span>
+                </div>
+
+                {evt.details && (
+                  <div className="text-[11px] font-mono text-slate-700 dark:text-slate-300 break-all bg-white/70 dark:bg-slate-800/50 p-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
+                    {evt.details}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl text-slate-400 text-xs">
+            لم يتم تسجيل أي حدث قياس رنين حتى الآن (يُسجل تلقائياً في مخزن مستقل عند إطلاق الأذان أو المنبه من JS وNative).
           </div>
         )}
       </div>

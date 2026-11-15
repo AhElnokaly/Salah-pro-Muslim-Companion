@@ -4,6 +4,7 @@ import { AlarmConfig, RelativePrayerTarget } from '../types';
 import { showAppNotification } from '../utils/pushNotificationService';
 import { playSpiritualSound, playSpiritualSpeech } from '../utils/spiritualAudio';
 import { getArabicPrayerOrEventName } from '../utils/alarmUtils';
+import { logRingDiagnosticEvent } from '../services/athanAlarmPlugin';
 
 export interface UseCustomAlarmTriggerProps {
   globalAudioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -45,6 +46,15 @@ export function executeCustomAlarmTrigger({
   }
 
   if (alarm.soundType !== 'silent') {
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'custom',
+        alarmId: alarm.id,
+        stage: 'custom_play_sound',
+        details: `soundType=${alarm.soundType || 'speech'}, notifyMode=${alarm.notifyMode || 'both'}, prayer=${targetPrayer || 'fixed'}`,
+      });
+    } catch {}
     playSpiritualSound(alarm.soundType || 'speech', fullTitle, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
   }
 
@@ -100,6 +110,15 @@ export function useCustomAlarmTrigger({
     }
 
     // Play spiritual Arabic voice reminder instead of generic beep
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'dhikr',
+        alarmId: title,
+        stage: 'dhikr_play_speech',
+        details: `bodyLen=${body.length}`,
+      });
+    } catch {}
     playSpiritualSpeech(`${title}.. ${body}`, audioVolume);
 
     if (setToastMessage) {
