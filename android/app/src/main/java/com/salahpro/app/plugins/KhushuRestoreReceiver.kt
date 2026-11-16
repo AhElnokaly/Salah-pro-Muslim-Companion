@@ -348,7 +348,7 @@ class KhushuRestoreReceiver : BroadcastReceiver() {
                     if (requestedMode == "dnd" && hasDndPermission) {
                         try {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+                                notificationManager?.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALARMS)
                             }
                         } catch (e: Exception) {
                             Log.w(TAG, "Error setting DND interruption filter", e)

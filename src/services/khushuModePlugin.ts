@@ -141,7 +141,7 @@ class KhushuModeWebFallback implements KhushuModePluginInterface {
       activatedAt: state.activatedAt,
       hasPendingRestoreAlarm: isActive,
       ringerMode: isActive ? 0 : 2,
-      interruptionFilter: isActive ? (state.mode === 'dnd' ? 3 : 1) : 1,
+      interruptionFilter: isActive ? (state.mode === 'dnd' ? 4 : 1) : 1,
     };
   }
 }
