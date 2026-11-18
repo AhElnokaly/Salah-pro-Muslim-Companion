@@ -49,10 +49,15 @@ class AthanForegroundService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var activePlayId: Long = 0L
+    private var activeRingAlarmId: String = ""
+    private var activeRingPrayer: String = ""
+    private var activeRingTrack: String = ""
+    private var activePlayTerminalLogged: Boolean = false
     private val handler = Handler(Looper.getMainLooper())
     private val stopRunnable = Runnable {
         Log.d(TAG, "Athan timeout reached, stopping service")
-        stopAthanAndSelf()
+        stopAthanAndSelf("timeout")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -60,7 +65,7 @@ class AthanForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_ATHAN) {
             Log.d(TAG, "User requested to stop athan")
-            stopAthanAndSelf()
+            stopAthanAndSelf("user_stop")
             return START_NOT_STICKY
         }
 
@@ -157,13 +162,54 @@ class AthanForegroundService : Service() {
                     localMp.setDataSource(file.absolutePath)
                     localMp.prepare()
                     localMp.isLooping = false
+                    val playId = System.currentTimeMillis()
+                    val ringAlarmId = rawPrayerKey.ifEmpty { prayerLogKey }
+                    val ringTrack = "file:${file.name}"
+                    activePlayId = playId
+                    activeRingAlarmId = ringAlarmId
+                    activeRingPrayer = prayerLogKey
+                    activeRingTrack = ringTrack
+                    activePlayTerminalLogged = false
+
                     localMp.setOnCompletionListener {
                         Log.d(TAG, "Custom athan audio finished playing")
-                        stopAthanAndSelf()
+                        try {
+                            if (!activePlayTerminalLogged && activePlayId == playId) {
+                                activePlayTerminalLogged = true
+                                val nowMs = System.currentTimeMillis()
+                                val elapsedMs = (nowMs - playId).coerceAtLeast(0L)
+                                AthanAlarmPlugin.logRingDiagEvent(
+                                    context = applicationContext,
+                                    source = "NATIVE",
+                                    alarmType = "athan",
+                                    alarmId = ringAlarmId,
+                                    stage = "native_mp_complete",
+                                    timeMs = nowMs,
+                                    details = "track=$ringTrack, prayer=$prayerLogKey, reason=completed, elapsedMs=$elapsedMs, playId=$playId"
+                                )
+                            }
+                        } catch (_: Exception) {}
+                        stopAthanAndSelf("completed")
                     }
                     localMp.setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "MediaPlayer error on custom file: what=$what, extra=$extra")
-                        stopAthanAndSelf()
+                        try {
+                            if (!activePlayTerminalLogged && activePlayId == playId) {
+                                activePlayTerminalLogged = true
+                                val nowMs = System.currentTimeMillis()
+                                val elapsedMs = (nowMs - playId).coerceAtLeast(0L)
+                                AthanAlarmPlugin.logRingDiagEvent(
+                                    context = applicationContext,
+                                    source = "NATIVE",
+                                    alarmType = "athan",
+                                    alarmId = ringAlarmId,
+                                    stage = "native_mp_error",
+                                    timeMs = nowMs,
+                                    details = "track=$ringTrack, prayer=$prayerLogKey, reason=error, elapsedMs=$elapsedMs, playId=$playId"
+                                )
+                            }
+                        } catch (_: Exception) {}
+                        stopAthanAndSelf("error")
                         true
                     }
                     mediaPlayer = localMp
@@ -175,9 +221,10 @@ class AthanForegroundService : Service() {
                             context = applicationContext,
                             source = "NATIVE",
                             alarmType = "athan",
-                            alarmId = rawPrayerKey.ifEmpty { prayerLogKey },
+                            alarmId = ringAlarmId,
                             stage = "native_mp_start",
-                            details = "track=file:${file.name}, prayer=$prayerLogKey"
+                            timeMs = playId,
+                            details = "track=$ringTrack, prayer=$prayerLogKey, playId=$playId"
                         )
                     } catch (_: Exception) {}
 
@@ -202,6 +249,8 @@ class AthanForegroundService : Service() {
                     break
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to play custom athan audio from file: $customFilePath, falling back", e)
+                    activePlayId = 0L
+                    activePlayTerminalLogged = false
                     try {
                         localMp?.release()
                     } catch (_: Exception) {}
@@ -244,6 +293,15 @@ class AthanForegroundService : Service() {
                 }
 
                 mediaPlayer?.apply {
+                    val playId = System.currentTimeMillis()
+                    val ringAlarmId = rawPrayerKey.ifEmpty { prayerLogKey }
+                    val ringTrack = "raw:$rawResName"
+                    activePlayId = playId
+                    activeRingAlarmId = ringAlarmId
+                    activeRingPrayer = prayerLogKey
+                    activeRingTrack = ringTrack
+                    activePlayTerminalLogged = false
+
                     setAudioAttributes(
                         AudioAttributes.Builder()
                             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -253,11 +311,43 @@ class AthanForegroundService : Service() {
                     isLooping = false
                     setOnCompletionListener {
                         Log.d(TAG, "Athan audio finished playing")
-                        stopAthanAndSelf()
+                        try {
+                            if (!activePlayTerminalLogged && activePlayId == playId) {
+                                activePlayTerminalLogged = true
+                                val nowMs = System.currentTimeMillis()
+                                val elapsedMs = (nowMs - playId).coerceAtLeast(0L)
+                                AthanAlarmPlugin.logRingDiagEvent(
+                                    context = applicationContext,
+                                    source = "NATIVE",
+                                    alarmType = "athan",
+                                    alarmId = ringAlarmId,
+                                    stage = "native_mp_complete",
+                                    timeMs = nowMs,
+                                    details = "track=$ringTrack, prayer=$prayerLogKey, reason=completed, elapsedMs=$elapsedMs, playId=$playId"
+                                )
+                            }
+                        } catch (_: Exception) {}
+                        stopAthanAndSelf("completed")
                     }
                     setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                        stopAthanAndSelf()
+                        try {
+                            if (!activePlayTerminalLogged && activePlayId == playId) {
+                                activePlayTerminalLogged = true
+                                val nowMs = System.currentTimeMillis()
+                                val elapsedMs = (nowMs - playId).coerceAtLeast(0L)
+                                AthanAlarmPlugin.logRingDiagEvent(
+                                    context = applicationContext,
+                                    source = "NATIVE",
+                                    alarmType = "athan",
+                                    alarmId = ringAlarmId,
+                                    stage = "native_mp_error",
+                                    timeMs = nowMs,
+                                    details = "track=$ringTrack, prayer=$prayerLogKey, reason=error, elapsedMs=$elapsedMs, playId=$playId"
+                                )
+                            }
+                        } catch (_: Exception) {}
+                        stopAthanAndSelf("error")
                         true
                     }
                     start()
@@ -266,9 +356,10 @@ class AthanForegroundService : Service() {
                             context = applicationContext,
                             source = "NATIVE",
                             alarmType = "athan",
-                            alarmId = rawPrayerKey.ifEmpty { prayerLogKey },
+                            alarmId = ringAlarmId,
                             stage = "native_mp_start",
-                            details = "track=raw:$rawResName, prayer=$prayerLogKey"
+                            timeMs = playId,
+                            details = "track=$ringTrack, prayer=$prayerLogKey, playId=$playId"
                         )
                     } catch (_: Exception) {}
                 }
@@ -347,7 +438,7 @@ class AthanForegroundService : Service() {
         }
     }
 
-    private fun stopAthanAndSelf() {
+    private fun stopAthanAndSelf(reason: String = "user_stop") {
         if (isServiceRunning) {
             AthanAlarmPlugin.logNativeEvent(
                 applicationContext,
@@ -355,6 +446,25 @@ class AthanForegroundService : Service() {
                 "reason=stop_or_completed"
             )
         }
+        try {
+            val mp = mediaPlayer
+            val wasPlaying = try { mp?.isPlaying == true } catch (_: Exception) { false }
+            if (wasPlaying && !activePlayTerminalLogged && activePlayId > 0L) {
+                activePlayTerminalLogged = true
+                val nowMs = System.currentTimeMillis()
+                val elapsedMs = (nowMs - activePlayId).coerceAtLeast(0L)
+                AthanAlarmPlugin.logRingDiagEvent(
+                    context = applicationContext,
+                    source = "NATIVE",
+                    alarmType = "athan",
+                    alarmId = activeRingAlarmId,
+                    stage = "native_mp_stop",
+                    timeMs = nowMs,
+                    details = "track=$activeRingTrack, prayer=$activeRingPrayer, reason=$reason, elapsedMs=$elapsedMs, playId=$activePlayId"
+                )
+            }
+        } catch (_: Exception) {}
+        activePlayId = 0L
         isServiceRunning = false
         handler.removeCallbacks(stopRunnable)
         try {
@@ -380,7 +490,7 @@ class AthanForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        stopAthanAndSelf()
+        stopAthanAndSelf("user_stop")
         super.onDestroy()
     }
 }
