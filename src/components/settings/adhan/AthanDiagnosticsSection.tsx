@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Activity,
   RefreshCw,
@@ -61,6 +61,13 @@ import { AlarmConfig, AppSettings } from '../../../types';
 import { KhushuMode } from '../../../services/khushuModePlugin';
 import { StorageFacade } from '../../../domain/storage/StorageFacade';
 import { resolveAthanTimes } from '../../../diagnostics/resolveAthanTimes';
+import {
+  detectDoubleRing,
+  formatDoubleRingReport,
+  RING_DIAG_LOG_FETCH_LIMIT,
+  RingHandoffPair,
+  RingSuspiciousPair,
+} from '../../../diagnostics/ringDoubleDetector';
 import { APP_VERSION } from '../../../version';
 
 interface NativeFileInfo {
@@ -80,9 +87,13 @@ const PRAYERS_LIST = [
 
 export interface AthanDiagnosticsSectionProps {
   setToastMessage?: (msg: string | null) => void;
+  showDoubleRingDetector?: boolean;
 }
 
-export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = ({ setToastMessage }) => {
+export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = ({
+  setToastMessage,
+  showDoubleRingDetector = false,
+}) => {
   const [loading, setLoading] = useState(false);
   const [nativeFiles, setNativeFiles] = useState<Record<string, NativeFileInfo>>({});
   const [lastPlay, setLastPlay] = useState<LastAthanPlayRecord | null>(null);
@@ -90,7 +101,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
   const [nativeLogs, setNativeLogs] = useState<NativeLogEvent[]>([]);
   const [ringDiagLogs, setRingDiagLogs] = useState<RingDiagnosticEvent[]>([]);
   const [isDndGranted, setIsDndGranted] = useState<boolean | null>(null);
-  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs' | 'ringDiag'>('none');
+  const [copiedType, setCopiedType] = useState<'none' | 'all' | 'events' | 'nativeLogs' | 'ringDiag' | 'doubleRing'>('none');
 
   // TEMP: remove after Commit 0a result
   const [dndProbeBusy, setDndProbeBusy] = useState<DndProbeTargetState | null>(null);
@@ -109,7 +120,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
         getLastAthanPlay(),
         getAlarmDiagnostics(),
         getNativeEventLog(100),
-        getRingDiagnosticLog(200),
+        getRingDiagnosticLog(RING_DIAG_LOG_FETCH_LIMIT),
         KhushuMode.checkPermission().catch(() => null),
       ]);
 
@@ -370,7 +381,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
     (!diagnostics.isIgnoringBatteryOptimizations || !diagnostics.canScheduleExactAlarms)
   );
 
-  const copyToClipboard = async (text: string, type: 'all' | 'events' | 'nativeLogs' | 'ringDiag') => {
+  const copyToClipboard = async (text: string, type: 'all' | 'events' | 'nativeLogs' | 'ringDiag' | 'doubleRing') => {
     let success = false;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -408,12 +419,16 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
             ? 'تم نسخ سجل إطلاق التنبيهات بنجاح ✓'
             : type === 'ringDiag'
             ? 'تم نسخ سجل قياس الرنين المزدوج بنجاح ✓'
+            : type === 'doubleRing'
+            ? 'تم نسخ تقرير كاشف الرنين المزدوج بنجاح ✓'
             : 'تم نسخ سجل الأحداث الأصلية بنجاح ✓'
         );
       }
       setTimeout(() => setCopiedType('none'), 3000);
     }
   };
+
+  const doubleRingReport = useMemo(() => detectDoubleRing(ringDiagLogs), [ringDiagLogs]);
 
   const getEventBadgeClass = (eventName: string): string => {
     switch (eventName) {
@@ -1590,6 +1605,169 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
           </div>
         )}
       </div>
+
+      {/* 4c. TASK10 / D1: Read-Only Double-Ring Detector Card (Tab only, never inside Modal) */}
+      {showDoubleRingDetector && (
+        <div className="bg-white dark:bg-[#161d26] p-4 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <BellRing className="w-4 h-4 text-indigo-500 shrink-0" />
+              <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">
+                كاشف الرنين المزدوج (TASK10 / D1 — قراءة فقط)
+              </h4>
+              <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold font-mono">
+                v{APP_VERSION.version} ({APP_VERSION.commitHash})
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                copyToClipboard(
+                  formatDoubleRingReport(doubleRingReport, {
+                    version: APP_VERSION.version,
+                    commitHash: APP_VERSION.commitHash,
+                    formatTime: formatTimestamp,
+                  }),
+                  'doubleRing'
+                )
+              }
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg transition-all cursor-pointer"
+              title="نسخ تقرير كاشف الرنين المزدوج"
+            >
+              {copiedType === 'doubleRing' ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400">تم النسخ ✓</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>نسخ تقرير الكاشف</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-center justify-between flex-wrap gap-2 ${
+              doubleRingReport.verdict === 'DUPLICATE_START'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-200'
+                : doubleRingReport.verdict === 'POSSIBLE_OVERLAP'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
+                : doubleRingReport.verdict === 'NONE_FOUND'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                : 'bg-slate-100 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 flex-wrap font-black">
+              <span>الحكم:</span>
+              <span className="font-mono">{doubleRingReport.verdict}</span>
+              {doubleRingReport.isEstimated && (
+                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
+                  تقديري
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] font-medium">
+              {doubleRingReport.verdict === 'INSUFFICIENT_DATA'
+                ? 'بيانات غير كافية (أقل من 3 أحداث صوت مسموعة — لا يُعد نجاحًا)'
+                : doubleRingReport.verdict === 'NONE_FOUND'
+                ? 'لم يُرصد تكرار أو تداخل صوتي ضمن النافذة'
+                : doubleRingReport.verdict === 'DUPLICATE_START'
+                ? `تكرار مؤكد (ثقة عالية): ${toArabicNumbers(doubleRingReport.duplicateStarts.length)} حالة`
+                : `تداخل محتمل (ثقة متوسطة): ${toArabicNumbers(doubleRingReport.possibleOverlaps.length)} حالة`}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">الأحداث المقروءة</div>
+              <div className="font-black font-mono text-slate-800 dark:text-slate-200">
+                {toArabicNumbers(doubleRingReport.totalEventsRead)} / {toArabicNumbers(RING_DIAG_LOG_FETCH_LIMIT)}
+              </div>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">أحداث بدء الصوت</div>
+              <div className="font-black font-mono text-slate-800 dark:text-slate-200">
+                {toArabicNumbers(doubleRingReport.audibleEventsCount)} (mp: {toArabicNumbers(doubleRingReport.nativeMpStartCount)})
+              </div>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">بدايات من غير نهاية</div>
+              <div className={`font-black font-mono ${doubleRingReport.startsWithoutEndCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {toArabicNumbers(doubleRingReport.startsWithoutEndCount)}
+              </div>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">الحالات المشبوهة</div>
+              <div className="font-black font-mono text-slate-800 dark:text-slate-200">
+                {toArabicNumbers(doubleRingReport.duplicateStarts.length + doubleRingReport.possibleOverlaps.length)}
+              </div>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">تسليم/إعادة (handoffs)</div>
+              <div className="font-black font-mono text-sky-600 dark:text-sky-400">
+                {toArabicNumbers(doubleRingReport.handoffs.length)}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1 bg-slate-50 dark:bg-slate-900/30 px-3 py-2 rounded-xl">
+            <span>أول حدث: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatTimestamp(doubleRingReport.firstEventTimeMs ?? undefined)}</strong></span>
+            <span>آخر حدث: <strong className="text-slate-700 dark:text-slate-200 font-mono">{formatTimestamp(doubleRingReport.lastEventTimeMs ?? undefined)}</strong></span>
+          </div>
+
+          {(doubleRingReport.duplicateStarts.length > 0 || doubleRingReport.possibleOverlaps.length > 0 || doubleRingReport.handoffs.length > 0) && (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {([...doubleRingReport.duplicateStarts, ...doubleRingReport.possibleOverlaps, ...doubleRingReport.handoffs] as Array<RingSuspiciousPair | RingHandoffPair>).map((pair, idx) => (
+                <div
+                  key={`${pair.kind}_${pair.first.timeMs}_${pair.second.timeMs}_${idx}`}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-800 space-y-1.5 text-[11px]"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                          pair.kind === 'DUPLICATE_START'
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                            : pair.kind === 'POSSIBLE_OVERLAP'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                            : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+                        }`}
+                      >
+                        {pair.kind === 'HANDOFF' ? 'HANDOFF (تسليم/إعادة)' : pair.kind}
+                      </span>
+                      {pair.kind !== 'HANDOFF' && pair.isEstimated && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
+                          تقديري
+                        </span>
+                      )}
+                      <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                        {pair.reason}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                      {pair.kind === 'HANDOFF'
+                        ? `فاصل التسليم: ${pair.handoffGapMs >= 0 ? '+' : ''}${pair.handoffGapMs}ms`
+                        : `الفرق: ${(pair.deltaMs / 1000).toFixed(1)}ث`}
+                    </span>
+                  </div>
+
+                  {[pair.first, pair.second].map((side, sideIdx) => (
+                    <div
+                      key={`${sideIdx}_${side.timeMs}_${side.stage}`}
+                      className="p-1.5 rounded-lg bg-white/80 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 font-mono text-[10px] text-slate-700 dark:text-slate-300 break-all"
+                    >
+                      [{sideIdx + 1}] {formatTimestamp(side.timeMs)} | {side.source} | {side.alarmType} | prayerKey={side.prayerKey || '—'} | stage={side.stage} | track={side.track || '—'} | playId={side.playId || '—'}
+                      {side.endTimeMs ? ` | end=${side.endStage}` : ''}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 5. Per-Prayer Native Files Status */}
       <div className="space-y-3">
