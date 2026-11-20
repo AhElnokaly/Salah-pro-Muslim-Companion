@@ -540,6 +540,21 @@ export type NativeAlarmCalcParams = {
   athanEnabledMap?: Record<string, boolean>;
 };
 
+export function buildCustomAlarmNativeKey(params: {
+  alarmId: string;
+  timeMs: number;
+  targetPrayer?: string;
+  snoozeOf?: string;
+}): string {
+  if (params.targetPrayer) {
+    return `custom_${params.alarmId}_${params.targetPrayer.toLowerCase()}_${params.timeMs}`;
+  }
+  if (params.snoozeOf) {
+    return `custom_snooze_${params.snoozeOf}_${params.alarmId}_${params.timeMs}`;
+  }
+  return `custom_${params.alarmId}_${params.timeMs}`;
+}
+
 /**
  * Builds list of native prayer time alarms including pre/post alerts, custom alarms, and khushu.
  */
@@ -613,9 +628,11 @@ export function buildNativePrayerTimeAlarms(
           const timeMs = targetDate.getTime();
           if (timeMs > now) {
             times.push({
-              prayerKey: alarm.snoozeOf
-                ? `custom_snooze_${alarm.snoozeOf}_${alarm.id}_${timeMs}`
-                : `custom_${alarm.id}_${timeMs}`,
+              prayerKey: buildCustomAlarmNativeKey({
+                alarmId: alarm.id,
+                timeMs,
+                snoozeOf: alarm.snoozeOf,
+              }),
               prayerName: alarm.title || 'منبه مخصص',
               timeMs,
               isFajr: false,
@@ -677,7 +694,11 @@ export function buildNativePrayerTimeAlarms(
             if (timeMs > now) {
               const targetNameArabic = prayerArabicNames[lowerTarget] || prayerTarget;
               times.push({
-                prayerKey: `custom_${alarm.id}_${lowerTarget}_${timeMs}`,
+                prayerKey: buildCustomAlarmNativeKey({
+                  alarmId: alarm.id,
+                  timeMs,
+                  targetPrayer: lowerTarget,
+                }),
                 prayerName: `${alarm.title || 'منبه'} (${targetNameArabic})`,
                 timeMs,
                 isFajr: lowerTarget === 'fajr',

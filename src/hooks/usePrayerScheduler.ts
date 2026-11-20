@@ -18,7 +18,8 @@ import {
 import { getLocalDateStr, cleanupOldTrackingKeys } from './prayerSchedulerUtils';
 import { useCustomAlarmTrigger } from './useCustomAlarmTrigger';
 import { useCachedPrayerTimes } from './useCachedPrayerTimes';
-import { isNativeAthanRunning, DailyPrayerTimesEntry, logRingDiagnosticEvent } from '../services/athanAlarmPlugin';
+import { isNativeAthanRunning, DailyPrayerTimesEntry, logRingDiagnosticEvent, getRingDiagnosticLog } from '../services/athanAlarmPlugin';
+import { resolveAndDispatchPendingCustomAlarms, PendingCustomAlarmItem } from './customAlarmReplayGuard';
 import { resolveAthanOverride } from '../domain/notifications/prayerAthanToggle';
 import { migrateRemovedDefaultAlarms } from '../domain/notifications/migrateRemovedDefaultAlarms';
 import { migrateRemovedSystemPrePostAlerts } from '../domain/notifications/migrateRemovedSystemPrePostAlerts';
@@ -56,6 +57,7 @@ export function usePrayerScheduler({
   settingsRef.current = settings;
   const prevPushAthanRef = useRef<boolean | undefined>(undefined);
   const days60ListRef = useRef<DailyPrayerTimesEntry[]>([]);
+  const inFlightCustomKeysRef = useRef<Set<string>>(new Set());
   const [customAlarms, setCustomAlarms] = useState<AlarmConfig[]>(() => {
     const saved = safeGetJSON<AlarmConfig[] | null>('salah_custom_alarms', null);
     if (saved !== null && Array.isArray(saved)) {
@@ -248,14 +250,7 @@ export function usePrayerScheduler({
       return score;
     };
 
-    interface PendingTriggerItem {
-      alarm: AlarmConfig;
-      targetPrayer?: RelativePrayerTarget;
-      triggeredKey: string;
-      priority: number;
-    }
-
-    const pendingAlarmsToTrigger: PendingTriggerItem[] = [];
+    const pendingAlarmsToTrigger: PendingCustomAlarmItem[] = [];
 
     // 2. Check Custom Alarms (Both Prayer-Relative & Fixed Times)
     customAlarms.forEach(alarm => {
@@ -282,11 +277,17 @@ export function usePrayerScheduler({
           const triggeredKey = `salah_triggered_${alarm.id}_${pTarget}_${todayStr}`;
           const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);
 
-          if (diff > 2 && !safeGetItem(triggeredKey)) {
+          if (diff > 2 && !safeGetItem(triggeredKey) && !inFlightCustomKeysRef.current.has(triggeredKey)) {
             // Expired, mark handled so opening app late doesn't ring
             safeSetItem(triggeredKey, 'expired');
-          } else if (isMatch && !safeGetItem(triggeredKey)) {
-            pendingAlarmsToTrigger.push({ alarm, targetPrayer: pTarget, triggeredKey, priority: getAlarmPriorityScore(alarm) });
+          } else if (isMatch && !safeGetItem(triggeredKey) && !inFlightCustomKeysRef.current.has(triggeredKey)) {
+            pendingAlarmsToTrigger.push({
+              alarm,
+              targetPrayer: pTarget,
+              prayerTimeStr,
+              triggeredKey,
+              priority: getAlarmPriorityScore(alarm),
+            });
           }
         });
       } else {
@@ -298,95 +299,94 @@ export function usePrayerScheduler({
         const triggeredKey = `salah_triggered_${alarm.id}_${todayStr}`;
         const isMatch = (diff >= 0 && diff <= 1) || (isCatchup && diff >= 0 && diff <= 2);
 
-        if (diff > 2 && !safeGetItem(triggeredKey)) {
+        if (diff > 2 && !safeGetItem(triggeredKey) && !inFlightCustomKeysRef.current.has(triggeredKey)) {
           safeSetItem(triggeredKey, 'expired');
-        } else if (isMatch && !safeGetItem(triggeredKey)) {
-          pendingAlarmsToTrigger.push({ alarm, triggeredKey, priority: getAlarmPriorityScore(alarm) });
+        } else if (isMatch && !safeGetItem(triggeredKey) && !inFlightCustomKeysRef.current.has(triggeredKey)) {
+          pendingAlarmsToTrigger.push({
+            alarm,
+            triggeredKey,
+            priority: getAlarmPriorityScore(alarm),
+          });
         }
       }
     });
 
     if (pendingAlarmsToTrigger.length > 0) {
-      pendingAlarmsToTrigger.sort((a, b) => b.priority - a.priority);
-
-      const isAnyPrayerAthanAttempting = prayers.some(
-        p => safeSessionGetItem(`salah_attempted_${todayStr}_${p}`) === 'true' && !safeGetItem(`salah_played_${todayStr}_${p}`)
-      );
-
-      const isAudioBusy = Boolean(
-        (globalAudioRef?.current && !globalAudioRef.current.paused && globalAudioRef.current.currentTime > 0) ||
-        isAnyPrayerAthanAttempting
-      );
-
-      const primaryItem = pendingAlarmsToTrigger[0];
-      safeSetItem(primaryItem.triggeredKey, 'true');
-      if (!isAudioBusy) {
-        try {
-          logRingDiagnosticEvent({
-            source: 'JS',
-            alarmType: 'custom',
-            alarmId: primaryItem.alarm.id,
-            stage: 'custom_dispatch_audible',
-            details: `prayer=${primaryItem.targetPrayer || 'fixed'}, soundType=${primaryItem.alarm.soundType || 'reminder'}, notifyMode=${primaryItem.alarm.notifyMode || 'both'}`,
-          });
-        } catch {}
-        triggerCustomAlarm(primaryItem.alarm, primaryItem.targetPrayer);
-      } else {
-        try {
-          logRingDiagnosticEvent({
-            source: 'JS',
-            alarmType: 'custom',
-            alarmId: primaryItem.alarm.id,
-            stage: 'custom_dispatch_muted_busy',
-            details: `prayer=${primaryItem.targetPrayer || 'fixed'}, origSound=${primaryItem.alarm.soundType || 'reminder'}`,
-          });
-        } catch {}
-        triggerCustomAlarm({ ...primaryItem.alarm, soundType: 'silent' }, primaryItem.targetPrayer);
-      }
-
-      if (primaryItem.alarm.id.startsWith('snooze_') || primaryItem.alarm.oneShot) {
-        setTimeout(() => {
-          const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
-          if (Array.isArray(currentList)) {
-            const updated = currentList.filter(a => a.id !== primaryItem.alarm.id);
-            safeSetJSON('salah_custom_alarms', updated);
-            window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updated }));
+      await resolveAndDispatchPendingCustomAlarms({
+        pendingItems: pendingAlarmsToTrigger,
+        checkDate,
+        inFlightKeys: inFlightCustomKeysRef.current,
+        getTriggered: safeGetItem,
+        setTriggered: safeSetItem,
+        readRingLog: getRingDiagnosticLog,
+        logDiag: logRingDiagnosticEvent,
+        computeIsAudioBusy: () => {
+          const isAnyPrayerAthanAttempting = prayers.some(
+            p => safeSessionGetItem(`salah_attempted_${todayStr}_${p}`) === 'true' && !safeGetItem(`salah_played_${todayStr}_${p}`)
+          );
+          return Boolean(
+            (globalAudioRef?.current && !globalAudioRef.current.paused && globalAudioRef.current.currentTime > 0) ||
+            isAnyPrayerAthanAttempting
+          );
+        },
+        onDispatch: (item, role) => {
+          if (role === 'primary_audible') {
+            try {
+              logRingDiagnosticEvent({
+                source: 'JS',
+                alarmType: 'custom',
+                alarmId: item.alarm.id,
+                stage: 'custom_dispatch_audible',
+                details: `prayer=${item.targetPrayer || 'fixed'}, soundType=${item.alarm.soundType || 'reminder'}, notifyMode=${item.alarm.notifyMode || 'both'}`,
+              });
+            } catch {}
+            triggerCustomAlarm(item.alarm, item.targetPrayer);
+          } else if (role === 'primary_muted_busy') {
+            try {
+              logRingDiagnosticEvent({
+                source: 'JS',
+                alarmType: 'custom',
+                alarmId: item.alarm.id,
+                stage: 'custom_dispatch_muted_busy',
+                details: `prayer=${item.targetPrayer || 'fixed'}, origSound=${item.alarm.soundType || 'reminder'}`,
+              });
+            } catch {}
+            triggerCustomAlarm({ ...item.alarm, soundType: 'silent' }, item.targetPrayer);
+          } else {
+            // Secondary items trigger silently and skip overwriting the primary ringing modal
+            try {
+              logRingDiagnosticEvent({
+                source: 'JS',
+                alarmType: 'custom',
+                alarmId: item.alarm.id,
+                stage: 'custom_dispatch_muted_secondary',
+                details: `prayer=${item.targetPrayer || 'fixed'}`,
+              });
+            } catch {}
+            triggerCustomAlarm({ ...item.alarm, soundType: 'silent' }, item.targetPrayer, true);
           }
-        }, 1500);
-      }
 
-      for (let i = 1; i < pendingAlarmsToTrigger.length; i++) {
-        const secondaryItem = pendingAlarmsToTrigger[i];
-        safeSetItem(secondaryItem.triggeredKey, 'true');
-        // Secondary items trigger silently and skip overwriting the primary ringing modal
-        try {
-          logRingDiagnosticEvent({
-            source: 'JS',
-            alarmType: 'custom',
-            alarmId: secondaryItem.alarm.id,
-            stage: 'custom_dispatch_muted_secondary',
-            details: `prayer=${secondaryItem.targetPrayer || 'fixed'}, idx=${i}`,
-          });
-        } catch {}
-        triggerCustomAlarm({ ...secondaryItem.alarm, soundType: 'silent' }, secondaryItem.targetPrayer, true);
-        if (secondaryItem.alarm.id.startsWith('snooze_') || secondaryItem.alarm.oneShot) {
-          setTimeout(() => {
-            const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
-            if (Array.isArray(currentList)) {
-              const updated = currentList.filter(a => a.id !== secondaryItem.alarm.id);
-              safeSetJSON('salah_custom_alarms', updated);
-              window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updated }));
-            }
-          }, 1500);
-        }
-      }
+          if (item.alarm.id.startsWith('snooze_') || item.alarm.oneShot) {
+            setTimeout(() => {
+              const currentList = safeGetJSON<AlarmConfig[]>('salah_custom_alarms', []);
+              if (Array.isArray(currentList)) {
+                const updated = currentList.filter(a => a.id !== item.alarm.id);
+                safeSetJSON('salah_custom_alarms', updated);
+                window.dispatchEvent(new CustomEvent('custom-alarms-changed', { detail: updated }));
+              }
+            }, 1500);
+          }
+        },
+      });
     }
   }, [settings, customAlarms, triggerAthan, triggerCustomAlarm, setToastMessage]);
 
   // Run catchup, cleanup, and native Android AlarmManager scheduling on initial state load or settings update
   useEffect(() => {
     if (isLoaded) {
-      checkTimesAndAlarms(new Date(), true);
+      void checkTimesAndAlarms(new Date(), true).catch((err) => {
+        console.warn('[usePrayerScheduler] initial checkTimesAndAlarms error:', err);
+      });
       cleanupOldTrackingKeys();
 
       const now = new Date();
@@ -540,7 +540,9 @@ export function usePrayerScheduler({
     let workerSuccess = false;
 
     const handleTick = () => {
-      checkTimesAndAlarms(new Date(), false);
+      void checkTimesAndAlarms(new Date(), false).catch((err) => {
+        console.warn('[usePrayerScheduler] tick checkTimesAndAlarms error:', err);
+      });
     };
 
     try {
@@ -586,7 +588,9 @@ export function usePrayerScheduler({
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        checkTimesAndAlarms(new Date(), true);
+        void checkTimesAndAlarms(new Date(), true).catch((err) => {
+          console.warn('[usePrayerScheduler] visibility checkTimesAndAlarms error:', err);
+        });
       }
     };
 
