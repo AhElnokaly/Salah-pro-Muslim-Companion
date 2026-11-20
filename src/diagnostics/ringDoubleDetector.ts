@@ -9,6 +9,9 @@ export const RING_DIAG_LOG_FETCH_LIMIT = 300;
 export const MIN_AUDIBLE_EVENTS_FOR_VERDICT = 3;
 export const DUPLICATE_START_WINDOW_MS = 120_000;
 export const DEFAULT_OVERLAP_WINDOW_MS = 60_000;
+/**
+ * @deprecated Unused for athan overlap detection; replaced by learned track history or `unverifiable`.
+ */
 export const FALLBACK_ATHAN_WINDOW_MS = 240_000;
 export const HANDOFF_TOLERANCE_MS = 1_000;
 
@@ -67,8 +70,12 @@ export interface RingAudibleEntry {
   endStage?: string;
   endType?: RingEndType;
   durationMs?: number;
+  learnedDurationMs?: number;
+  isUnverifiable?: boolean;
   isEstimatedInterval: boolean;
 }
+
+export type RingEstimatedSource = 'track_history' | 'default_window';
 
 export interface RingSuspiciousPair {
   kind: 'DUPLICATE_START' | 'POSSIBLE_OVERLAP';
@@ -77,6 +84,7 @@ export interface RingSuspiciousPair {
   deltaMs: number;
   windowUsedMs: number;
   isEstimated: boolean;
+  estimatedSource?: RingEstimatedSource;
   first: RingAudibleEntry;
   second: RingAudibleEntry;
 }
@@ -92,7 +100,6 @@ export interface RingHandoffPair {
 
 export interface DetectDoubleRingOptions {
   overlapWindowMs?: number;
-  athanFallbackWindowMs?: number;
   duplicateWindowMs?: number;
   minEventsForVerdict?: number;
 }
@@ -104,6 +111,7 @@ export interface DoubleRingReport {
   audibleEventsCount: number;
   nativeMpStartCount: number;
   startsWithoutEndCount: number;
+  unverifiableCount: number;
   firstEventTimeMs: number | null;
   lastEventTimeMs: number | null;
   duplicateStarts: RingSuspiciousPair[];
@@ -325,7 +333,6 @@ export function detectDoubleRing(
   options: DetectDoubleRingOptions = {}
 ): DoubleRingReport {
   const overlapWindowMs = options.overlapWindowMs ?? DEFAULT_OVERLAP_WINDOW_MS;
-  const athanFallbackWindowMs = options.athanFallbackWindowMs ?? FALLBACK_ATHAN_WINDOW_MS;
   const duplicateWindowMs = options.duplicateWindowMs ?? DUPLICATE_START_WINDOW_MS;
   const minEventsForVerdict = options.minEventsForVerdict ?? MIN_AUDIBLE_EVENTS_FOR_VERDICT;
 
@@ -386,7 +393,10 @@ export function detectDoubleRing(
     const alarmId = (item.event.alarmId || '').trim();
     const stage = item.event.stage.trim();
     const playId = item.kv.playId || undefined;
-    const track = item.kv.track || item.kv.soundType || undefined;
+    const track =
+      stage === 'native_mp_start'
+        ? item.kv.track || undefined
+        : item.kv.track || item.kv.soundType || undefined;
     const triggerId = item.kv.triggerId || undefined;
     const prayerKey = item.kv.prayer || alarmId;
 
@@ -433,14 +443,74 @@ export function detectDoubleRing(
     });
   }
 
+  // Learn track durations strictly from completed native_mp_start pairs (exact track string, no stop/error).
+  const maxCompleteDurationByTrack = new Map<string, number>();
+  for (const entry of audibleEvents) {
+    if (
+      entry.source === 'NATIVE' &&
+      entry.stage === 'native_mp_start' &&
+      entry.endType === 'complete' &&
+      entry.durationMs !== undefined &&
+      entry.track
+    ) {
+      const prevMax = maxCompleteDurationByTrack.get(entry.track);
+      if (prevMax === undefined || entry.durationMs > prevMax) {
+        maxCompleteDurationByTrack.set(entry.track, entry.durationMs);
+      }
+    }
+  }
+
+  let unverifiableCount = 0;
+  for (const entry of audibleEvents) {
+    if (entry.source === 'NATIVE' && entry.stage === 'native_mp_start' && entry.endTimeMs === undefined) {
+      const learnedMax = entry.track ? maxCompleteDurationByTrack.get(entry.track) : undefined;
+      if (learnedMax !== undefined) {
+        entry.learnedDurationMs = learnedMax + HANDOFF_TOLERANCE_MS;
+        entry.isEstimatedInterval = true;
+        entry.isUnverifiable = false;
+      } else {
+        entry.isEstimatedInterval = false;
+        entry.isUnverifiable = true;
+        unverifiableCount++;
+      }
+    }
+  }
+
   const duplicateStarts: RingSuspiciousPair[] = [];
   const possibleOverlaps: RingSuspiciousPair[] = [];
   const handoffs: RingHandoffPair[] = [];
 
   for (let i = 0; i < audibleEvents.length; i++) {
     const first = audibleEvents[i];
-    const fallbackWindowMs = first.alarmType === 'athan' ? athanFallbackWindowMs : overlapWindowMs;
-    const intervalEndMs = first.endTimeMs !== undefined ? first.endTimeMs : first.timeMs + fallbackWindowMs;
+    const isNativeStart = first.source === 'NATIVE' && first.stage === 'native_mp_start';
+
+    let canCheckOverlap = true;
+    let intervalEndMs = first.timeMs;
+    let overlapWindowUsedMs = overlapWindowMs;
+    let overlapIsEstimated = false;
+    let estimatedSource: RingEstimatedSource | undefined;
+
+    if (isNativeStart) {
+      if (first.endTimeMs !== undefined) {
+        intervalEndMs = first.endTimeMs;
+        overlapWindowUsedMs = Math.max(0, first.endTimeMs - first.timeMs);
+        overlapIsEstimated = false;
+      } else if (first.learnedDurationMs !== undefined) {
+        intervalEndMs = first.timeMs + first.learnedDurationMs;
+        overlapWindowUsedMs = first.learnedDurationMs;
+        overlapIsEstimated = true;
+        estimatedSource = 'track_history';
+      } else {
+        canCheckOverlap = false;
+        intervalEndMs = first.timeMs;
+      }
+    } else {
+      intervalEndMs = first.timeMs + overlapWindowMs;
+      overlapWindowUsedMs = overlapWindowMs;
+      overlapIsEstimated = true;
+      estimatedSource = 'default_window';
+    }
+
     const maxLookaheadMs = Math.max(duplicateWindowMs, intervalEndMs - first.timeMs);
 
     for (let j = i + 1; j < audibleEvents.length; j++) {
@@ -484,7 +554,7 @@ export function detectDoubleRing(
         }
       }
 
-      const isWithinOverlap = second.timeMs < intervalEndMs;
+      const isWithinOverlap = canCheckOverlap && second.timeMs < intervalEndMs;
 
       if (dupReason || isWithinOverlap) {
         if (first.endTimeMs !== undefined && first.endTimeMs <= second.timeMs + HANDOFF_TOLERANCE_MS) {
@@ -516,8 +586,9 @@ export function detectDoubleRing(
             confidence: 'medium',
             reason: first.endTimeMs !== undefined ? 'within_measured_interval' : 'within_estimated_window',
             deltaMs,
-            windowUsedMs: first.endTimeMs !== undefined ? Math.max(0, first.endTimeMs - first.timeMs) : fallbackWindowMs,
-            isEstimated: first.endTimeMs === undefined,
+            windowUsedMs: overlapWindowUsedMs,
+            isEstimated: overlapIsEstimated,
+            ...(estimatedSource ? { estimatedSource } : {}),
             first,
             second,
           });
@@ -551,6 +622,7 @@ export function detectDoubleRing(
     audibleEventsCount: audibleEvents.length,
     nativeMpStartCount,
     startsWithoutEndCount,
+    unverifiableCount,
     firstEventTimeMs,
     lastEventTimeMs,
     duplicateStarts,
@@ -565,7 +637,10 @@ export function formatDoubleRingReport(
   meta: { version?: string; commitHash?: string; formatTime?: (ms?: number) => string } = {}
 ): string {
   const fmtTime = meta.formatTime ?? ((ms?: number) => (ms ? new Date(ms).toISOString() : '—'));
-  const verdictLabel = `${report.verdict}${report.isEstimated ? ' (تقديري)' : ''}`;
+  const hasTrackHistoryEstimate = report.possibleOverlaps.some((p) => p.estimatedSource === 'track_history');
+  const verdictLabel = `${report.verdict}${
+    report.isEstimated ? (hasTrackHistoryEstimate ? ' (تقديري - estimated from track history)' : ' (تقديري)') : ''
+  }`;
   const lines: string[] = [
     `=== تقرير كاشف الرنين المزدوج (TASK10 / D1) ===`,
     `البناء (Build): v${meta.version || '?'} (${meta.commitHash || 'unknown'})`,
@@ -573,6 +648,7 @@ export function formatDoubleRingReport(
     `إجمالي الأحداث المقروءة: ${report.totalEventsRead}`,
     `أحداث بدء الصوت المسموعة: ${report.audibleEventsCount} (native_mp_start: ${report.nativeMpStartCount})`,
     `بدايات native_mp_start بدون نهاية: ${report.startsWithoutEndCount}`,
+    `بدايات غير قابلة للتحقق (unverifiable): ${report.unverifiableCount}`,
     `الفترة الزمنية: من ${fmtTime(report.firstEventTimeMs ?? undefined)} إلى ${fmtTime(report.lastEventTimeMs ?? undefined)}`,
     `حالات DUPLICATE_START (ثقة عالية): ${report.duplicateStarts.length}`,
     `حالات POSSIBLE_OVERLAP (ثقة متوسطة): ${report.possibleOverlaps.length}`,
@@ -581,9 +657,15 @@ export function formatDoubleRingReport(
 
   const appendPair = (label: string, pair: RingSuspiciousPair | RingHandoffPair, idx: number) => {
     const isHandoff = pair.kind === 'HANDOFF';
+    const estLabel =
+      !isHandoff && pair.isEstimated
+        ? pair.estimatedSource === 'track_history'
+          ? ', estimated from track history'
+          : ', تقديري'
+        : '';
     const extraInfo = isHandoff
       ? `فاصل التسليم ${(pair.handoffGapMs >= 0 ? '+' : '')}${pair.handoffGapMs}ms`
-      : `فرق ${(pair.deltaMs / 1000).toFixed(1)}ث${pair.isEstimated ? ', تقديري' : ''}`;
+      : `فرق ${(pair.deltaMs / 1000).toFixed(1)}ث${estLabel}`;
     lines.push(
       `--- ${label} #${idx + 1} (${pair.reason}, ${extraInfo}) ---`,
       `  [1] ${fmtTime(pair.first.timeMs)} | ${pair.first.source} | ${pair.first.alarmType} | alarmId=${pair.first.alarmId || '—'} | prayerKey=${pair.first.prayerKey || '—'} | stage=${pair.first.stage} | track=${pair.first.track || '—'} | playId=${pair.first.playId || '—'}${pair.first.endTimeMs ? ` | end=${pair.first.endStage}@${fmtTime(pair.first.endTimeMs)}` : ''}`,

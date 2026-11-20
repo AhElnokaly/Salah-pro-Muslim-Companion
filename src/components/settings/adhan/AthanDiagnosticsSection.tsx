@@ -1664,7 +1664,9 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               <span className="font-mono">{doubleRingReport.verdict}</span>
               {doubleRingReport.isEstimated && (
                 <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
-                  تقديري
+                  {doubleRingReport.possibleOverlaps.some((p) => p.estimatedSource === 'track_history')
+                    ? 'تقديري (estimated from track history)'
+                    : 'تقديري'}
                 </span>
               )}
             </div>
@@ -1679,7 +1681,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
             <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
               <div className="text-slate-400">الأحداث المقروءة</div>
               <div className="font-black font-mono text-slate-800 dark:text-slate-200">
@@ -1696,6 +1698,12 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
               <div className="text-slate-400">بدايات من غير نهاية</div>
               <div className={`font-black font-mono ${doubleRingReport.startsWithoutEndCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {toArabicNumbers(doubleRingReport.startsWithoutEndCount)}
+              </div>
+            </div>
+            <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
+              <div className="text-slate-400">غير قابل للتحقق (unverifiable)</div>
+              <div className={`font-black font-mono ${doubleRingReport.unverifiableCount > 0 ? 'text-slate-700 dark:text-slate-200' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {toArabicNumbers(doubleRingReport.unverifiableCount)}
               </div>
             </div>
             <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800">
@@ -1739,7 +1747,9 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                       </span>
                       {pair.kind !== 'HANDOFF' && pair.isEstimated && (
                         <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-200 text-[10px] font-bold">
-                          تقديري
+                          {pair.estimatedSource === 'track_history'
+                            ? 'estimated from track history'
+                            : 'تقديري'}
                         </span>
                       )}
                       <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
