@@ -103,3 +103,54 @@ export function syncUpcomingPrayerSchedule(settings: AppSettings): ScheduledAtha
   saveScheduledAthans(schedule);
   return schedule;
 }
+
+/**
+ * Generates prayer schedule items covering today and tomorrow (or specified daysCount)
+ * using the application's actual scheduling settings (coordinates, calculation method, madhab, offsets).
+ * Returns array of { name: string, timeMs: number } for proximity guard validation.
+ * Returns empty array if settings are missing or lack valid coordinates (fail-closed).
+ */
+export function generatePrayerSchedule(
+  settings?: Partial<AppSettings> | null,
+  startDate: Date = new Date(),
+  daysCount: number = 2
+): Array<{ name: string; timeMs: number }> {
+  if (!settings) {
+    return [];
+  }
+
+  const lat = settings.latitude;
+  const lng = settings.longitude;
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+    return [];
+  }
+
+  const result: Array<{ name: string; timeMs: number }> = [];
+  const prayerKeys = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const;
+  const calcMethod = settings.calcMethod || 'Egypt';
+  const madhab = settings.madhab || 'standard';
+  const manualOffsets = settings.prayerOffsets || {};
+  const timezoneId = settings.timezoneId;
+
+  for (let i = 0; i < daysCount; i++) {
+    const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+    const timezoneOffsetHours = getTimezoneOffsetForLocation(d, timezoneId);
+    const times = calculatePrayerTimes(d, lat, lng, timezoneOffsetHours, calcMethod, madhab, manualOffsets);
+
+    for (const key of prayerKeys) {
+      const timeStr = times[key];
+      if (!timeStr) continue;
+      const minutes = parseTimeToMinutes(timeStr);
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+
+      const prayerDate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, mins, 0, 0);
+      result.push({
+        name: key,
+        timeMs: prayerDate.getTime(),
+      });
+    }
+  }
+
+  return result;
+}

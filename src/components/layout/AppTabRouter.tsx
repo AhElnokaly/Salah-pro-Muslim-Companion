@@ -349,7 +349,7 @@ export const AppTabRouter: React.FC<AppTabRouterProps> = ({
 
         {activeTab === 'diagnostics' && (
           <div className="pb-12 space-y-4">
-            <AthanDiagnosticsSection setToastMessage={setToastMessage} />
+            <AthanDiagnosticsSection setToastMessage={setToastMessage} showDoubleRingDetector />
           </div>
         )}
       </Suspense>

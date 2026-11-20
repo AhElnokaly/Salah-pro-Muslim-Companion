@@ -19,6 +19,18 @@ class AthanBootReceiver : BroadcastReceiver() {
         val action = intent.action
         Log.d(TAG, "Received boot/package intent: $action")
 
+        val now = System.currentTimeMillis()
+        val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
+
+        if (action == Intent.ACTION_BOOT_COMPLETED || action == "android.intent.action.QUICKBOOT_POWERON") {
+            prefs.edit().putLong("last_device_boot_timestamp", now).apply()
+        }
+
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            prefs.edit().putLong("last_package_replaced_timestamp", now).apply()
+            AthanAlarmPlugin.logNativeEvent(context, "package_replaced", "action=$action")
+        }
+
         if (action == Intent.ACTION_BOOT_COMPLETED ||
             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
             action == "android.intent.action.QUICKBOOT_POWERON") {
@@ -50,23 +62,55 @@ class AthanBootReceiver : BroadcastReceiver() {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
             if (alarmManager == null) {
                 Log.w(TAG, "AlarmManager service not available on boot")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_alarm_manager_null")
                 return
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 Log.w(TAG, "Exact alarm permission missing on boot. Alarms will be scheduled when user opens app.")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_permission_not_granted")
                 return
             }
 
             val prefs = context.getSharedPreferences(AthanAlarmPlugin.PREFS_NAME, Context.MODE_PRIVATE)
-            val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null) ?: return
+            // On reboot or app update, the OS AlarmManager has been wiped.
+            // Do NOT trust the stored scheduled IDs ledger: clear it so all alarms are freshly re-registered.
+            prefs.edit()
+                .remove(AthanAlarmPlugin.KEY_SCHEDULED_IDS)
+                .apply()
+
+            val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null)
+            if (jsonString == null) {
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=no_saved_alarms")
+                return
+            }
 
             val jsonArray = JSONArray(jsonString)
-            val restoredCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, jsonArray)
+            val cleanArray = JSONArray()
+            var diagCount = 0
+            for (i in 0 until jsonArray.length()) {
+                val item = jsonArray.getJSONObject(i)
+                val pKey = item.optString("prayerKey", "")
+                val aId = item.optString("alarmId", "")
+                if (pKey.contains("diag_") || aId.startsWith("diag_")) {
+                    diagCount++
+                } else {
+                    cleanArray.put(item)
+                }
+            }
 
-            Log.d(TAG, "Restored $restoredCount exact athan alarms after boot")
+            if (diagCount > 0) {
+                prefs.edit().putString(AthanAlarmPlugin.KEY_SAVED_ALARMS, cleanArray.toString()).apply()
+                Log.d(TAG, "Purged $diagCount diagnostic alarms from boot restoration ledger")
+            }
+
+            val restoredCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, cleanArray)
+
+            Log.d(TAG, "Restored $restoredCount exact athan alarms after boot (forced re-registration)")
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=success, restoredCount=$restoredCount")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore athan alarms on boot", e)
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=failed", e)
         }
     }
 }

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { KhushuModeType } from '../services/khushuModePlugin';
 import { KhushuSettings } from '../domain/khushu/khushuTypes';
+import { buildIqamaOptions, clampIqamaOffset, getDefaultIqamaOffset } from '../domain/khushu/khushuFlowUtils';
 import { toArabicNumbers } from '../utils/hijri';
 import { KhushuPermissionOnboardingModal } from './khushu/KhushuPermissionOnboardingModal';
 
@@ -305,6 +306,78 @@ export const KhushuModeSheet: React.FC<KhushuModeSheetProps> = ({
                     </select>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* 3. وقت بدء الخشوع بعد الأذان لكل صلاة */}
+            <div
+              className={`bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3 transition-opacity ${
+                settings.autoWithIqama ? '' : 'opacity-50'
+              }`}
+            >
+              <div className="flex flex-col gap-1">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  <span>يبدأ بعد الأذان بـ (بالدقائق)</span>
+                </div>
+                {!settings.autoWithIqama && (
+                  <span className="text-[10px] text-amber-300/90 font-medium">
+                    فعّل التفعيل التلقائي لاختيار وقت البدء
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { key: 'fajr', label: 'صلاة الفجر' },
+                  { key: 'dhuhr', label: 'صلاة الظهر' },
+                  { key: 'asr', label: 'صلاة العصر' },
+                  { key: 'maghrib', label: 'صلاة المغرب' },
+                  { key: 'isha', label: 'صلاة العشاء' },
+                  { key: 'friday', label: 'صلاة وخطبة الجمعة' },
+                ].map((item) => {
+                  const prayerDefault = getDefaultIqamaOffset(item.key);
+                  const currentVal = clampIqamaOffset(
+                    settings.iqamaOffsets?.[item.key as keyof typeof settings.iqamaOffsets],
+                    prayerDefault
+                  );
+                  const optionsList = buildIqamaOptions(currentVal);
+
+                  return (
+                    <React.Fragment key={item.key}>
+                      <div
+                        className="flex items-center justify-between bg-black/20 p-2 rounded-xl border border-white/5"
+                      >
+                        <span className="text-slate-300">{item.label}</span>
+                        <select
+                          disabled={!settings.autoWithIqama}
+                          value={currentVal}
+                          onChange={(e) =>
+                            onUpdateSettings({
+                              iqamaOffsets: {
+                                ...settings.iqamaOffsets,
+                                [item.key]: clampIqamaOffset(parseInt(e.target.value, 10), prayerDefault),
+                              },
+                            })
+                          }
+                          className={`bg-slate-800 text-amber-300 text-xs rounded-lg px-2 py-1 border border-slate-700 outline-none ${
+                            !settings.autoWithIqama ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                          }`}
+                        >
+                          {optionsList.map((m) => (
+                            <option key={m} value={m}>
+                              {toArabicNumbers(m)} د
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {item.key === 'friday' && !settings.enableFridaySpecial && (
+                        <div className="col-span-2 text-[10px] text-amber-300/80 pr-1">
+                          تنبيه: ميزة الجمعة الخاصة غير مفعلة، سيُعتمد وقت وتأخير الظهر بدلاً منه.
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
 
