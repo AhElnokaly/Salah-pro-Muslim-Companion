@@ -81,10 +81,15 @@
   - `src/domain/notifications/UnifiedNotificationOrchestrator.ts`
   - ~~`src/domain/notifications/NotificationPlanner.ts`~~ — **محذوف نهائيًا (راجع بند 14، WP-01.4)**، كان dead code 100%. تحديث توثيقي فقط، لا يُعتبر كسر لهذا البند.
   - `src/services/NotificationScheduler.ts`
-  - `src/services/AlarmReconciliationService.ts` (نقطتا الاستدعاء اتحوّلتا)
+  - `src/services/AlarmReconciliationService.ts` (قراءة فقط عبر `getAlarmDiagnostics()` — أُزيل استدعاء `syncAllNotificationChannels`)
 - **القواعد:**
   - توحيد قنوات إرسال وجدولة وإلغاء الإشعارات والتنبيهات بين نظام أندرويد الأصلي وخدمات الويب Service Worker.
   - أي كود جديد يحتاج جدولة/إلغاء تنبيه لازم يعدي عبر `UnifiedNotificationOrchestrator`، مش نداء مباشر لـ `AthanAlarm`.
+
+### تحديث فرعي — جعل `AlarmReconciliationService.reconcileAlarms()` قراءة فقط (Commit 1)
+- **المشكلة المكتشفة:** استدعاء `syncAllNotificationChannels` يومياً مرتين من داخل `AlarmDiagnosticsModal` كان يُرسل جدول يوم واحد فقط إلى `scheduleAthanAlarms` ويمسح بقية الأيام والمنبهات المخصصة من الـ ledger و`KEY_SAVED_ALARMS`.
+- **الإصلاح:** اقتصار `AlarmReconciliationService.reconcileAlarms()` على القراءة فقط من `getAlarmDiagnostics()` (`savedCount` و`scheduledCount`) مع إبقاء `UnifiedNotificationOrchestrator` و`NotificationScheduler` و`usePrayerScheduler` بدون تعديل، وتعطيل زر تجربة الأذان 60 ثانية مؤقتاً لحين إضافة `mode: 'merge'` في Commit 2.
+- **ملاحظة بند 14:** `scheduleTestAlarm` في `AlarmReconciliationService.ts` ما زالت محتفظةً بالمعرف المحجوز `id: 1` ضمن النطاق `[1, 999]` دون مساس.
 
 ### تحديث فرعي (v8) — إصلاح الإلغاء الفردي (كان مكسور تمامًا)
 - **المشكلة المكتشفة:** `AlarmIdentifier.ts` كان بيستخدم خوارزمية FNV-1a مختلفة تمامًا

@@ -1,164 +1,57 @@
 /**
  * Alarm Reconciliation Service
- * Compares desired upcoming prayer alarms with scheduled state and updates accordingly.
+ * Read-only diagnostics inspection over app-recorded alarm state via getAlarmDiagnostics().
  */
 
-import { UnifiedNotificationOrchestrator } from '../domain/notifications/UnifiedNotificationOrchestrator';
+import { getAlarmDiagnostics } from './athanAlarmPlugin';
 import { NotificationScheduler } from './NotificationScheduler';
-import { calculatePrayerTimes, parseTimeToMinutes, getTimezoneOffsetForLocation } from '../utils/prayerCalc';
-import { AppSettings, PrayerTimes } from '../types';
-import { isAthanEnabled } from '../utils/athanEnabled';
-import { getPushSettings } from '../utils/pushNotificationService';
+import { AppSettings } from '../types';
 
 export interface ReconciliationStatus {
   lastReconciledAt: string;
+  savedCount: number;
   scheduledCount: number;
-  missingCount: number;
-  obsoleteCount: number;
-  retainedCount: number;
   success: boolean;
 }
 
 export class AlarmReconciliationService {
   /**
-   * Reconciles current alarms for today and tomorrow with true state diffing
+   * Reads current app-recorded alarm counts (read-only, never writes or reschedules alarms).
+   * - savedCount: future entries in getAlarmDiagnostics().savedAlarms
+   * - scheduledCount: future entries with isCurrentlyScheduled === true
    */
-  static async reconcileAlarms(settings: AppSettings): Promise<ReconciliationStatus> {
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const getLocalFormattedDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-    const todayStr = getLocalFormattedDate(now);
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const tomorrowStr = getLocalFormattedDate(tomorrow);
-
-    const lat = settings.latitude ?? 30.0444;
-    const lng = settings.longitude ?? 31.2357;
-    const calcMethod = settings.calcMethod ?? 'Egypt';
-    const madhab = settings.madhab ?? 'standard';
-    const offsets = settings.prayerOffsets ?? {};
-
-    const todayTzOffset = getTimezoneOffsetForLocation(now, settings.timezoneId);
-    const tomorrowTzOffset = getTimezoneOffsetForLocation(tomorrow, settings.timezoneId);
-
-    const todayTimes = calculatePrayerTimes(
-      now,
-      lat,
-      lng,
-      todayTzOffset,
-      calcMethod,
-      madhab,
-      offsets
-    );
-
-    const tomorrowTimes = calculatePrayerTimes(
-      tomorrow,
-      lat,
-      lng,
-      tomorrowTzOffset,
-      calcMethod,
-      madhab,
-      offsets
-    );
-
-    const desiredAlarms: Array<{ key: string; name: string; timeMs: number; dateStr: string }> = [];
-
-    const pushSettings = getPushSettings();
-    const processTimes = (dateObj: Date, dateStr: string, times: PrayerTimes) => {
-      const keys = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-      for (const key of keys) {
-        if (key === 'Sunrise' || !isAthanEnabled(key, settings, pushSettings) || !times[key]) continue;
-        const timeStr = times[key];
-        const minutes = parseTimeToMinutes(timeStr);
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        const triggerDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), hours, mins, 0, 0);
-
-        if (!isNaN(triggerDate.getTime()) && triggerDate.getTime() > now.getTime()) {
-          desiredAlarms.push({
-            key,
-            name: key,
-            timeMs: triggerDate.getTime(),
-            dateStr,
-          });
-        }
-      }
-    };
-
-    processTimes(now, todayStr, todayTimes);
-    processTimes(tomorrow, tomorrowStr, tomorrowTimes);
-
+  static async reconcileAlarms(_settings?: AppSettings): Promise<ReconciliationStatus> {
     try {
-      // 1. Fetch currently active scheduled alarms from native layer
-      const scheduledState = await UnifiedNotificationOrchestrator.getScheduledAlarms();
-      const currentAlarms = scheduledState.alarms || [];
-
-      // 2. Compute Real Diff: Missing, Obsolete, and Retained
-      // Match by prayerKey and time within 60-second window
-      let retainedCount = 0;
-      let missingCount = 0;
-
-      for (const desired of desiredAlarms) {
-        const isMatched = currentAlarms.some(curr => 
-          curr.prayerKey.toLowerCase() === desired.key.toLowerCase() &&
-          Math.abs(curr.timeMs - desired.timeMs) < 60000
-        );
-        if (isMatched) {
-          retainedCount++;
-        } else {
-          missingCount++;
-        }
-      }
-
-      let obsoleteCount = 0;
-      for (const curr of currentAlarms) {
-        const isStillDesired = desiredAlarms.some(desired => 
-          desired.key.toLowerCase() === curr.prayerKey.toLowerCase() &&
-          Math.abs(desired.timeMs - curr.timeMs) < 60000
-        );
-        if (!isStillDesired) {
-          obsoleteCount++;
-        }
-      }
-
-      // 3. Execute reconciliation through Unified Notification Orchestrator
-      const enabledPrayers = (settings.adhanEnabled || {}) as Record<string, boolean>;
-      await UnifiedNotificationOrchestrator.syncAllNotificationChannels(
-        settings,
-        todayStr,
-        todayTimes,
-        enabledPrayers
+      const diag = await getAlarmDiagnostics();
+      const nowMs = Date.now();
+      const savedAlarms = Array.isArray(diag?.savedAlarms) ? diag.savedAlarms : [];
+      const futureSaved = savedAlarms.filter(
+        (alarm) => typeof alarm.timeMs === 'number' && alarm.timeMs > nowMs
       );
-      await UnifiedNotificationOrchestrator.syncAllNotificationChannels(
-        settings,
-        tomorrowStr,
-        tomorrowTimes,
-        enabledPrayers
-      );
+
+      const savedCount = futureSaved.length;
+      const scheduledCount = futureSaved.filter((alarm) => Boolean(alarm.isCurrentlyScheduled)).length;
 
       return {
         lastReconciledAt: new Date().toISOString(),
-        scheduledCount: desiredAlarms.length,
-        missingCount,
-        obsoleteCount,
-        retainedCount,
+        savedCount,
+        scheduledCount,
         success: true,
       };
     } catch (err) {
-      console.error('[AlarmReconciliationService] Reconciliation error:', err);
+      console.error('[AlarmReconciliationService] Diagnostics read error:', err);
       return {
         lastReconciledAt: new Date().toISOString(),
+        savedCount: 0,
         scheduledCount: 0,
-        missingCount: desiredAlarms.length,
-        obsoleteCount: 0,
-        retainedCount: 0,
         success: false,
       };
     }
   }
 
   /**
-   * Schedules a single test alarm after specified delay in seconds
+   * @deprecated Disabled in Commit 1 UI until Commit 2 adds safe mode: 'merge' scheduling.
+   * Schedules a single test alarm after specified delay in seconds.
    */
   static async scheduleTestAlarm(seconds = 60): Promise<boolean> {
     const triggerAt = Date.now() + seconds * 1000;
