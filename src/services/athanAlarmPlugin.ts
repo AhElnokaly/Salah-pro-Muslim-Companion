@@ -21,11 +21,18 @@ export interface PrayerTimeAlarm {
   snoozeOf?: string;
 }
 
+export interface ScheduleFailureSampleItem {
+  requestCode: number;
+  errorType: string;
+}
+
 export interface ScheduleAthanResult {
   scheduledCount: number;
   addedCount?: number;
   removedCount?: number;
   retainedCount?: number;
+  failedCount?: number;
+  failedSample?: ScheduleFailureSampleItem[];
   exactAlarmPermissionMissing?: boolean;
 }
 
@@ -34,8 +41,10 @@ export interface ReconcileAthanResult {
   addedCount: number;
   removedCount: number;
   retainedCount: number;
+  failedCount?: number;
+  failedSample?: ScheduleFailureSampleItem[];
   exactAlarmPermissionMissing?: boolean;
-  os_verified?: string;
+  pi_missing_before?: string;
 }
 
 export interface ScheduledAlarmItem extends PrayerTimeAlarm {
@@ -200,6 +209,9 @@ export interface AlarmDiagnosticsResult {
   standbyBucket: number;
   nativeEvents?: NativeLogEvent[];
   lastDeviceBootTimestamp?: number;
+  lastReconcileFailedCount?: number;
+  lastReconcileFailedSample?: ScheduleFailureSampleItem[];
+  lastReconcileAtMs?: number;
 }
 
 export interface ScheduledAlarmCountsByType {
@@ -277,7 +289,14 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
     scheduleAthanAlarms: async (options) => {
       lastScheduledOptions = options;
       console.log('[AthanAlarm Plugin]: Web fallback simulation for scheduling native alarms:', options.times.length);
-      return { scheduledCount: options.times.length, addedCount: options.times.length, removedCount: 0, retainedCount: 0 };
+      return {
+        scheduledCount: options.times.length,
+        addedCount: options.times.length,
+        removedCount: 0,
+        retainedCount: 0,
+        failedCount: 0,
+        failedSample: [],
+      };
     },
     reconcileAthanAlarms: async (options) => {
       console.log('[AthanAlarm Plugin]: Web fallback simulation for reconciling native alarms:', options.times.length);
@@ -286,7 +305,9 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
         addedCount: options.times.length,
         removedCount: 0,
         retainedCount: 0,
-        os_verified: `${Math.min(options.times.length, 20)}/${Math.min(options.times.length, 20)}`,
+        failedCount: 0,
+        failedSample: [],
+        pi_missing_before: '0/0',
       };
     },
     getScheduledAlarms: async () => {
@@ -342,6 +363,9 @@ const AthanAlarm = registerPlugin<AthanAlarmPlugin>('AthanAlarm', {
         canScheduleExactAlarms: true,
         standbyBucket: 10,
         nativeEvents: [],
+        lastReconcileFailedCount: 0,
+        lastReconcileFailedSample: [],
+        lastReconcileAtMs: 0,
       };
     },
     getNativeEventLog: async () => {

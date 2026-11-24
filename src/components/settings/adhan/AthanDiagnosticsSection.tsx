@@ -69,6 +69,7 @@ import {
   RingSuspiciousPair,
 } from '../../../diagnostics/ringDoubleDetector';
 import { APP_VERSION } from '../../../version';
+import { formatScheduleFailureLine } from '../../../diagnostics/scheduleFailureFormatter';
 
 interface NativeFileInfo {
   path: string;
@@ -542,6 +543,7 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       `• صلاحية عدم الإزعاج (DND): ${isDndGranted === true ? 'ممنوحة' : isDndGranted === false ? 'غير ممنوحة' : 'غير معروف'}`,
       `• فئة الاستعداد للتطبيق: ${formatStandbyBucket(diagnostics?.standbyBucket)}`,
       `• أقرب منبه AlarmClock مسجل بالنظام: ${diagnostics?.nextAlarmClockMs ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}`,
+      `• ${formatScheduleFailureLine(diagnostics?.lastReconcileFailedCount, diagnostics?.lastReconcileFailedSample, diagnostics?.lastReconcileAtMs)}`,
       ``,
       `[2] سجل إطلاق التنبيهات الأخيرة (Fire Events Log - ${diagnostics?.fireEvents?.length || 0} حدث):`,
     ];
@@ -596,9 +598,11 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
       : nativeLogs;
 
     const latestReconcile = list.find((e) => e.event === 'reconcile');
-    const osVerifiedMatch = latestReconcile?.details?.match(/os_verified=([^, ]+)/);
-    if (osVerifiedMatch) {
-      lines.push(`• مطابقة منبهات النظام (OS Verified): ${osVerifiedMatch[1]}`);
+    const piMissingMatch = latestReconcile?.details?.match(/pi_missing_before=([^, ]+)/);
+    if (piMissingMatch) {
+      lines.push(
+        `• فقد PendingIntent قبل إعادة التسجيل (pi_missing_before — proxy أحادي الاتجاه: missing = ضايع أكيد، present = غير مؤكد، الإثبات الفعلي dumpsys alarm، و0/0 عند الـ boot متوقع): ${piMissingMatch[1]}`
+      );
     }
 
     if (list.length > 0) {
@@ -1257,25 +1261,47 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                 {diagnostics.nextAlarmClockMs > 0 ? formatTimestamp(diagnostics.nextAlarmClockMs) : 'لا يوجد منبه AlarmClock مسجل'}
               </span>
             </div>
+            <div className="flex items-center justify-between flex-wrap sm:flex-nowrap gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 sm:col-span-2">
+              <span className="text-slate-500 dark:text-slate-400 font-bold text-[11px] sm:text-xs">
+                حالة تسجيل آخر مصالحة:
+              </span>
+              <span
+                className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] break-all ${
+                  (diagnostics.lastReconcileFailedCount ?? 0) > 0
+                    ? 'text-rose-700 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-950/40'
+                    : 'text-slate-700 dark:text-slate-200 bg-slate-200/60 dark:bg-slate-800/60'
+                }`}
+              >
+                {formatScheduleFailureLine(
+                  diagnostics.lastReconcileFailedCount,
+                  diagnostics.lastReconcileFailedSample,
+                  diagnostics.lastReconcileAtMs
+                )}
+              </span>
+            </div>
+
             {(() => {
               const list = diagnostics.nativeEvents || nativeLogs;
               const latestReconcile = list.find((e) => e.event === 'reconcile');
-              const osMatch = latestReconcile?.details?.match(/os_verified=([^, ]+)/);
-              if (!osMatch) return null;
-              const val = osMatch[1];
+              const piMatch = latestReconcile?.details?.match(/pi_missing_before=([^, ]+)/);
+              if (!piMatch) return null;
+              const val = piMatch[1];
+              const [missingPart] = val.split('/');
+              const hasMissing = Number(missingPart) > 0;
               return (
                 <div className="flex items-center justify-between flex-wrap sm:flex-nowrap gap-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 sm:col-span-2">
                   <span className="text-slate-500 dark:text-slate-400 font-bold text-[11px] sm:text-xs">
-                    مطابقة منبهات النظام (OS Verified):
+                    فقد PendingIntent قبل إعادة التسجيل (proxy أحادي الاتجاه):
                   </span>
                   <span
                     className={`font-mono font-bold px-2 py-0.5 rounded-md text-[11px] shrink-0 ${
-                      val === 'unknown'
+                      hasMissing
                         ? 'text-amber-700 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40'
-                        : 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/60 dark:bg-emerald-950/40'
+                        : 'text-slate-700 dark:text-slate-200 bg-slate-200/60 dark:bg-slate-800/60'
                     }`}
+                    title="missing = ضايع أكيد، present = غير مؤكد (الإثبات الفعلي dumpsys alarm)، 0/0 عند الـ boot متوقع"
                   >
-                    {val === 'unknown' ? 'غير مؤكد (unknown)' : `${val} منبه مؤكد بالنظام ✓`}
+                    {val} (missing=ضايع أكيد، present=غير مؤكد)
                   </span>
                 </div>
               );
@@ -1482,19 +1508,21 @@ export const AthanDiagnosticsSection: React.FC<AthanDiagnosticsSectionProps> = (
                         {evt.event}
                       </span>
                       {evt.event === 'reconcile' && (() => {
-                        const m = evt.details?.match(/os_verified=([^, ]+)/);
+                        const m = evt.details?.match(/pi_missing_before=([^, ]+)/);
                         if (!m) return null;
                         const val = m[1];
+                        const [missingPart] = val.split('/');
+                        const hasMissing = Number(missingPart) > 0;
                         return (
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${
-                              val === 'unknown'
+                              hasMissing
                                 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300/60 dark:border-amber-800/60'
-                                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-300/60 dark:border-emerald-800/60'
+                                : 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-300/60 dark:border-slate-700/60'
                             }`}
-                            title="مطابقة المنبهات مع نظام التشغيل OS عبر PendingIntent"
+                            title="proxy أحادي الاتجاه قبل إعادة التسجيل: missing = ضايع أكيد، present = غير مؤكد، 0/0 عند الـ boot متوقع"
                           >
-                            OS: {val}
+                            pi_missing_before: {val}
                           </span>
                         );
                       })()}

@@ -91,6 +91,11 @@
 - **الإصلاح:** اقتصار `AlarmReconciliationService.reconcileAlarms()` على القراءة فقط من `getAlarmDiagnostics()` (`savedCount` و`scheduledCount`) مع إبقاء `UnifiedNotificationOrchestrator` و`NotificationScheduler` و`usePrayerScheduler` بدون تعديل، وتعطيل زر تجربة الأذان 60 ثانية مؤقتاً لحين إضافة `mode: 'merge'` في Commit 2.
 - **ملاحظة بند 14:** `scheduleTestAlarm` في `AlarmReconciliationService.ts` ما زالت محتفظةً بالمعرف المحجوز `id: 1` ضمن النطاق `[1, 999]` دون مساس.
 
+### تحديث فرعي — إظهار فشل الجدولة واستبدال `os_verified` بمقياس `pi_missing_before`
+- **عقد `AthanAlarmPlugin`:** تمرير `failedCount` و`failedSample` (بحد أقصى 5 `{ requestCode, errorType }`) في `scheduleAthanAlarms` و`reconcileAthanAlarms` وفي سطر `reconcile` داخل `nativeEvents` (`failed=N`)، وحفظ `lastReconcileFailedCount` و`lastReconcileFailedSample` و`lastReconcileAtMs` في `SharedPreferences` لإرجاعها عبر `getAlarmDiagnostics()`.
+- **مقياس `pi_missing_before`:** استبدال `os_verified` بفحص `PendingIntent(..., FLAG_NO_CREATE)` **قبل** حلقة التسجيل على كامل تقاطع `(ledger ∩ desired)`؛ موثق صراحةً كـ proxy أحادي الاتجاه (`missing` = ضايع أكيد، `present` = غير مؤكد، `0/0` عند الـ boot متوقع لأن `AthanBootReceiver` يمسح الـ ledger قبله، والإثبات الفعلي عبر `dumpsys alarm`).
+- **الملفات:** `android/app/src/main/java/com/salahpro/app/plugins/AthanAlarmPlugin.kt`, `ReconcileTelemetryHelper.kt`, `src/services/athanAlarmPlugin.ts`, `src/diagnostics/scheduleFailureFormatter.ts`, `src/components/settings/adhan/AthanDiagnosticsSection.tsx`.
+
 ### تحديث فرعي (v8) — إصلاح الإلغاء الفردي (كان مكسور تمامًا)
 - **المشكلة المكتشفة:** `AlarmIdentifier.ts` كان بيستخدم خوارزمية FNV-1a مختلفة تمامًا
   عن `getDeterministicRequestCode` في `AthanAlarmPlugin.kt` (Java `hashCode`) — نفس

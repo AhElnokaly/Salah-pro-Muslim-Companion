@@ -63,6 +63,9 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_SAVED_ALARMS = "saved_alarms_json"
         const val KEY_NATIVE_EVENT_LOG = "native_event_log_json"
         const val KEY_RING_DIAG_LOG = "ring_diag_log_json"
+        const val KEY_LAST_RECONCILE_FAILED_COUNT = "last_reconcile_failed_count"
+        const val KEY_LAST_RECONCILE_FAILED_SAMPLE = "last_reconcile_failed_sample"
+        const val KEY_LAST_RECONCILE_AT_MS = "last_reconcile_at_ms"
 
         // TEMP: remove after Commit 0a result
         const val KEY_DND_PROBE_PENDING_RESTORE = "dnd_probe_pending_restore"
@@ -398,8 +401,30 @@ class AthanAlarmPlugin : Plugin() {
                 )
             }
 
+            // One-way proxy BEFORE re-scheduling over (ledger ∩ desired):
+            // 'missing' proves PendingIntent was lost (e.g. Force Stop); 'present' is inconclusive (only dumpsys alarm proves OS retention).
+            // 0/0 on boot is expected because AthanBootReceiver clears KEY_SCHEDULED_IDS beforehand.
+            val piMissingBeforeStr = try {
+                val checkFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    PendingIntent.FLAG_NO_CREATE
+                }
+                val checkIntent = Intent(context, AthanAlarmReceiver::class.java).apply {
+                    action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
+                }
+                val intersectionIds = desiredMap.keys.filter { currentScheduledIds.contains(it.toString()) }
+                computePiMissingBefore(intersectionIds) { reqCode ->
+                    PendingIntent.getBroadcast(context, reqCode, checkIntent, checkFlags) != null
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed checking PendingIntent before reconcile", e)
+                "unknown"
+            }
+
             // 3. Unconditionally re-assert every 14-day alarm in AlarmManager
             val newScheduledIds = mutableSetOf<String>()
+            val failureTracker = ScheduleFailureTracker(maxSampleSize = 5)
             for ((reqCode, item) in desiredMap) {
                 val timeMs = item.optLong("timeMs", 0L)
                 val prayerName = item.optString("prayerName", "الصلاة")
@@ -448,6 +473,7 @@ class AthanAlarmPlugin : Plugin() {
                     }
                     newScheduledIds.add(reqCode.toString())
                 } catch (e: Exception) {
+                    failureTracker.recordFailure(reqCode, e)
                     Log.e(TAG, "Error scheduling 14-day alarm reqCode=$reqCode", e)
                     logNativeEvent(
                         context,
@@ -458,56 +484,54 @@ class AthanAlarmPlugin : Plugin() {
                 }
             }
 
-            // Save updated state ledger
+            val failedSampleJson = JSONArray().apply {
+                for (sampleItem in failureTracker.getSample()) {
+                    put(JSONObject().put("requestCode", sampleItem.requestCode).put("errorType", sampleItem.errorType))
+                }
+            }
+
+            // Save updated state ledger + persisted last-reconcile failure telemetry
             prefs.edit()
                 .putInt(KEY_SCHEDULED_COUNT, newScheduledIds.size)
                 .putStringSet(KEY_SCHEDULED_IDS, newScheduledIds)
+                .putInt(KEY_LAST_RECONCILE_FAILED_COUNT, failureTracker.failedCount)
+                .putString(KEY_LAST_RECONCILE_FAILED_SAMPLE, failedSampleJson.toString())
+                .putLong(KEY_LAST_RECONCILE_AT_MS, now)
                 .apply()
 
-            // 4. Verify OS registration via PendingIntent.getBroadcast(FLAG_NO_CREATE) for near window (next 20 upcoming alarms)
-            var osVerifiedStr = "unknown"
-            try {
-                val checkFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-                } else {
-                    PendingIntent.FLAG_NO_CREATE
-                }
-                val checkIntent = Intent(context, AthanAlarmReceiver::class.java).apply {
-                    action = AthanAlarmReceiver.ACTION_ATHAN_ALARM
-                }
-                val nearWindowAlarms = active14DayList
-                    .filter { it.optLong("timeMs", 0L) > now }
-                    .take(20)
-                var verifiedCount = 0
-                for (item in nearWindowAlarms) {
-                    val timeMs = item.optLong("timeMs", 0L)
-                    val prayerKey = item.optString("prayerKey", "")
-                    val reqCode = getDeterministicRequestCode(prayerKey, timeMs)
-                    val pi = PendingIntent.getBroadcast(context, reqCode, checkIntent, checkFlags)
-                    if (pi != null) {
-                        verifiedCount++
-                    }
-                }
-                osVerifiedStr = "$verifiedCount/${nearWindowAlarms.size}"
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed verifying alarms with OS via FLAG_NO_CREATE", e)
-                osVerifiedStr = "unknown"
-            }
-
-            Log.d(TAG, "Reconcile completed: 14-day active total=${newScheduledIds.size}, added=$addedCount, removed=$removedCount, reasserted/retained=$retainedCount, os_verified=$osVerifiedStr")
+            Log.d(TAG, "Reconcile completed: 14-day active total=${newScheduledIds.size}, added=$addedCount, removed=$removedCount, reasserted/retained=$retainedCount, failed=${failureTracker.failedCount}, pi_missing_before=$piMissingBeforeStr")
             logNativeEvent(
                 context,
                 "reconcile",
-                "scheduled=$addedCount, cancelled=$removedCount, retained=$retainedCount, os_verified=$osVerifiedStr, total=${newScheduledIds.size}"
+                "scheduled=$addedCount, cancelled=$removedCount, retained=$retainedCount, failed=${failureTracker.failedCount}, pi_missing_before=$piMissingBeforeStr, total=${newScheduledIds.size}"
             )
 
             return mapOf(
                 "added" to addedCount,
                 "removed" to removedCount,
                 "retained" to retainedCount,
-                "os_verified" to osVerifiedStr,
+                "failedCount" to failureTracker.failedCount,
+                "failedSampleJson" to failedSampleJson.toString(),
+                "pi_missing_before" to piMissingBeforeStr,
                 "total" to newScheduledIds.size
             )
+        }
+
+        private fun toFailureSampleJsArray(rawJson: String?): JSArray {
+            val arr = JSArray()
+            if (rawJson.isNullOrEmpty()) return arr
+            try {
+                val parsed = JSONArray(rawJson)
+                for (i in 0 until parsed.length()) {
+                    val obj = parsed.getJSONObject(i)
+                    arr.put(JSObject().apply {
+                        put("requestCode", obj.optInt("requestCode", 0))
+                        put("errorType", obj.optString("errorType", "Exception"))
+                    })
+                }
+            } catch (_: Exception) {
+            }
+            return arr
         }
 
         @JvmStatic
@@ -963,6 +987,8 @@ class AthanAlarmPlugin : Plugin() {
             ret.put("addedCount", 0)
             ret.put("removedCount", 0)
             ret.put("retainedCount", 0)
+            ret.put("failedCount", 0)
+            ret.put("failedSample", JSArray())
             ret.put("exactAlarmPermissionMissing", true)
             call.resolve(ret)
             return
@@ -1030,6 +1056,8 @@ class AthanAlarmPlugin : Plugin() {
         ret.put("addedCount", reconcileResult["added"] ?: 0)
         ret.put("removedCount", reconcileResult["removed"] ?: 0)
         ret.put("retainedCount", reconcileResult["retained"] ?: 0)
+        ret.put("failedCount", (reconcileResult["failedCount"] as? Number)?.toInt() ?: 0)
+        ret.put("failedSample", toFailureSampleJsArray(reconcileResult["failedSampleJson"] as? String))
         ret.put("exactAlarmPermissionMissing", false)
         call.resolve(ret)
     }
@@ -1091,6 +1119,9 @@ class AthanAlarmPlugin : Plugin() {
             ret.put("addedCount", 0)
             ret.put("removedCount", 0)
             ret.put("retainedCount", 0)
+            ret.put("failedCount", 0)
+            ret.put("failedSample", JSArray())
+            ret.put("pi_missing_before", "unknown")
             ret.put("exactAlarmPermissionMissing", true)
             call.resolve(ret)
             return
@@ -1102,7 +1133,9 @@ class AthanAlarmPlugin : Plugin() {
         ret.put("addedCount", (result["added"] as? Number)?.toInt() ?: 0)
         ret.put("removedCount", (result["removed"] as? Number)?.toInt() ?: 0)
         ret.put("retainedCount", (result["retained"] as? Number)?.toInt() ?: 0)
-        ret.put("os_verified", result["os_verified"] as? String ?: "unknown")
+        ret.put("failedCount", (result["failedCount"] as? Number)?.toInt() ?: 0)
+        ret.put("failedSample", toFailureSampleJsArray(result["failedSampleJson"] as? String))
+        ret.put("pi_missing_before", result["pi_missing_before"] as? String ?: "unknown")
         ret.put("exactAlarmPermissionMissing", false)
         call.resolve(ret)
     }
@@ -1617,6 +1650,9 @@ class AthanAlarmPlugin : Plugin() {
         val lastBootTimestamp = prefs.getLong("last_device_boot_timestamp", 0L)
         ret.put("lastDeviceBootTimestamp", lastBootTimestamp)
         ret.put("nativeEvents", nativeEventsArray)
+        ret.put("lastReconcileFailedCount", prefs.getInt(KEY_LAST_RECONCILE_FAILED_COUNT, 0))
+        ret.put("lastReconcileFailedSample", toFailureSampleJsArray(prefs.getString(KEY_LAST_RECONCILE_FAILED_SAMPLE, "[]")))
+        ret.put("lastReconcileAtMs", prefs.getLong(KEY_LAST_RECONCILE_AT_MS, 0L))
 
         call.resolve(ret)
     }

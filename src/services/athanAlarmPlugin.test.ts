@@ -1,6 +1,6 @@
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import {
+import AthanAlarm, {
   chunkBinaryData,
   ATHAN_CHUNK_SIZE,
   setAthanPluginBridgeForTesting,
@@ -11,6 +11,7 @@ import {
   groupScheduledAlarmsByType,
   getNativeEventLog,
   reconcileNativeAthanAlarms,
+  getAlarmDiagnostics,
 } from './athanAlarmPlugin';
 import { safeSetItem, safeRemoveItem } from '../utils/storage';
 
@@ -758,11 +759,11 @@ describe('Native Event Log (Ring Buffer) diagnostics', () => {
     assert.equal(result[0].error, 'SecurityException: Not allowed to change DND interruption filter');
   });
 
-  test('parses os_verified correctly from reconcile event details', async () => {
+  test('parses pi_missing_before and failed=N correctly from reconcile event details (without os_verified)', async () => {
     const reconcileEvent = {
       timestampMs: 1729000000000,
       event: 'reconcile',
-      details: 'scheduled=0, cancelled=0, retained=70, os_verified=15/15, total=70',
+      details: 'scheduled=0, cancelled=0, retained=70, failed=2, pi_missing_before=3/70, total=68',
     };
 
     setAthanPluginBridgeForTesting({
@@ -774,29 +775,33 @@ describe('Native Event Log (Ring Buffer) diagnostics', () => {
 
     const result = await getNativeEventLog(10);
     assert.equal(result.length, 1);
-    const match = result[0].details.match(/os_verified=([^, ]+)/);
-    assert.ok(match, 'os_verified must be present in details');
-    assert.equal(match![1], '15/15');
+    const piMatch = result[0].details.match(/pi_missing_before=([^, ]+)/);
+    assert.ok(piMatch, 'pi_missing_before must be present in details');
+    assert.equal(piMatch![1], '3/70');
+    const failedMatch = result[0].details.match(/failed=(\d+)/);
+    assert.ok(failedMatch, 'failed=N must be present in details');
+    assert.equal(failedMatch![1], '2');
+    assert.equal(result[0].details.includes('os_verified'), false);
   });
 
-  test('handles os_verified=unknown when OS verification is unavailable', async () => {
-    const unknownReconcileEvent = {
+  test('supports pi_missing_before=0/0 on boot reconcile when ledger was cleared before restore', async () => {
+    const bootReconcileEvent = {
       timestampMs: 1729000000000,
       event: 'reconcile',
-      details: 'scheduled=0, cancelled=0, retained=70, os_verified=unknown, total=70',
+      details: 'scheduled=70, cancelled=0, retained=0, failed=0, pi_missing_before=0/0, total=70',
     };
 
     setAthanPluginBridgeForTesting({
       getNativeEventLog: async () => ({
-        events: [unknownReconcileEvent],
+        events: [bootReconcileEvent],
         total: 1,
       }),
     } as any);
 
     const result = await getNativeEventLog(10);
-    const match = result[0].details.match(/os_verified=([^, ]+)/);
-    assert.ok(match);
-    assert.equal(match![1], 'unknown');
+    const piMatch = result[0].details.match(/pi_missing_before=([^, ]+)/);
+    assert.ok(piMatch);
+    assert.equal(piMatch![1], '0/0');
   });
 
   test('supports new native event types: alarm_cancel, package_replaced, schedule_failed', async () => {
@@ -843,15 +848,87 @@ describe('Native Event Log (Ring Buffer) diagnostics', () => {
     assert.ok(result[3].error?.includes('SecurityException'));
   });
 
-  test('reconcileNativeAthanAlarms includes os_verified in return result on web fallback', async () => {
+  test('reconcileNativeAthanAlarms includes failedCount, failedSample, and pi_missing_before (no os_verified) on web fallback', async () => {
     const mockAlarms = [
-      { prayerKey: 'fajr', prayerName: 'الفجر', timeMs: Date.now() + 10000 },
-      { prayerKey: 'dhuhr', prayerName: 'الظهر', timeMs: Date.now() + 20000 },
+      { prayerKey: 'Fajr', prayerName: 'الفجر', timeMs: Date.now() + 10000 },
+      { prayerKey: 'Dhuhr', prayerName: 'الظهر', timeMs: Date.now() + 20000 },
     ];
     const res = await reconcileNativeAthanAlarms({ times: mockAlarms as any });
     assert.ok(res !== null);
-    assert.ok(res?.os_verified !== undefined, 'os_verified must be defined in result');
-    assert.equal(res?.os_verified, '2/2');
+    assert.equal(res?.pi_missing_before, '0/0');
+    assert.equal(res?.failedCount, 0);
+    assert.deepEqual(res?.failedSample, []);
+    assert.equal('os_verified' in (res || {}), false);
+  });
+
+  test('AthanAlarm.scheduleAthanAlarms web fallback exposes failedCount and failedSample', async () => {
+    const mockAlarms = [
+      { prayerKey: 'Fajr', prayerName: 'الفجر', timeMs: Date.now() + 10000 },
+    ];
+    const res = await AthanAlarm.scheduleAthanAlarms({ times: mockAlarms as any });
+    assert.equal(res.failedCount, 0);
+    assert.deepEqual(res.failedSample, []);
+  });
+
+  test('reconcileNativeAthanAlarms surfaces failedCount, failedSample (max 5), and pi_missing_before from native bridge', async () => {
+    const sample = [
+      { requestCode: 4100, errorType: 'IllegalStateException' },
+      { requestCode: 4101, errorType: 'IllegalStateException' },
+      { requestCode: 4102, errorType: 'IllegalStateException' },
+      { requestCode: 4103, errorType: 'IllegalStateException' },
+      { requestCode: 4104, errorType: 'SecurityException' },
+    ];
+    setAthanPluginBridgeForTesting({
+      reconcileAthanAlarms: async () => ({
+        scheduledCount: 65,
+        addedCount: 5,
+        removedCount: 0,
+        retainedCount: 60,
+        failedCount: 7,
+        failedSample: sample,
+        pi_missing_before: '2/62',
+        exactAlarmPermissionMissing: false,
+      }),
+    } as any);
+
+    const res = await reconcileNativeAthanAlarms({ times: [] });
+    assert.ok(res !== null);
+    assert.equal(res?.failedCount, 7);
+    assert.equal(res?.failedSample?.length, 5);
+    assert.deepEqual(res?.failedSample?.[0], { requestCode: 4100, errorType: 'IllegalStateException' });
+    assert.equal(res?.pi_missing_before, '2/62');
+  });
+
+  test('getAlarmDiagnostics web fallback & bridge include lastReconcileFailedCount, lastReconcileFailedSample, and lastReconcileAtMs', async () => {
+    const webDiag = await AthanAlarm.getAlarmDiagnostics!();
+    assert.equal(webDiag.lastReconcileFailedCount, 0);
+    assert.deepEqual(webDiag.lastReconcileFailedSample, []);
+    assert.equal(webDiag.lastReconcileAtMs, 0);
+
+    setAthanPluginBridgeForTesting({
+      getAlarmDiagnostics: async () => ({
+        savedAlarms: [],
+        nextAlarmClockMs: 0,
+        fireEvents: [],
+        isIgnoringBatteryOptimizations: true,
+        canScheduleExactAlarms: true,
+        standbyBucket: 10,
+        nativeEvents: [],
+        lastReconcileFailedCount: 3,
+        lastReconcileFailedSample: [
+          { requestCode: 9001, errorType: 'IllegalStateException' },
+        ],
+        lastReconcileAtMs: 1735689600000,
+      }),
+    } as any);
+
+    const bridgeDiag = await getAlarmDiagnostics();
+    assert.ok(bridgeDiag !== null);
+    assert.equal(bridgeDiag?.lastReconcileFailedCount, 3);
+    assert.deepEqual(bridgeDiag?.lastReconcileFailedSample, [
+      { requestCode: 9001, errorType: 'IllegalStateException' },
+    ]);
+    assert.equal(bridgeDiag?.lastReconcileAtMs, 1735689600000);
   });
 });
 
