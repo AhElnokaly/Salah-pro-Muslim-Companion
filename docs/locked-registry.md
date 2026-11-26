@@ -88,7 +88,7 @@
 
 ### تحديث فرعي — جعل `AlarmReconciliationService.reconcileAlarms()` قراءة فقط (Commit 1)
 - **المشكلة المكتشفة:** استدعاء `syncAllNotificationChannels` يومياً مرتين من داخل `AlarmDiagnosticsModal` كان يُرسل جدول يوم واحد فقط إلى `scheduleAthanAlarms` ويمسح بقية الأيام والمنبهات المخصصة من الـ ledger و`KEY_SAVED_ALARMS`.
-- **الإصلاح:** اقتصار `AlarmReconciliationService.reconcileAlarms()` على القراءة فقط من `getAlarmDiagnostics()` (`savedCount` و`scheduledCount`) مع إبقاء `UnifiedNotificationOrchestrator` و`NotificationScheduler` و`usePrayerScheduler` بدون تعديل، وتعطيل زر تجربة الأذان 60 ثانية مؤقتاً لحين إضافة `mode: 'merge'` في Commit 2.
+- **الإصلاح:** اقتصار `AlarmReconciliationService.reconcileAlarms()` على القراءة فقط من `getAlarmDiagnostics()` (`savedCount` و`scheduledCount`) مع إبقاء `UnifiedNotificationOrchestrator` و`NotificationScheduler` و`usePrayerScheduler` بدون تعديل، وإبقاء زر تجربة الأذان 60 ثانية معطّلاً؛ إذ إن التسوية الكاملة لجدول الـ14 يوماً تتم تلقائياً في كل فتح بارد عبر `usePrayerScheduler` ← `orchestratePrayerAlarms` ← `reconcileAlarmsInternalStatic` (تعيد تسجيل كل منبهات النافذة دون شرط)، ولا يلزم زر إصلاح أو وضع دمج منفصل.
 - **ملاحظة بند 14:** `scheduleTestAlarm` في `AlarmReconciliationService.ts` ما زالت محتفظةً بالمعرف المحجوز `id: 1` ضمن النطاق `[1, 999]` دون مساس.
 
 ### تحديث فرعي — إظهار فشل الجدولة واستبدال `os_verified` بمقياس `pi_missing_before`
@@ -220,6 +220,7 @@
 - **القواعد:**
   - `prayerKey` الكانوني = الاسم الخام فقط بدون أي prefix/suffix: `Fajr` | `Dhuhr`
     | `Asr` | `Maghrib` | `Isha`. التاريخ يُمثَّل حصرًا في `timeMs`، مش في الاسم.
+  - **نطاق القاعدة:** تنطبق صيغة الاسم المجرد هذه على منبهات الأذان (`athan`) فقط. أما منبهات الخشوع فتستخدم الصيغة `${CanonicalName}_khushu` (مثل `Fajr_khushu`)، والمنبهات المخصصة تستخدم `buildCustomAlarmNativeKey` (`custom_<alarmId>_<targetPrayer>_<timeMs>`، أو `custom_<alarmId>_<timeMs>` للمثبّت بالوقت، أو `custom_snooze_<snoozeOf>_<alarmId>_<timeMs>` للغفوة).
   - ممنوع أي صيغة `day_N_fajr` أو `renewed_N_fajr` في أي مسار كتابة جديد.
   - نطاقات ID محجوزة وغير قابلة للتداخل: `[1, 999]` اختبار فقط، `[1000, 10000999]`
     صلوات حقيقية عبر `getDeterministicRequestCode`.

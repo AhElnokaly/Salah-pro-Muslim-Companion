@@ -35,7 +35,7 @@ class AthanBootReceiver : BroadcastReceiver() {
             action == Intent.ACTION_MY_PACKAGE_REPLACED ||
             action == "android.intent.action.QUICKBOOT_POWERON") {
 
-            restoreAlarms(context)
+            restoreAlarms(context, action)
             restoreKhushuState(context)
         }
     }
@@ -57,18 +57,19 @@ class AthanBootReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun restoreAlarms(context: Context) {
+    private fun restoreAlarms(context: Context, action: String? = null) {
+        val actionLabel = action?.takeIf { it.isNotBlank() } ?: "unknown"
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
             if (alarmManager == null) {
                 Log.w(TAG, "AlarmManager service not available on boot")
-                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_alarm_manager_null")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_alarm_manager_null, action=$actionLabel")
                 return
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
                 Log.w(TAG, "Exact alarm permission missing on boot. Alarms will be scheduled when user opens app.")
-                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_permission_not_granted")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=aborted_permission_not_granted, action=$actionLabel")
                 return
             }
 
@@ -81,7 +82,7 @@ class AthanBootReceiver : BroadcastReceiver() {
 
             val jsonString = prefs.getString(AthanAlarmPlugin.KEY_SAVED_ALARMS, null)
             if (jsonString == null) {
-                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=no_saved_alarms")
+                AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=no_saved_alarms, action=$actionLabel")
                 return
             }
 
@@ -107,10 +108,10 @@ class AthanBootReceiver : BroadcastReceiver() {
             val restoredCount = AthanAlarmPlugin.restoreOrScheduleAlarms(context, cleanArray)
 
             Log.d(TAG, "Restored $restoredCount exact athan alarms after boot (forced re-registration)")
-            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=success, restoredCount=$restoredCount")
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=success, restoredCount=$restoredCount, action=$actionLabel")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore athan alarms on boot", e)
-            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=failed", e)
+            AthanAlarmPlugin.logNativeEvent(context, "boot_restore", "result=failed, action=$actionLabel", e)
         }
     }
 }
