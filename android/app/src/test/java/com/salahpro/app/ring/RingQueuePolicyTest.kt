@@ -92,7 +92,7 @@ class RingQueuePolicyTest {
         assertTrue(decision.shouldStopCurrentImmediately)
         assertTrue(decision.shouldStartNewImmediately)
         assertEquals(athan, decision.activeRequest)
-        assertEquals(custom, decision.preemptedRequest)
+        assertEquals(custom.copy(enqueuedAtMs = t0 + 2_000L), decision.preemptedRequest)
         assertEquals(1, decision.updatedQueue.size)
         assertEquals(custom.triggerId, decision.updatedQueue.first().triggerId)
 
