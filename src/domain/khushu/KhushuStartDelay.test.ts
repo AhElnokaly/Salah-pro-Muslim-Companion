@@ -358,14 +358,37 @@ describe('Phase 2 - Khushu Start Delay Subsystem Tests', () => {
       };
 
       const tomorrowTimes = { ...mockTimes };
-      const alarms = buildNativePrayerTimeAlarms(
-        mockTimes,
-        tomorrowTimes,
-        {
-          khushuAutoWithIqama: true,
-          khushuSettings: khushuCustom,
+      const fixedNow = new Date();
+      fixedNow.setHours(3, 0, 0, 0);
+      const fixedMs = fixedNow.getTime();
+      const RealDate = globalThis.Date;
+      class FrozenDate extends RealDate {
+        constructor(...args: any[]) {
+          if (args.length === 0) {
+            super(fixedMs);
+          } else {
+            super(...(args as [any]));
+          }
         }
-      );
+        static now(): number {
+          return fixedMs;
+        }
+      }
+
+      let alarms: ReturnType<typeof buildNativePrayerTimeAlarms>;
+      globalThis.Date = FrozenDate as DateConstructor;
+      try {
+        alarms = buildNativePrayerTimeAlarms(
+          mockTimes,
+          tomorrowTimes,
+          {
+            khushuAutoWithIqama: true,
+            khushuSettings: khushuCustom,
+          }
+        );
+      } finally {
+        globalThis.Date = RealDate;
+      }
 
       const athanAlarms = alarms.filter((a) => a.alarmType === 'athan');
       const khushuAlarms = alarms.filter((a) => a.alarmType === 'khushu');

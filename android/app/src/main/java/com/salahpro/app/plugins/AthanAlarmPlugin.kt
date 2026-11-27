@@ -66,6 +66,8 @@ class AthanAlarmPlugin : Plugin() {
         const val KEY_LAST_RECONCILE_FAILED_COUNT = "last_reconcile_failed_count"
         const val KEY_LAST_RECONCILE_FAILED_SAMPLE = "last_reconcile_failed_sample"
         const val KEY_LAST_RECONCILE_AT_MS = "last_reconcile_at_ms"
+        const val KEY_ATHAN_DURATION_PREFIX = "athan_duration_ms_"
+        const val KEY_ATHAN_DURATION_SIG_PREFIX = "athan_duration_sig_"
 
         // TEMP: remove after Commit 0a result
         const val KEY_DND_PROBE_PENDING_RESTORE = "dnd_probe_pending_restore"
@@ -628,6 +630,93 @@ class AthanAlarmPlugin : Plugin() {
                 else -> alarmType.equals(alarmId, ignoreCase = true) ||
                         prayerKey.startsWith("custom_${alarmId}_") ||
                         prayerKey.contains(alarmId, ignoreCase = true)
+            }
+        }
+
+        @JvmStatic
+        fun buildDurationCacheSignature(filePath: String, fileSizeBytes: Long): String {
+            return "$fileSizeBytes|$filePath"
+        }
+
+        @JvmStatic
+        fun fileCacheDurationKey(filePath: String): String {
+            return "${KEY_ATHAN_DURATION_PREFIX}file_${Integer.toHexString(filePath.hashCode())}"
+        }
+
+        @JvmStatic
+        fun fileCacheSigKey(filePath: String): String {
+            return "${KEY_ATHAN_DURATION_SIG_PREFIX}file_${Integer.toHexString(filePath.hashCode())}"
+        }
+
+        @JvmStatic
+        fun shouldRemeasureAthanDuration(
+            currentPath: String,
+            currentSizeBytes: Long,
+            cachedSignature: String?,
+            cachedDurationMs: Long?
+        ): Boolean {
+            if (currentPath.isBlank() || currentSizeBytes <= 0L) return false
+            if (cachedDurationMs == null || cachedDurationMs <= 0L) return true
+            if (cachedSignature.isNullOrBlank()) return true
+            return cachedSignature != buildDurationCacheSignature(currentPath, currentSizeBytes)
+        }
+
+        @JvmStatic
+        fun resolveReusableAthanDurationMs(
+            currentPath: String,
+            currentSizeBytes: Long,
+            slotCachedSignature: String?,
+            slotCachedDurationMs: Long?,
+            fileCachedSignature: String?,
+            fileCachedDurationMs: Long?
+        ): Long? {
+            if (currentPath.isBlank() || currentSizeBytes <= 0L) return null
+            if (!shouldRemeasureAthanDuration(currentPath, currentSizeBytes, slotCachedSignature, slotCachedDurationMs)) {
+                return slotCachedDurationMs
+            }
+            if (!shouldRemeasureAthanDuration(currentPath, currentSizeBytes, fileCachedSignature, fileCachedDurationMs)) {
+                return fileCachedDurationMs
+            }
+            return null
+        }
+
+        @JvmStatic
+        fun measureAudioDurationMs(filePath: String?): Long? {
+            if (filePath.isNullOrBlank()) return null
+            val file = File(filePath)
+            if (!file.exists() || !file.isFile || file.length() <= 0L) return null
+            val retriever = MediaMetadataRetriever()
+            return try {
+                retriever.setDataSource(file.absolutePath)
+                val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                val durationMs = durStr?.toLongOrNull()
+                if (durationMs != null && durationMs > 0L) durationMs else null
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to measure audio duration for $filePath", e)
+                null
+            } finally {
+                try {
+                    retriever.release()
+                } catch (_: Exception) {}
+            }
+        }
+
+        @JvmStatic
+        fun storeFileDurationCache(
+            prefs: android.content.SharedPreferences,
+            filePath: String,
+            fileSizeBytes: Long,
+            durationMs: Long
+        ) {
+            if (filePath.isBlank() || fileSizeBytes <= 0L || durationMs <= 0L) return
+            try {
+                val sig = buildDurationCacheSignature(filePath, fileSizeBytes)
+                prefs.edit()
+                    .putLong(fileCacheDurationKey(filePath), durationMs)
+                    .putString(fileCacheSigKey(filePath), sig)
+                    .apply()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed storing file duration cache for $filePath", e)
             }
         }
     }
@@ -1285,19 +1374,7 @@ class AthanAlarmPlugin : Plugin() {
                 }
 
                 // Verify with MediaMetadataRetriever
-                val retriever = MediaMetadataRetriever()
-                var durationMs = 0L
-                try {
-                    retriever.setDataSource(partFile.absolutePath)
-                    val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    durationMs = durStr?.toLongOrNull() ?: 0L
-                } catch (e: Exception) {
-                    Log.e(TAG, "MediaMetadataRetriever failed on ${partFile.absolutePath}", e)
-                } finally {
-                    try {
-                        retriever.release()
-                    } catch (_: Exception) {}
-                }
+                val durationMs = measureAudioDurationMs(partFile.absolutePath) ?: 0L
 
                 if (durationMs <= 0L) {
                     partFile.delete()
@@ -1313,6 +1390,13 @@ class AthanAlarmPlugin : Plugin() {
                 if (!renamed) {
                     partFile.copyTo(audioFile, overwrite = true)
                     partFile.delete()
+                }
+
+                try {
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    storeFileDurationCache(prefs, audioFile.absolutePath, audioFile.length(), durationMs)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Non-fatal: failed caching chunk duration for $muezzinId", e)
                 }
 
                 val ret = JSObject()
@@ -1364,19 +1448,7 @@ class AthanAlarmPlugin : Plugin() {
                 return
             }
 
-            val retriever = MediaMetadataRetriever()
-            var durationMs = 0L
-            try {
-                retriever.setDataSource(partFile.absolutePath)
-                val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                durationMs = durStr?.toLongOrNull() ?: 0L
-            } catch (e: Exception) {
-                Log.e(TAG, "MediaMetadataRetriever failed on ${partFile.absolutePath}", e)
-            } finally {
-                try {
-                    retriever.release()
-                } catch (_: Exception) {}
-            }
+            val durationMs = measureAudioDurationMs(partFile.absolutePath) ?: 0L
 
             if (durationMs <= 0L) {
                 partFile.delete()
@@ -1388,6 +1460,13 @@ class AthanAlarmPlugin : Plugin() {
             if (!partFile.renameTo(audioFile)) {
                 partFile.copyTo(audioFile, overwrite = true)
                 partFile.delete()
+            }
+
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                storeFileDurationCache(prefs, audioFile.absolutePath, audioFile.length(), durationMs)
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-fatal: failed caching athan file duration for $type", e)
             }
 
             val ret = JSObject()
@@ -1407,6 +1486,7 @@ class AthanAlarmPlugin : Plugin() {
         val keys = listOf("general", "fajr", "dhuhr", "asr", "maghrib", "isha")
 
         val pathsObj = call.getObject("paths")
+        val inCallMeasured = mutableMapOf<String, Long?>()
 
         for (k in keys) {
             var path: String? = null
@@ -1427,12 +1507,63 @@ class AthanAlarmPlugin : Plugin() {
             }
 
             val prefKey = "athan_file_$k"
+            val durationPrefKey = "$KEY_ATHAN_DURATION_PREFIX$k"
+            val sigPrefKey = "$KEY_ATHAN_DURATION_SIG_PREFIX$k"
             if (keyPresent && path != null) {
                 if (path.isNotEmpty()) {
                     editor.putString(prefKey, path)
+                    try {
+                        val file = File(path)
+                        val currentSize = if (file.exists() && file.isFile) file.length() else 0L
+                        if (currentSize > 0L) {
+                            val sig = buildDurationCacheSignature(path, currentSize)
+                            val slotSig = prefs.getString(sigPrefKey, null)
+                            val slotDur = if (prefs.contains(durationPrefKey)) prefs.getLong(durationPrefKey, -1L) else null
+                            val cacheDurKey = fileCacheDurationKey(path)
+                            val cacheSigKey = fileCacheSigKey(path)
+                            val fileSig = prefs.getString(cacheSigKey, null)
+                            val fileDur = if (prefs.contains(cacheDurKey)) prefs.getLong(cacheDurKey, -1L) else null
+
+                            val cachedDur = inCallMeasured[sig] ?: resolveReusableAthanDurationMs(
+                                currentPath = path,
+                                currentSizeBytes = currentSize,
+                                slotCachedSignature = slotSig,
+                                slotCachedDurationMs = slotDur,
+                                fileCachedSignature = fileSig,
+                                fileCachedDurationMs = fileDur
+                            )
+
+                            val resolvedDuration = if (cachedDur != null && cachedDur > 0L) {
+                                cachedDur
+                            } else if (inCallMeasured.containsKey(sig)) {
+                                null
+                            } else {
+                                val measured = measureAudioDurationMs(path)
+                                inCallMeasured[sig] = measured
+                                measured
+                            }
+
+                            if (resolvedDuration != null && resolvedDuration > 0L) {
+                                editor.putLong(durationPrefKey, resolvedDuration)
+                                editor.putString(sigPrefKey, sig)
+                                editor.putLong(cacheDurKey, resolvedDuration)
+                                editor.putString(cacheSigKey, sig)
+                            } else {
+                                editor.remove(durationPrefKey)
+                                editor.remove(sigPrefKey)
+                            }
+                        } else {
+                            editor.remove(durationPrefKey)
+                            editor.remove(sigPrefKey)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Non-fatal: failed resolving duration for slot $k ($path)", e)
+                    }
                 } else {
-                    // Explicit empty string "" removes athan_file_<k>
+                    // Explicit empty string "" removes athan_file_<k> and its duration metadata
                     editor.remove(prefKey)
+                    editor.remove(durationPrefKey)
+                    editor.remove(sigPrefKey)
                 }
             }
             // If key is absent/null in paths, LEAVE UNCHANGED in prefs!
@@ -1458,7 +1589,12 @@ class AthanAlarmPlugin : Plugin() {
                 dir.listFiles()?.forEach { f ->
                     try {
                         if (!referencedPaths.contains(f.canonicalPath) && !f.name.endsWith(".part")) {
+                            val removedPath = f.absolutePath
                             f.delete()
+                            prefs.edit()
+                                .remove(fileCacheDurationKey(removedPath))
+                                .remove(fileCacheSigKey(removedPath))
+                                .apply()
                             Log.d(TAG, "Deleted unreferenced athan file: ${f.name}")
                         }
                     } catch (e: Exception) {
@@ -1504,6 +1640,12 @@ class AthanAlarmPlugin : Plugin() {
         val ret = JSObject()
         for (k in keys) {
             val path = prefs.getString("athan_file_$k", null)
+            val durationPrefKey = "$KEY_ATHAN_DURATION_PREFIX$k"
+            val storedDurationMs = if (!path.isNullOrEmpty() && prefs.contains(durationPrefKey)) {
+                prefs.getLong(durationPrefKey, -1L).takeIf { it > 0L }
+            } else {
+                null
+            }
             val info = JSObject()
             info.put("path", path ?: "")
             if (!path.isNullOrEmpty()) {
@@ -1515,6 +1657,7 @@ class AthanAlarmPlugin : Plugin() {
                 info.put("exists", false)
                 info.put("sizeBytes", 0L)
             }
+            info.put("durationMs", storedDurationMs ?: JSONObject.NULL)
             ret.put(k, info)
         }
         call.resolve(ret)
