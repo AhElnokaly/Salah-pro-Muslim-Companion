@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Bell, Clock, Cpu, Battery, Wrench, CheckCircle, AlertTriangle, Play, RefreshCw, X } from 'lucide-react';
+import { ShieldCheck, Bell, Clock, Battery, Wrench, CheckCircle, AlertTriangle, Play, RefreshCw, X } from 'lucide-react';
 import { AppSettings } from '../types';
-import AthanAlarm, { checkExactAlarmPermission, checkNotificationPermission, requestExactAlarmPermission, requestNotificationPermission } from '../services/athanAlarmPlugin';
+import { checkExactAlarmPermission, checkNotificationPermission, requestExactAlarmPermission, requestNotificationPermission } from '../services/athanAlarmPlugin';
 import { AlarmReconciliationService, ReconciliationStatus } from '../services/AlarmReconciliationService';
 import { runPrayerCalcGoldenTests } from '../utils/prayerCalc';
+import { APP_VERSION } from '../version';
 
 interface AlarmDiagnosticsModalProps {
   isOpen: boolean;
@@ -20,7 +21,6 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
   const [exactAlarmGranted, setExactAlarmGranted] = useState<boolean | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileStatus, setReconcileStatus] = useState<ReconciliationStatus | null>(null);
-  const [testAlarmScheduled, setTestAlarmScheduled] = useState(false);
   const [goldenTestsPass, setGoldenTestsPass] = useState(false);
 
   const runDiagnostics = async () => {
@@ -56,11 +56,6 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
     }
   };
 
-  const handleScheduleTest = async () => {
-    const success = await AlarmReconciliationService.scheduleTestAlarm(60);
-    setTestAlarmScheduled(success);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -78,7 +73,12 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">فحص وتشخيص تنبيهات الصلاة</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold">فحص وتشخيص تنبيهات الصلاة</h3>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-medium">
+                  v{APP_VERSION.version} ({APP_VERSION.commitHash})
+                </span>
+              </div>
               <p className="text-xs text-slate-400">التحقق اللحظي من صلاحيات الجهاز ومواقيت الصلاة</p>
             </div>
           </div>
@@ -146,13 +146,15 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
             <p className="text-xs text-slate-400">المدينة: {settings.cityName} | المذهب: {settings.madhab}</p>
           </div>
 
-          {/* Active Reconciliation Count & Diff Stats */}
+          {/* App-Recorded Alarms Status (Read-Only) */}
           <div className="p-4 bg-slate-800/60 rounded-xl border border-slate-700/50 space-y-2.5">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">التنبيهات وحالة التوفيق (Reconciliation)</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">التنبيهات المسجّلة في التطبيق</h4>
                 <p className="text-sm font-medium mt-0.5">
-                  {reconcileStatus ? `${reconcileStatus.scheduledCount} تنبيه مجدول للصلوات القادمة` : 'جاري الفحص...'}
+                  {reconcileStatus
+                    ? `${reconcileStatus.scheduledCount} تنبيه مجدول مسجّل في التطبيق`
+                    : 'جاري الفحص...'}
                 </p>
               </div>
               <button
@@ -167,18 +169,14 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
             </div>
 
             {reconcileStatus && (
-              <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-700/40 text-center">
+              <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-slate-700/40 text-center">
                 <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
-                  <div className="text-xs text-slate-400">محتفظ به</div>
-                  <div className="text-sm font-bold text-emerald-400 mt-0.5">{reconcileStatus.retainedCount}</div>
+                  <div className="text-xs text-slate-400">المحفوظ المسجّل في التطبيق</div>
+                  <div className="text-sm font-bold text-blue-400 mt-0.5">{reconcileStatus.savedCount}</div>
                 </div>
                 <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
-                  <div className="text-xs text-slate-400">تمت إضافته</div>
-                  <div className="text-sm font-bold text-blue-400 mt-0.5">{reconcileStatus.missingCount}</div>
-                </div>
-                <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-700/30">
-                  <div className="text-xs text-slate-400">ملغي قديم</div>
-                  <div className="text-sm font-bold text-amber-400 mt-0.5">{reconcileStatus.obsoleteCount}</div>
+                  <div className="text-xs text-slate-400">المجدول المسجّل في التطبيق</div>
+                  <div className="text-sm font-bold text-emerald-400 mt-0.5">{reconcileStatus.scheduledCount}</div>
                 </div>
               </div>
             )}
@@ -193,30 +191,32 @@ export const AlarmDiagnosticsModal: React.FC<AlarmDiagnosticsModalProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={handleAutoRepair}
-              disabled={isReconciling}
-              className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl transition-colors flex items-center justify-center space-x-2 space-x-reverse shadow-lg shadow-emerald-600/20"
-            >
-              <Wrench className="w-4 h-4" />
-              <span>إصلاح تلقائي للصلاحيات</span>
-            </button>
+          <div className="pt-3 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleAutoRepair}
+                disabled={isReconciling}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl transition-colors flex items-center justify-center space-x-2 space-x-reverse shadow-lg shadow-emerald-600/20"
+              >
+                <Wrench className="w-4 h-4" />
+                <span>إصلاح تلقائي للصلاحيات</span>
+              </button>
 
-            <button
-              onClick={handleScheduleTest}
-              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm rounded-xl border border-slate-700 transition-colors flex items-center justify-center space-x-2 space-x-reverse"
-            >
-              <Play className="w-4 h-4 text-emerald-400" />
-              <span>تجربة الأذان بعد 60 ثانية</span>
-            </button>
-          </div>
-
-          {testAlarmScheduled && (
-            <p className="text-xs text-center text-emerald-400 font-medium bg-emerald-500/10 py-2 rounded-lg">
-              ✓ تم إدراج تجربة الأذان، سينطلق التنبيه خلال 60 ثانية بالضبط!
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="w-full py-2.5 px-4 bg-slate-800/50 text-slate-500 font-medium text-sm rounded-xl border border-slate-700/50 cursor-not-allowed flex items-center justify-center space-x-2 space-x-reverse"
+              >
+                <Play className="w-4 h-4 text-slate-500" />
+                <span>تجربة الأذان بعد 60 ثانية</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-center text-slate-400">
+              زر تجربة الأذان معطّل مؤقتاً لحماية الجدول المسجّل حتى دعم الدمج الآمن في التحديث القادم.
             </p>
-          )}
+          </div>
         </div>
       </div>
     </div>

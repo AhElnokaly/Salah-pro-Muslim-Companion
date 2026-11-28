@@ -54,7 +54,7 @@ describe('TASK 5: Custom Alarm Snooze & One-Shot Scheduling', () => {
       const originalId = ringing.snoozeOf || ringing.id;
 
       const snoozedAlarm: AlarmConfig = {
-        id: `snooze_${Date.now()}`,
+        id: `snooze_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         title: `${cleanTitle} (غفوة)`,
         type: 'fixed',
         time: snoozeTime,

@@ -76,12 +76,14 @@ export function getPushSettings(): PushNotificationSettings {
 /**
  * Save push settings
  */
-export function savePushSettings(settings: PushNotificationSettings): void {
-  safeSetJSON(SETTINGS_STORAGE_KEY, settings);
-  safeSetJSON('salah_push_settings', settings);
-  safeSetJSON('hemmaty_push_settings', settings);
+export function savePushSettings(settings: PushNotificationSettings & { changedKey?: string }): void {
+  // changedKey is event metadata only: never persisted and never leaked to listeners.
+  const { changedKey: _changedKey, ...cleanSettings } = settings;
+  safeSetJSON(SETTINGS_STORAGE_KEY, cleanSettings);
+  safeSetJSON('salah_push_settings', cleanSettings);
+  safeSetJSON('hemmaty_push_settings', cleanSettings);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('push-settings-changed', { detail: settings }));
+    window.dispatchEvent(new CustomEvent('push-settings-changed', { detail: cleanSettings }));
   }
 }
 

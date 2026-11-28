@@ -4,7 +4,7 @@
  */
 
 import { PrayerTimes } from '../../types';
-import { KhushuSettings } from './khushuTypes';
+import { KhushuSettings, DEFAULT_KHUSHU_SETTINGS } from './khushuTypes';
 import { parseTimeToMinutes } from '../../utils/prayerCalc';
 
 export interface IqamaWindowInfo {
@@ -36,6 +36,105 @@ export function parsePrayerTimeToDate(timeStr: string, baseDate: Date): Date | n
   return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes, 0, 0);
 }
 
+export const IQAMA_OFFSET_MIN = 5;
+export const IQAMA_OFFSET_MAX = 30;
+export const IQAMA_OFFSET_DEFAULT = 15;
+
+/**
+ * Returns the default iqama offset for a specific prayer key from DEFAULT_KHUSHU_SETTINGS.
+ * Fajr: 20, Dhuhr: 15, Asr: 15, Maghrib: 10, Isha: 15, Friday: 25.
+ * Falls back to IQAMA_OFFSET_DEFAULT (15) for unknown keys.
+ */
+export function getDefaultIqamaOffset(key: string): number {
+  const lowerKey = key.toLowerCase();
+  const defaults = DEFAULT_KHUSHU_SETTINGS?.iqamaOffsets as unknown as Record<string, number> | undefined;
+  if (defaults && typeof defaults[lowerKey] === 'number') {
+    return defaults[lowerKey];
+  }
+  return IQAMA_OFFSET_DEFAULT;
+}
+
+/**
+ * Clamps an iqama offset in minutes to an integer between 5 and 30.
+ * Rules:
+ * - Accepts numbers or numeric strings (e.g. '12' -> 12).
+ * - Rounds floating point numbers to the nearest integer (e.g. 7.6 -> 8).
+ * - Values below 5 become 5 (zero is NOT allowed).
+ * - Values above 30 become 30.
+ * - Non-numeric, null, undefined, or NaN fall back to fallback (default 15).
+ */
+export function clampIqamaOffset(value: unknown, fallback: number = IQAMA_OFFSET_DEFAULT): number {
+  const safeFallback =
+    typeof fallback === 'number' && !isNaN(fallback)
+      ? Math.min(IQAMA_OFFSET_MAX, Math.max(IQAMA_OFFSET_MIN, Math.round(fallback)))
+      : IQAMA_OFFSET_DEFAULT;
+
+  if (value === null || value === undefined || value === '') {
+    return safeFallback;
+  }
+
+  const num = typeof value === 'number' ? value : Number(value);
+  if (isNaN(num)) {
+    return safeFallback;
+  }
+
+  const rounded = Math.round(num);
+  if (rounded < IQAMA_OFFSET_MIN) return IQAMA_OFFSET_MIN;
+  if (rounded > IQAMA_OFFSET_MAX) return IQAMA_OFFSET_MAX;
+  return rounded;
+}
+
+/**
+ * Builds the list of selectable options for iqama offset dropdowns.
+ * Standard options: [5, 10, 15, 20, 25, 30].
+ * If a custom value is present and within range, it is included in sorted order.
+ */
+export function buildIqamaOptions(currentValue: number = IQAMA_OFFSET_DEFAULT): number[] {
+  const base = [5, 10, 15, 20, 25, 30];
+  const clamped = clampIqamaOffset(currentValue, IQAMA_OFFSET_DEFAULT);
+  if (!base.includes(clamped)) {
+    return [...base, clamped].sort((a, b) => a - b);
+  }
+  return base;
+}
+
+/**
+ * Computes the exact timestamp in milliseconds when Khushu mode should start.
+ * Formula: athanTimeMs + clampIqamaOffset(offsetMin, fallback) * 60,000 ms.
+ */
+export function computeKhushuStartMs(
+  athanTimeMs: number,
+  offsetMin: unknown,
+  fallback: number = IQAMA_OFFSET_DEFAULT
+): number {
+  const offset = clampIqamaOffset(offsetMin, fallback);
+  return athanTimeMs + offset * 60000;
+}
+
+/**
+ * Resolves the prayer-specific iqama offset from KhushuSettings.
+ * Handles Friday Jumu'ah special when applicable.
+ */
+export function resolveKhushuIqamaOffset(
+  settings: Partial<KhushuSettings> | null | undefined,
+  prayerKey: string,
+  isFriday: boolean = false
+): number {
+  const lowerKey = prayerKey.toLowerCase();
+  const effectiveKey = isFriday && lowerKey === 'dhuhr' && settings?.enableFridaySpecial ? 'friday' : lowerKey;
+  const prayerDefault = getDefaultIqamaOffset(effectiveKey);
+
+  if (!settings) return prayerDefault;
+  const offsets = settings.iqamaOffsets as Record<string, unknown> | undefined;
+
+  let rawVal: unknown = offsets?.[lowerKey];
+  if (isFriday && lowerKey === 'dhuhr' && settings.enableFridaySpecial) {
+    rawVal = offsets?.friday;
+  }
+
+  return clampIqamaOffset(rawVal, prayerDefault);
+}
+
 /**
  * Calculates current status in the Adhan -> Iqama -> Khushu lifecycle
  */
@@ -62,19 +161,18 @@ export function getIqamaWindowInfo(
     if (!athanDate) continue;
 
     const prayerId = item.id;
-    let iqamaOffset = settings.iqamaOffsets[prayerId] || 15;
-    let prayerDuration = settings.prayerDurations[prayerId] || 15;
+    const iqamaOffset = resolveKhushuIqamaOffset(settings, prayerId, isFriday);
+    let prayerDuration = settings.prayerDurations?.[prayerId] || 15;
 
     // Friday Jumu'ah special handling
     if (isFriday && prayerId === 'dhuhr' && settings.enableFridaySpecial) {
-      iqamaOffset = settings.iqamaOffsets.friday || 25;
-      prayerDuration = settings.prayerDurations.friday || 45;
+      prayerDuration = settings.prayerDurations?.friday || 45;
     }
 
-    const iqamaDate = new Date(athanDate.getTime() + iqamaOffset * 60 * 1000);
-    const nowMs = now.getTime();
     const athanMs = athanDate.getTime();
-    const iqamaMs = iqamaDate.getTime();
+    const iqamaMs = computeKhushuStartMs(athanMs, iqamaOffset);
+    const iqamaDate = new Date(iqamaMs);
+    const nowMs = now.getTime();
 
     // Adhan -> Iqama window (between athan and iqama + 90 seconds tolerance)
     if (nowMs >= athanMs && nowMs <= iqamaMs + 90 * 1000) {
@@ -100,3 +198,4 @@ export function getIqamaWindowInfo(
 
   return null;
 }
+

@@ -335,6 +335,47 @@ Task #3 CalendarSettingsTab: Added toggle control for seasonal transition alerts
 Task #4 Verification: 70/70 tests passing (19 suites, 0 fails). TypeScript clean. compile_applet succeeded.
 Result: PASS
 
+---
+
+[2026-11-22 04:22] Commit 1 — Read-Only AlarmDiagnosticsModal & AlarmReconciliationService (TS Only)
+Command: `npx tsx --test src/services/AlarmReconciliationService.test.ts` (before fix -> FAIL)
+Output:
+# tests 2 / # pass 0 / # fail 2 (`syncAllNotificationChannels` called 4 times instead of 0; `savedCount` undefined).
+`npm test` (before fix): # tests 408 / # suites 110 / # pass 406 / # fail 2.
+Result: EXPECTED FAIL (Baseline confirmed)
+
+---
+
+[2026-11-22 04:22] Commit 1 — Post-Fix Test, Lint & Build Verification
+Command: `npx tsx --test src/services/AlarmReconciliationService.test.ts && npx tsx --test src/domain/khushu/KhushuStartDelay.test.ts && npm test && npm run lint && npm run build`
+Output:
+- `AlarmReconciliationService.test.ts`: # tests 2, # suites 1, # pass 2, # fail 0
+- `KhushuStartDelay.test.ts`: # tests 21, # suites 9, # pass 21, # fail 0
+- `npm test`: # tests 408, # suites 110, # pass 408, # fail 0, # cancelled 0, # skipped 0, # todo 0
+- `npm run lint` (`tsc --noEmit`): clean (0 errors)
+- `npm run build` (`vite build`): ✓ 2435 modules transformed, ✓ built in 7.19s
+Result: PASS
+
+---
+
+[2026-11-23 12:00] Reconcile Failure Observability & `pi_missing_before` — Fail-First Baseline
+Command: `npm test` (new bridge tests on pre-fix code)
+Output:
+# tests 411, # suites 110, # pass 408, # fail 3
+(`reconcileNativeAthanAlarms`, `AthanAlarm.scheduleAthanAlarms`, `getAlarmDiagnostics` web fallbacks returned `undefined` for `failedCount`/`pi_missing_before`/`lastReconcileFailedCount`)
+Result: EXPECTED FAIL (Baseline confirmed)
+
+---
+
+[2026-11-23 12:02] Reconcile Failure Observability & `pi_missing_before` — Post-Fix Verification
+Command: `npm test && npm run lint && npm run build`
+Output:
+- `npm test`: # tests 414, # suites 111, # pass 414, # fail 0, # cancelled 0, # skipped 0, # todo 0
+- `npm run lint` (`tsc --noEmit`): clean (0 errors)
+- `npm run build` (`vite build`): ✓ 2436 modules transformed, ✓ built in 8.37s
+Result: PASS (Kotlin JUnit & Android build execute on GitHub Actions CI `./gradlew testDebugUnitTest`)
+
+
 
 
 

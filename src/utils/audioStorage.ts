@@ -134,6 +134,9 @@ export async function isAudioDownloaded(trackId: string): Promise<boolean> {
  * Deletes a downloaded audio track from IndexedDB.
  */
 export async function deleteDownloadedAudio(trackId: string): Promise<void> {
+  if (typeof indexedDB === 'undefined') {
+    return;
+  }
   const db = await initAudioDB();
   const dbKey = `downloaded_${trackId}`;
   return new Promise((resolve, reject) => {

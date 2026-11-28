@@ -1,14 +1,83 @@
 import { useCallback, MutableRefObject, Dispatch, SetStateAction } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { AlarmConfig, RelativePrayerTarget } from '../types';
 import { showAppNotification } from '../utils/pushNotificationService';
 import { playSpiritualSound, playSpiritualSpeech } from '../utils/spiritualAudio';
 import { getArabicPrayerOrEventName } from '../utils/alarmUtils';
+import { logRingDiagnosticEvent } from '../services/athanAlarmPlugin';
 
 export interface UseCustomAlarmTriggerProps {
   globalAudioRef: MutableRefObject<HTMLAudioElement | null>;
   audioVolume: number;
   setActiveRingingAlarm: Dispatch<SetStateAction<AlarmConfig | null>>;
   setToastMessage?: (msg: string) => void;
+}
+
+export interface ExecuteCustomAlarmTriggerOptions {
+  alarm: AlarmConfig;
+  targetPrayer?: RelativePrayerTarget;
+  skipModal?: boolean;
+  globalAudioRef: MutableRefObject<HTMLAudioElement | null>;
+  audioVolume: number;
+  setActiveRingingAlarm: Dispatch<SetStateAction<AlarmConfig | null>>;
+  setToastMessage?: (msg: string) => void;
+}
+
+export function executeCustomAlarmTrigger({
+  alarm,
+  targetPrayer,
+  skipModal = false,
+  globalAudioRef,
+  audioVolume,
+  setActiveRingingAlarm,
+  setToastMessage,
+}: ExecuteCustomAlarmTriggerOptions) {
+  const prayerSuffix = targetPrayer ? ` (${getArabicPrayerOrEventName(targetPrayer)})` : '';
+  const fullTitle = `${alarm.title}${prayerSuffix}`;
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    showAppNotification(`تنبيه: ${fullTitle}`, {
+      body: `حان الآن موعد: ${fullTitle}`,
+      icon: '/icon-192.png',
+      dir: 'rtl'
+    }).catch((e) => {
+      console.warn('Alarm notification non-fatal error:', e);
+    });
+  }
+
+  if (alarm.soundType !== 'silent') {
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'custom',
+        alarmId: alarm.id,
+        stage: 'custom_play_sound',
+        details: `soundType=${alarm.soundType || 'speech'}, notifyMode=${alarm.notifyMode || 'both'}, prayer=${targetPrayer || 'fixed'}`,
+      });
+    } catch {}
+    playSpiritualSound(alarm.soundType || 'speech', fullTitle, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
+  }
+
+  if (alarm.autoKhushu && !Capacitor.isNativePlatform()) {
+    import('../services/khushuModePlugin').then(({ KhushuMode }) => {
+      KhushuMode.activate({
+        durationMinutes: alarm.khushuDurationMinutes || 15,
+        mode: 'silent',
+        origin: 'js_foreground',
+      }).catch((e) => console.warn('[useCustomAlarmTrigger] autoKhushu error:', e));
+    });
+  }
+
+  if (!skipModal) {
+    setActiveRingingAlarm({
+      ...alarm,
+      title: fullTitle
+    });
+  }
+
+  if (setToastMessage) {
+    setToastMessage(`⏰ ${fullTitle}`);
+  }
 }
 
 export function useCustomAlarmTrigger({
@@ -18,42 +87,15 @@ export function useCustomAlarmTrigger({
   setToastMessage,
 }: UseCustomAlarmTriggerProps) {
   const triggerCustomAlarm = useCallback((alarm: AlarmConfig, targetPrayer?: RelativePrayerTarget, skipModal: boolean = false) => {
-    const prayerSuffix = targetPrayer ? ` (${getArabicPrayerOrEventName(targetPrayer)})` : '';
-    const fullTitle = `${alarm.title}${prayerSuffix}`;
-
-    if ('Notification' in window && Notification.permission === 'granted') {
-      showAppNotification(`تنبيه: ${fullTitle}`, {
-        body: `حان الآن موعد: ${fullTitle}`,
-        icon: '/icon-192.png',
-        dir: 'rtl'
-      }).catch((e) => {
-        console.warn('Alarm notification non-fatal error:', e);
-      });
-    }
-
-    if (alarm.soundType !== 'silent') {
-      playSpiritualSound(alarm.soundType || 'speech', fullTitle, audioVolume, globalAudioRef, alarm.notifyMode || 'both');
-    }
-
-    if (alarm.autoKhushu) {
-      import('../services/khushuModePlugin').then(({ KhushuMode }) => {
-        KhushuMode.activate({
-          durationMinutes: alarm.khushuDurationMinutes || 15,
-          mode: 'silent',
-        }).catch((e) => console.warn('[useCustomAlarmTrigger] autoKhushu error:', e));
-      });
-    }
-
-    if (!skipModal) {
-      setActiveRingingAlarm({
-        ...alarm,
-        title: fullTitle
-      });
-    }
-
-    if (setToastMessage) {
-      setToastMessage(`⏰ ${fullTitle}`);
-    }
+    executeCustomAlarmTrigger({
+      alarm,
+      targetPrayer,
+      skipModal,
+      globalAudioRef,
+      audioVolume,
+      setActiveRingingAlarm,
+      setToastMessage,
+    });
   }, [globalAudioRef, audioVolume, setActiveRingingAlarm, setToastMessage]);
 
   const triggerSpiritualAlert = useCallback((title: string, body: string) => {
@@ -68,6 +110,15 @@ export function useCustomAlarmTrigger({
     }
 
     // Play spiritual Arabic voice reminder instead of generic beep
+    try {
+      logRingDiagnosticEvent({
+        source: 'JS',
+        alarmType: 'dhikr',
+        alarmId: title,
+        stage: 'dhikr_play_speech',
+        details: `bodyLen=${body.length}`,
+      });
+    } catch {}
     playSpiritualSpeech(`${title}.. ${body}`, audioVolume);
 
     if (setToastMessage) {

@@ -94,7 +94,7 @@ export const AlarmRestoreConfirmModal: React.FC<AlarmRestoreConfirmModalProps> =
             استعادة التنبيهات الافتراضية
           </h3>
           <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-            هل تريد استعادة قائمة التنبيهات الافتراضية (قبل الصلاة، بعد الصلاة، الضحى، قيام الليل)؟
+            هل تريد استعادة قائمة التنبيهات الافتراضية (صلاة الضحى، أذكار الصباح، أذكار المساء، قيام الليل)؟
           </p>
         </div>
 

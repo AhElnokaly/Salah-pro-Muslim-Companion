@@ -273,10 +273,15 @@ Last updated: 2026-08-31
 - `src/services/alarmIdentifier.test.ts`: Deterministic Android 32-bit integer request code generation and collision avoidance tests.
 - `src/services/adaptiveKhatmaCalculator.test.ts`: No-guilt khatma pace calculation, automatic extension, and tier-based encouragement tests.
 - `src/services/storageFacade.test.ts`: Canonical storage keys, stable prefixes, fallbacks, and synchronous persistence tests.
+- `src/utils/prayerTimestamp.ts`: Pure timestamp conversion engine with internal midnight carry handling, DST spring/fall resilience, and no-throw runtime safety.
+- `src/utils/prayerTimestamp.test.ts`: Automated unit tests (14 assertions across 5 suites) for pure timestamp conversion, golden reference values (Cairo, Riyadh, New York), midnight carries (positive & negative), DST transitions, and city calendar helpers.
+- `scripts/test_tz_invariance.cjs`: Multi-process timezone invariance verification suite spawning 5 isolated Node child processes (Africa/Cairo, Asia/Riyadh, America/New_York, UTC, Australia/Sydney) proving identical numeric timeMs output across hosts.
 
 ## Khushu Mode 2.0 Architecture (`src/domain/khushu/`, `src/components/khushu/`)
 - `src/domain/khushu/khushuTypes.ts`: Strict TypeScript interfaces for `KhushuSettings`, `KhushuPrayerDurations`, `KhushuIqamaOffsets`, and default settings.
 - `src/domain/khushu/khushuStorage.ts`: Environment-safe persistent storage facade (`getStorage()`) supporting cross-platform web preview and headless test environments.
+- `src/domain/khushu/customAlarmKhushuDecision.ts`: Pure specification mirror (`TS_SPEC_MIRROR`) for custom alarm Khushu decision logic (estimated delay `durationMs + 1500L`, immediate silent/vibrate, `AUDIO_ERROR` 5s fallback, and overlap resolution).
+- `src/domain/khushu/customAlarmKhushuDecision.test.ts`: Automated unit tests (6 suites, 11 assertions) for custom alarm Khushu decision logic specification mirror.
 - `src/domain/khushu/useKhushuAutoScheduler.ts`: Autonomous scheduler monitoring Iqama time offsets and Friday Jumu'ah overrides, auto-triggering Khushu mode during prayer times.
 - `src/components/khushu/KhushuDistractionShield.tsx`: Deep OLED dark backdrop with pulsating focus indicator, remaining time, dhikr reminder, and dismiss action.
 - `src/components/khushu/KhushuPostPrayerModal.tsx`: Post-prayer tranquil modal offering quick Sunnah athkar (Astaghfirullah x3, Allahumma Antas Salam, Ayat al-Kursi, Tasbeeh) with haptic feedback.
@@ -286,7 +291,10 @@ Last updated: 2026-08-31
 ## Native Android Widget Khushu Architecture (`android/app/src/main/`)
 - `salah_widget_layout.xml`: Native widget layout featuring the prayer schedule header, next prayer badge, and dedicated bottom `widget_khushu_bar` with live status indicator (`widget_khushu_status`) and toggle action button (`widget_khushu_btn`).
 - `SalahWidgetProvider.kt`: AppWidgetProvider managing prayer time updates and dispatching `ACTION_TOGGLE_KHUSHU`. Configures PendingIntents (`FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`), detects Khushu state via `KhushuRestoreReceiver.isKhushuActive`, and dynamically formats widget colors and button states.
-- `KhushuRestoreReceiver.kt`: BroadcastReceiver and static helper engine managing Khushu SharedPreferences, audio manager interactions (DND / Interruption Filter and RingerMode Silent), deterministic restore alarms (`RESTORE_ALARM_REQUEST_CODE = 998877`), and broadcast triggers to synchronize all home screen widgets.
+- `KhushuRestoreReceiver.kt`: BroadcastReceiver and static helper engine managing Khushu SharedPreferences, audio manager interactions (DND / Interruption Filter and RingerMode Silent), deterministic restore alarms (`RESTORE_ALARM_REQUEST_CODE = 998877`), deferred custom alarm Khushu scheduling (`ACTION_ACTIVATE_KHUSHU_DEFERRED`, `CUSTOM_ALARM_DEFERRED_KHUSHU_REQUEST_CODE = 998878`), and broadcast triggers to synchronize all home screen widgets.
+- `AthanAlarmReceiver.kt`: Alarm receiver handling Athan, custom worship alarms, and alerts. Features pure decision evaluation via `CustomAlarmKhushuDecision`, deferred Khushu timing with safety margin, dead code cleanup, and structured native telemetry without touching Athan foreground service paths.
+- `CustomAlarmKhushuDecision.kt`: Pure JVM decision logic (`KOTLIN_STATIC`) for custom alarm Khushu activation and timing, free of Android Context dependencies.
+- `CustomAlarmKhushuDecisionTest.kt`: JUnit unit test suite (`KOTLIN_STATIC`) covering all paths of custom alarm Khushu decision logic.
 - `KhushuModePlugin.kt`: Capacitor native plugin exposing `activate`, `deactivate`, `getStatus`, `checkPermission`, and `requestPermission` to the frontend, with broadcast dispatching to `SalahWidgetProvider.updateAllWidgets` on state transitions.
 
 

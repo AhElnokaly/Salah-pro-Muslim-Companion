@@ -8,10 +8,11 @@
 
 ### الملفات الرئيسية للتكامل الأصلي:
 
-1. **`AthanAlarmPlugin.kt`**
+1. **`AthanAlarmPlugin.kt`** (بمساعدة `ReconcileTelemetryHelper.kt`)
    - هو الجسر بين React/JavaScript ونظام أندرويد.
    - يوفر الدوال التالية لجانب الـ Web:
-     - `scheduleAthan(...)`: جدول منبه أذان أو تذكير مخصص.
+     - `scheduleAthanAlarms(...)` و`reconcileAthanAlarms(...)`: جدولة ومصالحة منبهات نافذة 14 يوماً مع إرجاع `failedCount` و`failedSample` (بحد أقصى 5 `{ requestCode, errorType }`) و`pi_missing_before` (proxy أحادي الاتجاه قبل إعادة التسجيل: `missing` = ضايع أكيد، `present` = غير مؤكد، `0/0` عند الـ boot متوقع).
+     - `getAlarmDiagnostics()`: قراءة المنبهات المحفوظة وأحداث النظام وحالة آخر مصالحة المحفوظة (`lastReconcileFailedCount`, `lastReconcileFailedSample`, `lastReconcileAtMs`).
      - `cancelAthan(...)`: إلغاء منبه محدد بالرمز الفرعي.
      - `checkExactAlarmPermission()`: الفحص المباشر لصلاحية `SCHEDULE_EXACT_ALARM`.
      - `requestExactAlarmPermission()`: فتح شاشة إعدادات النظام للمستخدم لمنح الصلاحية.

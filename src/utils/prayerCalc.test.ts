@@ -119,7 +119,16 @@ describe('Prayer Calculation Engine', () => {
   });
 
   test('calculateTriggerMinutes accurately computes trigger times from Arabic prayer times', () => {
-    const beforeAlarm = DEFAULT_WORSHIP_ALARMS[0]; // 10 minutes before salah
+    const beforeAlarm = {
+      id: 'mock_before',
+      title: 'قبل الصلاة',
+      enabled: true,
+      type: 'prayer_relative' as const,
+      relation: 'before' as const,
+      offsetMinutes: 10,
+      days: [0, 1, 2, 3, 4, 5, 6],
+      soundType: 'reminder' as const,
+    };
     assert.equal(beforeAlarm.relation, 'before');
     assert.equal(beforeAlarm.offsetMinutes, 10);
 
@@ -132,7 +141,16 @@ describe('Prayer Calculation Engine', () => {
     assert.equal(triggerFajr, 255 - 10, '10 minutes before Fajr should be 245 (04:05)');
 
     // After salah alarm (15 minutes after)
-    const afterAlarm = DEFAULT_WORSHIP_ALARMS[1];
+    const afterAlarm = {
+      id: 'mock_after',
+      title: 'بعد الصلاة',
+      enabled: true,
+      type: 'prayer_relative' as const,
+      relation: 'after' as const,
+      offsetMinutes: 15,
+      days: [0, 1, 2, 3, 4, 5, 6],
+      soundType: 'reminder' as const,
+    };
     const triggerAfterIsha = calculateTriggerMinutes(afterAlarm, '٧:١٣ م');
     assert.equal(triggerAfterIsha, 1153 + 15, '15 minutes after Isha should be 1168 (19:28)');
   });

@@ -81,10 +81,20 @@
   - `src/domain/notifications/UnifiedNotificationOrchestrator.ts`
   - ~~`src/domain/notifications/NotificationPlanner.ts`~~ — **محذوف نهائيًا (راجع بند 14، WP-01.4)**، كان dead code 100%. تحديث توثيقي فقط، لا يُعتبر كسر لهذا البند.
   - `src/services/NotificationScheduler.ts`
-  - `src/services/AlarmReconciliationService.ts` (نقطتا الاستدعاء اتحوّلتا)
+  - `src/services/AlarmReconciliationService.ts` (قراءة فقط عبر `getAlarmDiagnostics()` — أُزيل استدعاء `syncAllNotificationChannels`)
 - **القواعد:**
   - توحيد قنوات إرسال وجدولة وإلغاء الإشعارات والتنبيهات بين نظام أندرويد الأصلي وخدمات الويب Service Worker.
   - أي كود جديد يحتاج جدولة/إلغاء تنبيه لازم يعدي عبر `UnifiedNotificationOrchestrator`، مش نداء مباشر لـ `AthanAlarm`.
+
+### تحديث فرعي — جعل `AlarmReconciliationService.reconcileAlarms()` قراءة فقط (Commit 1)
+- **المشكلة المكتشفة:** استدعاء `syncAllNotificationChannels` يومياً مرتين من داخل `AlarmDiagnosticsModal` كان يُرسل جدول يوم واحد فقط إلى `scheduleAthanAlarms` ويمسح بقية الأيام والمنبهات المخصصة من الـ ledger و`KEY_SAVED_ALARMS`.
+- **الإصلاح:** اقتصار `AlarmReconciliationService.reconcileAlarms()` على القراءة فقط من `getAlarmDiagnostics()` (`savedCount` و`scheduledCount`) مع إبقاء `UnifiedNotificationOrchestrator` و`NotificationScheduler` و`usePrayerScheduler` بدون تعديل، وإبقاء زر تجربة الأذان 60 ثانية معطّلاً؛ إذ إن التسوية الكاملة لجدول الـ14 يوماً تتم تلقائياً في كل فتح بارد عبر `usePrayerScheduler` ← `orchestratePrayerAlarms` ← `reconcileAlarmsInternalStatic` (تعيد تسجيل كل منبهات النافذة دون شرط)، ولا يلزم زر إصلاح أو وضع دمج منفصل.
+- **ملاحظة بند 14:** `scheduleTestAlarm` في `AlarmReconciliationService.ts` ما زالت محتفظةً بالمعرف المحجوز `id: 1` ضمن النطاق `[1, 999]` دون مساس.
+
+### تحديث فرعي — إظهار فشل الجدولة واستبدال `os_verified` بمقياس `pi_missing_before`
+- **عقد `AthanAlarmPlugin`:** تمرير `failedCount` و`failedSample` (بحد أقصى 5 `{ requestCode, errorType }`) في `scheduleAthanAlarms` و`reconcileAthanAlarms` وفي سطر `reconcile` داخل `nativeEvents` (`failed=N`)، وحفظ `lastReconcileFailedCount` و`lastReconcileFailedSample` و`lastReconcileAtMs` في `SharedPreferences` لإرجاعها عبر `getAlarmDiagnostics()`.
+- **مقياس `pi_missing_before`:** استبدال `os_verified` بفحص `PendingIntent(..., FLAG_NO_CREATE)` **قبل** حلقة التسجيل على كامل تقاطع `(ledger ∩ desired)`؛ موثق صراحةً كـ proxy أحادي الاتجاه (`missing` = ضايع أكيد، `present` = غير مؤكد، `0/0` عند الـ boot متوقع لأن `AthanBootReceiver` يمسح الـ ledger قبله، والإثبات الفعلي عبر `dumpsys alarm`).
+- **الملفات:** `android/app/src/main/java/com/salahpro/app/plugins/AthanAlarmPlugin.kt`, `ReconcileTelemetryHelper.kt`, `src/services/athanAlarmPlugin.ts`, `src/diagnostics/scheduleFailureFormatter.ts`, `src/components/settings/adhan/AthanDiagnosticsSection.tsx`.
 
 ### تحديث فرعي (v8) — إصلاح الإلغاء الفردي (كان مكسور تمامًا)
 - **المشكلة المكتشفة:** `AlarmIdentifier.ts` كان بيستخدم خوارزمية FNV-1a مختلفة تمامًا
@@ -210,6 +220,7 @@
 - **القواعد:**
   - `prayerKey` الكانوني = الاسم الخام فقط بدون أي prefix/suffix: `Fajr` | `Dhuhr`
     | `Asr` | `Maghrib` | `Isha`. التاريخ يُمثَّل حصرًا في `timeMs`، مش في الاسم.
+  - **نطاق القاعدة:** تنطبق صيغة الاسم المجرد هذه على منبهات الأذان (`athan`) فقط. أما منبهات الخشوع فتستخدم الصيغة `${CanonicalName}_khushu` (مثل `Fajr_khushu`)، والمنبهات المخصصة تستخدم `buildCustomAlarmNativeKey` (`custom_<alarmId>_<targetPrayer>_<timeMs>`، أو `custom_<alarmId>_<timeMs>` للمثبّت بالوقت، أو `custom_snooze_<snoozeOf>_<alarmId>_<timeMs>` للغفوة).
   - ممنوع أي صيغة `day_N_fajr` أو `renewed_N_fajr` في أي مسار كتابة جديد.
   - نطاقات ID محجوزة وغير قابلة للتداخل: `[1, 999]` اختبار فقط، `[1000, 10000999]`
     صلوات حقيقية عبر `getDeterministicRequestCode`.

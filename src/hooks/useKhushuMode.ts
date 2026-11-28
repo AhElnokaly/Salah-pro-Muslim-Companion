@@ -127,6 +127,7 @@ export function useKhushuMode() {
         const res = await KhushuMode.activate({
           mode,
           durationMinutes: duration,
+          origin: 'manual_ui',
         });
 
         if (res.active) {
@@ -142,8 +143,15 @@ export function useKhushuMode() {
           await syncStatus();
         }
         return res.active;
-      } catch (e) {
+      } catch (e: any) {
         console.error('[useKhushuMode] activate error:', e);
+        if (typeof window !== 'undefined') {
+          const isScheduleFailed = e?.message?.includes('SCHEDULE_FAILED') || e?.code === 'SCHEDULE_FAILED';
+          const msg = isScheduleFailed
+            ? 'تعذر تفعيل وضع الخشوع: تعذر ضمان جدولة منبه استعادة الرنين بأمان'
+            : 'تعذر تفعيل وضع الخشوع: حدث خطأ أثناء تطبيق كتم الصوت';
+          window.dispatchEvent(new CustomEvent('khushu-activation-error', { detail: { message: msg, error: e } }));
+        }
         return false;
       } finally {
         setLoading(false);

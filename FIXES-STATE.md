@@ -65,8 +65,14 @@ Status: done
 - [x] Task 63 — [FEATURE/CUSTOM ALARMS] Full native pipeline orchestration for Custom Worship Alarms (fixed & prayer-relative) via AlarmManager with audio, vibration, and auto-khushu — verified by AI Tester
 - [x] Task 64 — [RELEASE/v1.1.0] Bumped app version to 1.1.0 (build 110) across package.json, build.gradle, and updated changelog — verified by AI Tester
 
-## In Progress / Backlog Tasks
-- None
+## In Progress / Active Fixes
+- [x] R13a — [TIMEZONE CORRECTNESS] Pure timestamp conversion engine (`src/utils/prayerTimestamp.ts`) with internal midnight carry handling, DST spring/fall resilience, multi-process timezone invariance verification (`scripts/test_tz_invariance.cjs`), and zero runtime throw policy — commit [R13a]
+- [x] R12a — [KHUSHU DECISION LOGIC] Pure decision logic for custom alarm audio deferred khushu activation (`CustomAlarmKhushuDecision.kt`, `customAlarmKhushuDecision.ts`, unit tests, and documentation `docs/fixes/R12_B3_khushu_custom_alarm_sound.md`) — commit [R12a]
+- [x] R12b — [KOTLIN NATIVE AUDIO] Implement deferred khushu activation in AthanAlarmReceiver & KhushuRestoreReceiver with structured audio telemetry, dead code cleanup, and fallback safety — commit [R12b]
+- [ ] R12c — [DIAGNOSTICS] Update Test B specification verdict matrix in testB_khushuCustomAlarm.ts
+- [ ] R13b — [WIRING] Connect buildPrayerTimestampMs into athanAlarmPlugin.ts and prayerScheduleSync.ts
+- [ ] R13c — [PRAYER CALC CARRY] Raw minutes and carry handling in prayerCalc.ts
+- [ ] R13d — [CACHE] Include timezoneId in locationCache.ts and usePrayerScheduler.ts
 
 ## Blocked / needs input
 - None
