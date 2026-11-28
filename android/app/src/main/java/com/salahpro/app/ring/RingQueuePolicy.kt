@@ -131,7 +131,9 @@ object RingQueuePolicy {
 
         // 4. Busy: preempt if strictly higher priority; otherwise defer into sorted queue
         if ((newRequest.priority?.rank ?: 0) > (currentActive.priority?.rank ?: 0)) {
-            val reEnqueuedCurrent = currentActive.copy(enqueuedAtMs = nowMs)
+            val reEnqueuedCurrent = currentActive.copy(
+                enqueuedAtMs = currentActive.enqueuedAtMs ?: nowMs
+            )
             val nextQueue = (queue + reEnqueuedCurrent).sortedWith(queueComparator)
             return IncomingDecision(
                 outcome = RingOutcome.PLAYED,
@@ -189,7 +191,7 @@ object RingQueuePolicy {
                 }
             }
             if (chosen == null) {
-                chosen = candidate
+                chosen = candidate.copy(enqueuedAtMs = null)
             } else {
                 remaining.add(candidate)
             }

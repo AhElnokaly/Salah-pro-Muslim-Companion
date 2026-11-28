@@ -295,4 +295,80 @@ class RingQueuePolicyTest {
         assertEquals(secondCustom.triggerId, nextUp.nextRequest?.triggerId)
         assertTrue(nextUp.remainingQueue.isEmpty())
     }
+
+    @Test
+    fun repeatedPreemption_ofSameDhikr_keepsFirstEnqueuedAtMs_andEnforces10mCapFromFirstDefer() {
+        val t0 = 60_000_000L
+        val dhikr = makeRequest("dhikr_repeat", "dhikr", createdAtMs = t0)
+        val custom = makeRequest("custom_p", "custom", createdAtMs = t0 + 10_000L)
+        val athan = makeRequest("asr", "athan", createdAtMs = t0 + 500_000L, scheduledTimeMs = t0 + 500_000L)
+
+        val firstPreemptAt = t0 + 10_000L
+        val firstDecision = RingQueuePolicy.decideIncoming(
+            currentActive = dhikr,
+            newRequest = custom,
+            queue = emptyList(),
+            nowMs = firstPreemptAt
+        )
+        assertEquals(firstPreemptAt, firstDecision.preemptedRequest?.enqueuedAtMs)
+
+        // Repeated preemption of the already-deferred DHIKR (without having been popped to active)
+        val secondPreemptAt = t0 + 500_000L
+        val secondDecision = RingQueuePolicy.decideIncoming(
+            currentActive = firstDecision.preemptedRequest,
+            newRequest = athan,
+            queue = emptyList(),
+            nowMs = secondPreemptAt
+        )
+        assertEquals(firstPreemptAt, secondDecision.preemptedRequest?.enqueuedAtMs)
+        assertEquals(firstPreemptAt, secondDecision.updatedQueue.first().enqueuedAtMs)
+
+        // 10-minute cap is measured from firstPreemptAt, not secondPreemptAt
+        val expiredFromFirst = RingQueuePolicy.popNextPlayable(
+            secondDecision.updatedQueue,
+            nowMs = firstPreemptAt + RingConstants.DHIKR_MAX_DEFER_MS + 1L
+        )
+        assertNull(expiredFromFirst.nextRequest)
+        assertEquals(1, expiredFromFirst.skippedRequests.size)
+        assertEquals("dhikr_defer_expired_10m", expiredFromFirst.skippedRequests.first().reason)
+    }
+
+    @Test
+    fun poppedRequest_startedPlaying_getsFreshEnqueuedAtMsWhenPreemptedAgain() {
+        val t0 = 60_000_000L
+        val dhikr = makeRequest("dhikr_replayed", "dhikr", createdAtMs = t0)
+        val custom = makeRequest("custom_1", "custom", createdAtMs = t0 + 10_000L)
+
+        val firstPreemptAt = t0 + 10_000L
+        val firstDecision = RingQueuePolicy.decideIncoming(
+            currentActive = dhikr,
+            newRequest = custom,
+            queue = emptyList(),
+            nowMs = firstPreemptAt
+        )
+        assertEquals(firstPreemptAt, firstDecision.preemptedRequest?.enqueuedAtMs)
+
+        // Popped to become active again -> enqueuedAtMs must be reset
+        val popAt = t0 + 60_000L
+        val popped = RingQueuePolicy.popNextPlayable(firstDecision.updatedQueue, nowMs = popAt)
+        val nowPlayingDhikr = popped.nextRequest!!
+        assertEquals(dhikr.triggerId, nowPlayingDhikr.triggerId)
+        assertNull(nowPlayingDhikr.enqueuedAtMs)
+
+        // Preempted again much later (after >10m since firstPreemptAt) -> gets fresh enqueuedAtMs
+        val secondPreemptAt = t0 + 700_000L
+        val athan = makeRequest("maghrib", "athan", createdAtMs = secondPreemptAt, scheduledTimeMs = secondPreemptAt)
+        val rePreempt = RingQueuePolicy.decideIncoming(
+            currentActive = nowPlayingDhikr,
+            newRequest = athan,
+            queue = emptyList(),
+            nowMs = secondPreemptAt
+        )
+        assertEquals(secondPreemptAt, rePreempt.preemptedRequest?.enqueuedAtMs)
+
+        // Must still be playable 1s after secondPreemptAt (no stale timestamp expiry)
+        val rePopped = RingQueuePolicy.popNextPlayable(rePreempt.updatedQueue, nowMs = secondPreemptAt + 1_000L)
+        assertEquals(dhikr.triggerId, rePopped.nextRequest?.triggerId)
+        assertNull(rePopped.nextRequest?.enqueuedAtMs)
+    }
 }
